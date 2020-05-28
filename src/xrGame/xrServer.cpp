@@ -126,7 +126,7 @@ void xrServer::client_Destroy(IClient* C)
     // Delete assosiated entity
     // xrClientData*	D = (xrClientData*)C;
     // CSE_Abstract* E = D->owner;
-    IClient* alife_client = net_players.FindAndEraseClient(std::bind(std::equal_to<IClient*>(), C, std::placeholders::_1));
+    IClient* alife_client = net_players.FindAndEraseClient(std::bind(std::equal_to<IClient*>(), std::placeholders::_1, C));
     // VERIFY(alife_client);
     if (alife_client)
     {
