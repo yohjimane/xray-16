@@ -34,6 +34,8 @@ LPCSTR GAME_CONFIG = "game.ltx";
 #include <shlwapi.h>
 #pragma comment(lib, "shlwapi.lib")
 
+#include "xrGame/Level.h"
+
 struct logical_string_predicate
 {
     static HRESULT AnsiToUnicode(LPCSTR pszA, LPVOID buffer, u32 const& buffer_size)
@@ -534,9 +536,19 @@ u32 CSE_ALifeObject::ef_detector_type() const
 bool CSE_ALifeObject::used_ai_locations() const /* noexcept */
 { return !!m_flags.is(flUsedAI_Locations); }
 bool CSE_ALifeObject::can_switch_online() const /* noexcept */
-{ return match_configuration() && !!m_flags.is(flSwitchOnline); }
+{
+    if (GameID() == eGameIDSingle)
+        return (match_configuration() && !!m_flags.is(flSwitchOnline));
+    else
+        return true;
+}
 bool CSE_ALifeObject::can_switch_offline() const /* noexcept */
-{ return !match_configuration() || !!m_flags.is(flSwitchOffline); }
+{
+    if (GameID() == eGameIDSingle)
+        return (match_configuration() && !!m_flags.is(flSwitchOffline));
+    else
+        return true;
+}
 bool CSE_ALifeObject::can_save() const /* noexcept */
 { return !!m_flags.is(flCanSave); }
 bool CSE_ALifeObject::interactive() const /* noexcept */
