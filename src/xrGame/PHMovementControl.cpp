@@ -1033,7 +1033,7 @@ void CPHMovementControl::AllocateCharacterObject(CharacterType type)
     switch (type)
     {
     case actor:
-        m_character = create_actor_character(IsGameTypeSingle());
+        m_character = create_actor_character(true);
         break;
     // case actor:	m_character = new CPHActorCharacter	()					;	break;
     // case ai:		m_character = new CPHAICharacter	()					;	break;
