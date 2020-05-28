@@ -197,6 +197,10 @@ CLevel::~CLevel()
         StopSaveDemo();
     }
     deinit_compression();
+
+    xr_delete(m_game_graph);
+    m_chunk->close();
+    FS.r_close(spawn);
 }
 
 shared_str CLevel::name() const { return map_data.m_name; }

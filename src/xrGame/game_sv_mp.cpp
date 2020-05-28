@@ -25,7 +25,12 @@
 #include "game_sv_mp_vote_flags.h"
 #include "player_name_modifyer.h"
 
-u32 g_dwMaxCorpses = 10;
+#include "alife_simulator.h"
+#include "alife_object_registry.h"
+#include "alife_graph_registry.h"
+#include "alife_time_manager.h"
+
+u32		g_dwMaxCorpses = 10;
 //-----------------------------------------------------------------
 BOOL g_sv_mp_bSpectator_FreeFly = FALSE;
 BOOL g_sv_mp_bSpectator_FirstEye = TRUE;
@@ -52,6 +57,7 @@ game_sv_mp::game_sv_mp()
     : inherited(), m_bRankUp_Allowed(false), m_bVotingReal(false),
       m_uVoteStartTime(0), m_u8SpectatorModes(0)
 {
+    m_alife_simulator = NULL;
     m_strWeaponsData = xr_new<CItemMgr>();
     m_bVotingActive = false;
     //------------------------------------------------------
@@ -63,7 +69,11 @@ game_sv_mp::game_sv_mp()
     round_statistics_dump_fn[0] = 0;
 }
 
-game_sv_mp::~game_sv_mp() { xr_delete(m_strWeaponsData); }
+game_sv_mp::~game_sv_mp()
+{
+    xr_delete(m_alife_simulator);
+    xr_delete(m_strWeaponsData);
+}
 void game_sv_mp::Update()
 {
     inherited::Update();
@@ -467,23 +477,23 @@ extern float g_fTimeFactor;
 #define SAVE_SCREENSHOTS_KEY "-savescreenshots"
 void game_sv_mp::Create(shared_str& options)
 {
-    SetVotingActive(false);
-    inherited::Create(options);
-    //-------------------------------------------------------------------
-    if (!g_bConsoleCommandsCreated)
-    {
-        g_bConsoleCommandsCreated = true;
-    }
+	SetVotingActive(false);
+	inherited::Create(options);
+	//-------------------------------------------------------------------
+	if (!g_bConsoleCommandsCreated)
+	{
+		g_bConsoleCommandsCreated = true;
+	}
 
-    //------------------------------------------------------------------
-    LoadRanks();
-    //------------------------------------------------------------------
-    Set_RankUp_Allowed(false);
-    m_cdkey_ban_list.load();
-    if (strstr(Core.Params, SAVE_SCREENSHOTS_KEY))
-    {
-        g_sv_mp_save_proxy_screenshots = TRUE;
-    }
+	//------------------------------------------------------------------
+	LoadRanks();
+	//------------------------------------------------------------------
+	Set_RankUp_Allowed(false);
+	m_cdkey_ban_list.load();
+	if (strstr(Core.Params, SAVE_SCREENSHOTS_KEY))
+	{
+		g_sv_mp_save_proxy_screenshots = TRUE;
+	}
 };
 
 u8 game_sv_mp::SpectatorModes_Pack()

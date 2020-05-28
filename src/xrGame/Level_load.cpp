@@ -16,8 +16,25 @@ bool CLevel::Load_GameSpecific_Before()
     ZoneScoped;
 
     // AI space
-    g_pGamePersistent->LoadTitle("st_loading_ai_objects");
+    g_pGamePersistent->LoadTitle();
     string_path fn_game;
+
+    if (GamePersistent().GameType() != eGameIDSingle && OnClient() && FS.exist(fn_game, "$level$", "alife.spawn")) {
+        spawn = FS.r_open(fn_game);
+
+        IReader* chunk;
+
+        chunk = spawn->open_chunk(3);
+        R_ASSERT2(chunk, "Spawn version mismatch - REBUILD SPAWN!");
+        ai().patrol_path_storage(*chunk);
+        chunk->close();
+
+        m_chunk = spawn->open_chunk(4);
+        R_ASSERT2(m_chunk, "Spawn version mismatch - REBUILD SPAWN!");
+        ai().SetGameGraph(xr_new<CGameGraph>(*m_chunk));
+    }
+
+    g_pGamePersistent->LoadTitle("st_loading_ai_objects");
 
     if (GamePersistent().GameType() == eGameIDSingle && !ai().get_alife() && FS.exist(fn_game, "$level$", "level.ai") &&
         !net_Hosts.empty())

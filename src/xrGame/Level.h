@@ -163,6 +163,10 @@ private:
     };
     ClientStatistics stats;
 
+    IReader* m_chunk;
+    IReader* spawn;
+    CGameGraph* m_game_graph;
+
 public:
 #ifdef DEBUG
     CLevelDebug* m_level_debug = nullptr;
