@@ -105,7 +105,7 @@ bool CInventoryOwner::net_Spawn(CSE_Abstract* DC)
         return FALSE;
     CSE_Abstract* E = (CSE_Abstract*)(DC);
 
-    if (IsGameTypeSingle())
+    if (IsGameTypeSingle() || !smart_cast<CActor*>(E))
     {
         CSE_ALifeTraderAbstract* pTrader = NULL;
         if (E)
@@ -369,15 +369,16 @@ void CInventoryOwner::SetCommunity(CHARACTER_COMMUNITY_INDEX new_community)
     CEntityAlive* EA = smart_cast<CEntityAlive*>(this);
     VERIFY(EA);
 
-    CSE_Abstract* e_entity = ai().alife().objects().object(EA->ID(), false);
-    if (!e_entity)
-        return;
-
     CharacterInfo().SetCommunity(new_community);
     if (EA->g_Alive())
     {
         EA->ChangeTeam(CharacterInfo().Community().team(), EA->g_Squad(), EA->g_Group());
     }
+
+
+    CSE_Abstract* e_entity = ai().alife().objects().object(EA->ID(), false);
+    if (!e_entity)
+        return;
 
     // XXX: special case for trader, investigate if we can get rid of it
     CSE_ALifeTraderAbstract* trader = smart_cast<CSE_ALifeTraderAbstract*>(e_entity);
