@@ -1703,6 +1703,7 @@ void CSE_ALifeMonsterBase::UPDATE_Read(NET_Packet& tNetPacket)
         tNetPacket.r_float(o_torso.yaw);
         tNetPacket.r_u16(u_motion_idx);
         tNetPacket.r_u16(u_motion_slot);
+        set_health(f_health);
     }
 }
 
