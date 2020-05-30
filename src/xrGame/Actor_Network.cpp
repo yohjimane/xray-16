@@ -8,7 +8,7 @@
 #include "xrEngine/CustomHUD.h"
 #include "CameraLook.h"
 #include "CameraFirstEye.h"
-
+#include "actor_mp_client.h"
 #include "ActorEffector.h"
 
 #include "xrPhysics/IPHWorld.h"
@@ -51,6 +51,8 @@
 #include "debug_renderer.h"
 #include "xrPhysics/phvalide.h"
 #endif
+
+#include "actor_mp_client.h"
 
 int g_cl_InterpolationType = 0;
 u32 g_cl_InterpolationMaxPoints = 0;
@@ -547,13 +549,40 @@ bool CActor::net_Spawn(CSE_Abstract* DC)
     // force actor to be local on server client
     CSE_Abstract* e = (CSE_Abstract*)(DC);
     CSE_ALifeCreatureActor* E = smart_cast<CSE_ALifeCreatureActor*>(e);
-    if (OnServer())
-    {
-        E->s_flags.set(M_SPAWN_OBJECT_LOCAL, TRUE);
-    }
+    if (!IsGameTypeSingle()) {
+        if (OnServer())
+        {
+            if (!smart_cast<CActorMP*>(this)) {
+                E->s_flags.set(M_SPAWN_OBJECT_LOCAL, TRUE);
+                Msg("single_actor_spawn");
+                g_actor = this;
+            }
+        }
 
-    if (TRUE == E->s_flags.test(M_SPAWN_OBJECT_LOCAL) && TRUE == E->s_flags.is(M_SPAWN_OBJECT_ASPLAYER))
-        g_actor = this;
+        if (OnClient())
+        {
+            if (smart_cast<CActorMP*>(this)) {
+                if (TRUE == E->s_flags.test(M_SPAWN_OBJECT_LOCAL))
+                {
+                    if (TRUE == E->s_flags.test(M_SPAWN_OBJECT_ASPLAYER))
+                    {
+                        Msg("mp_actor_spawn");
+                        g_actor = this;
+                    }
+                }
+            }
+        }
+    }
+    else
+    {
+        if (OnServer())
+        {
+            E->s_flags.set(M_SPAWN_OBJECT_LOCAL, TRUE);
+        }
+
+        if (TRUE == E->s_flags.test(M_SPAWN_OBJECT_LOCAL) && TRUE == E->s_flags.is(M_SPAWN_OBJECT_ASPLAYER))
+            g_actor = this;
+    }
 
     VERIFY(m_pActorEffector == NULL);
 
