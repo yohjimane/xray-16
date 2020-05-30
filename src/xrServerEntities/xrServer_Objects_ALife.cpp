@@ -34,7 +34,7 @@ LPCSTR GAME_CONFIG = "game.ltx";
 #include <shlwapi.h>
 #pragma comment(lib, "shlwapi.lib")
 
-#include "xrGame/Level.h"
+#include "xrEngine/IGame_Persistent.h"
 
 struct logical_string_predicate
 {
@@ -537,14 +537,14 @@ bool CSE_ALifeObject::used_ai_locations() const /* noexcept */
 { return !!m_flags.is(flUsedAI_Locations); }
 bool CSE_ALifeObject::can_switch_online() const /* noexcept */
 {
-    if (GameID() == eGameIDSingle)
+    if (g_pGamePersistent->GameType() == eGameIDSingle)
         return (match_configuration() && !!m_flags.is(flSwitchOnline));
     else
         return true;
 }
 bool CSE_ALifeObject::can_switch_offline() const /* noexcept */
 {
-    if (GameID() == eGameIDSingle)
+    if (g_pGamePersistent->GameType() == eGameIDSingle)
         return (match_configuration() && !!m_flags.is(flSwitchOffline));
     else
         return true;
