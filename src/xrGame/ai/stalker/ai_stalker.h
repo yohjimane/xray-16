@@ -174,6 +174,12 @@ public:
     virtual bool net_SaveRelevant();
     virtual void net_Relcase(IGameObject* O);
 
+    //For MP sync
+    u16 u_last_torso_motion_idx;
+    u16 u_last_legs_motion_idx;
+    u16 u_last_head_motion_idx;
+    u16 u_last_script_motion_idx;
+
     // save/load server serialization
     virtual void save(NET_Packet& output_packet);
     virtual void load(IReader& input_packet);

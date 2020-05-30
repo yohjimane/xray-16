@@ -654,6 +654,21 @@ public:
     virtual void UPDATE_Write(NET_Packet& P);
     virtual void STATE_Read(NET_Packet& P, u16 size);
     virtual void STATE_Write(NET_Packet& P);
+
+    float f_health;
+    float f_head_dir_pitch;
+    float f_head_dir_yaw;
+    u16 u_active_slot;
+    u16 u_torso_anm_idx;
+    u16 u_torso_anm_slot;
+    u16 u_legs_anm_idx;
+    u16 u_legs_anm_slot;
+    u16 u_head_anm_idx;
+    u16 u_head_anm_slot;
+    u16 u_script_anm_idx;
+    u16 u_script_anm_slot;
+    virtual BOOL Net_Relevant();
+
     SERVER_ENTITY_EDITOR_METHODS
 };
 
