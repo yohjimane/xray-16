@@ -136,6 +136,16 @@ void CBaseMonster::net_Import(NET_Packet& P)
         XFORM().rotateY(f_yaw);
         Position().set(fv_position);
 
+        SPHNetState	State;
+        State.position = fv_position;
+        State.previous_position = fv_position;
+        CPHSynchronize* pSyncObj = NULL;
+        pSyncObj = PHGetSyncItem(0);
+        if (pSyncObj)
+        {
+            pSyncObj->set_State(State);
+        }
+
         MotionID motion;
         IKinematicsAnimated* ik_anim_obj = smart_cast<IKinematicsAnimated*>(Visual());
         if (u_last_motion_idx != u_motion_idx || u_last_motion_slot != u_motion_slot)
@@ -151,5 +161,8 @@ void CBaseMonster::net_Import(NET_Packet& P)
                     ik_anim_obj->LL_GetMotionDef(motion)->Speed(), FALSE, 0, 0, 0));
             }
         }
+
+        setVisible(TRUE);
+        setEnabled(TRUE);
     }
 }

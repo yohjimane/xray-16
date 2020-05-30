@@ -19,6 +19,8 @@
 #include "ai/monsters/monster_sound_defs.h"
 #include "ai/monsters/monster_aura.h"
 
+#include "xrPhysics/PHCharacter.h"
+
 class CCharacterPhysicsSupport;
 class CMonsterCorpseCoverEvaluator;
 class CCoverEvaluatorFarFromEnemy;
@@ -41,6 +43,8 @@ class CMonsterHome;
 // Lain: added
 class CMonsterSquad;
 class squad_grouping_behaviour;
+
+class CPHCharacter;
 
 #ifdef DEBUG
 namespace debug
