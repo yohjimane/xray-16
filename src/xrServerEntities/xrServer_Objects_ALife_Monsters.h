@@ -547,10 +547,14 @@ class CSE_ALifeMonsterBase : public CSE_ALifeMonsterAbstract, public CSE_PHSkele
 
 public:
     u16 m_spec_object_id;
+    float f_health;
+    u16 u_motion_idx;
+    u16 u_motion_slot;
 
     CSE_ALifeMonsterBase(LPCSTR caSection); // constructor for variable initialization
     virtual ~CSE_ALifeMonsterBase();
     virtual void load(NET_Packet& tNetPacket);
+    virtual BOOL Net_Relevant();
     virtual CSE_Abstract* cast_abstract() { return this; }
     virtual void spawn_supplies(LPCSTR) {}
     virtual void spawn_supplies() {}
