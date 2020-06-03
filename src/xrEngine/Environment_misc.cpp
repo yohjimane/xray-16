@@ -1163,3 +1163,9 @@ void CEnvironment::save_weather_effects(CInifile* environment_config /*= nullptr
     if (should_save_environment_config && environment_config)
         environment_config->save_at_end(true);
 }
+
+void CEnvironment::OnDisconnect()
+{
+	unload();
+	load();
+}

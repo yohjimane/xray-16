@@ -376,6 +376,7 @@ void IGame_Persistent::Disconnect()
 #ifndef _EDITOR
     // clear "need to play" particles
     destroy_particles(true);
+    pEnvironment->OnDisconnect();
 #endif
 }
 

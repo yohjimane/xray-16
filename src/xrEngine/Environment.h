@@ -357,6 +357,7 @@ public:
 
     void OnDeviceCreate();
     void OnDeviceDestroy();
+    void OnDisconnect();
 
     float GetGameTime() { return fGameTime; }
     void GetGameTime(u32& hours, u32& minutes, u32& seconds) const
