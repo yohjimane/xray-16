@@ -1233,6 +1233,7 @@
     <ClInclude Include="UIGameCTA.h" />
     <ClInclude Include="UIGameCustom.h" />
     <ClInclude Include="UIGameDM.h" />
+    <ClInclude Include="UIGameFMP.h" />
     <ClInclude Include="UIGameMP.h" />
     <ClInclude Include="UIGameSP.h" />
     <ClInclude Include="UIGameTDM.h" />
@@ -3086,6 +3087,7 @@
       <PrecompiledHeaderOutputFile>$(IntDir)$(ProjectName)_script.pch</PrecompiledHeaderOutputFile>
     </ClCompile>
     <ClCompile Include="UIGameDM.cpp" />
+    <ClCompile Include="UIGameFMP.cpp" />
     <ClCompile Include="UIGameMP.cpp" />
     <ClCompile Include="UIGameSP.cpp">
       <PrecompiledHeaderFile>pch_script.h</PrecompiledHeaderFile>

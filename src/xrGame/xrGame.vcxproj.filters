@@ -2242,6 +2242,9 @@
     <Filter Include="Core\Server\ServerEntities\scripts\script_value_wrapper">
       <UniqueIdentifier>{51778476-f463-42d8-bf56-1f2ffa97a662}</UniqueIdentifier>
     </Filter>
+    <Filter Include="UI\GameTypes\FreeMp">
+      <UniqueIdentifier>{d4178439-35ae-4a2f-9abd-5b552dead9c8}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="mt_config.h">
@@ -6341,6 +6344,9 @@
     <ClInclude Include="..\xrServerEntities\script_value_wrapper_inline.h">
       <Filter>Core\Server\ServerEntities\scripts\script_value_wrapper</Filter>
     </ClInclude>
+    <ClInclude Include="UIGameFMP.h">
+      <Filter>UI\GameTypes\FreeMp</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="damage_manager.cpp">
@@ -9566,6 +9572,9 @@
     </ClCompile>
     <ClCompile Include="..\xrServerEntities\script_properties_list_helper_script.cpp">
       <Filter>Core\Server\ServerEntities\scripts\script_properties_list_helper</Filter>
+    </ClCompile>
+    <ClCompile Include="UIGameFMP.cpp">
+      <Filter>UI\GameTypes\FreeMp</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
