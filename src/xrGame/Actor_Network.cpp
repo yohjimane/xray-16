@@ -61,6 +61,7 @@ BOOL net_cl_inputguaranteed = FALSE;
 int g_start_game_vertex_id = 0;
 Fvector g_start_position{};
 CActor* g_actor = NULL;
+CActor* g_single_actor = NULL;
 
 CActor* Actor()
 {
@@ -554,12 +555,14 @@ bool CActor::net_Spawn(CSE_Abstract* DC)
         {
             if (!smart_cast<CActorMP*>(this)) {
                 E->s_flags.set(M_SPAWN_OBJECT_LOCAL, TRUE);
+                E->s_flags.set(M_SPAWN_OBJECT_ASPLAYER, FALSE);
                 Msg("single_actor_spawn");
                 g_actor = this;
+                g_single_actor = this;
             }
         }
 
-        if (OnClient())
+        if (OnClient() || (OnServer() && !GEnv.isDedicatedServer))
         {
             if (smart_cast<CActorMP*>(this)) {
                 if (TRUE == E->s_flags.test(M_SPAWN_OBJECT_LOCAL))
@@ -807,7 +810,16 @@ void CActor::net_Destroy()
     SetDefaultVisualOutfit(NULL);
 
     if (g_actor == this)
+    {
+        Msg("g_actor set to NULL");
         g_actor = NULL;
+    }
+
+    if (g_single_actor == this)
+    {
+        Msg("g_single_actor set to NULL");
+        g_single_actor = NULL;
+    }
 
     Engine.Sheduler.Unregister(this);
 
