@@ -49,10 +49,19 @@ CUIRankingWnd::~CUIRankingWnd()
 
 void CUIRankingWnd::Show(bool status)
 {
-    if (status)
+    if (status && Actor())
     {
         if (m_actor_ch_info)
-            m_actor_ch_info->InitCharacter(Actor()->object_id());
+        {
+            if (IsGameTypeSingle())
+            {
+                m_actor_ch_info->InitCharacter(Actor()->object_id());
+            }
+            else
+            {
+                m_actor_ch_info->InitCharacterMP(Actor());
+            }
+        }
 
         if (m_money_value)
         {

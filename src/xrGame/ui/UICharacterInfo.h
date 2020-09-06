@@ -70,6 +70,7 @@ public:
 
     void InitCharacter(u16 id);
     void ClearInfo();
+    void InitCharacterMP(CInventoryOwner* invOwner);
     void InitCharacterMP(LPCSTR player_name, LPCSTR player_icon);
 
     virtual void Update();

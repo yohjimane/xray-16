@@ -8,6 +8,7 @@
 #include "xrUICore/Cursor/UICursor.h"
 #include "ai_space.h"
 #include "xrScriptEngine/script_engine.hpp"
+#include "Level.h"
 
 CUIAchievements::CUIAchievements(CUIScrollView* parent)
     : CUIWindow(CUIAchievements::GetDebugType()), m_parent(parent)
@@ -39,8 +40,11 @@ void CUIAchievements::init_from_xml(CUIXml& xml)
 }
 void CUIAchievements::Update()
 {
-    if (ParentHasMe() && !m_repeat)
-        return;
+	if (!IsGameTypeSingle())
+		return;
+
+	if (ParentHasMe() && !m_repeat)
+		return;
 
     luabind::functor<bool> f;
     R_ASSERT(GEnv.ScriptEngine->functor(m_functor_str, f));
