@@ -170,6 +170,9 @@ public:
     virtual LPCSTR GetGameScore(string32& score_dest);
     virtual void OnConnected();
 
+    virtual bool NeedToSendReady_Actor(int key, game_PlayerState* ps);
+    virtual bool NeedToSendReady_Spectator(int key, game_PlayerState* ps);
+
 private:
     // next methods for alife players in buy menu (artefacthunt)
     typedef buffer_vector<shared_str> aditional_ammo_t;

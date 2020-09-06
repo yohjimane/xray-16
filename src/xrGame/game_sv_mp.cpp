@@ -623,16 +623,17 @@ void game_sv_mp::SpawnPlayer(ClientID id, LPCSTR N)
         };
         ps_who->RespawnTime = Device.dwTimeGlobal;
 
-        Game().m_WeaponUsageStatistic->OnPlayerSpawned(ps_who);
-    }
-    else if (pS)
+		Game().m_WeaponUsageStatistic->OnPlayerSpawned(ps_who);
+	}
+	else
     {
-        Fvector Pos, Angle;
-        //			ps_who->setFlag(GAME_PLAYER_FLAG_CS_SPECTATOR);
-        if (!GetPosAngleFromActor(id, Pos, Angle))
+        if (pS)
+        {
             assign_RP(E, ps_who);
+        }
         else
         {
+            Fvector Pos, Angle;
             E->o_Angle.set(Angle);
             E->o_Position.set(Pos);
         }
