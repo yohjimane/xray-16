@@ -612,7 +612,10 @@ void game_sv_mp::SpawnPlayer(ClientID id, LPCSTR N)
     {
         pA->s_team = u8(ps_who->team);
         assign_RP(pA, ps_who);
-        SetSkin(E, pA->s_team, ps_who->skin);
+        if (UseSkin())
+        {
+            SetSkin(E, pA->s_team, ps_who->skin);
+        }
         ps_who->resetFlag(GAME_PLAYER_FLAG_VERY_VERY_DEAD);
         if (!ps_who->RespawnTime)
         {

@@ -69,6 +69,7 @@ protected:
         u16 KilledID, KILL_TYPE KillType, u16 KillerID, u16 WeaponID, SPECIAL_KILL_TYPE SpecialKill);
     virtual void RespawnPlayer(ClientID id_who, bool NoSpectator);
     virtual void SetSkin(CSE_Abstract* E, u16 Team, u16 ID);
+    virtual bool UseSkin() const { return true; }
     bool GetPosAngleFromActor(ClientID id, Fvector& Pos, Fvector& Angle);
     void AllowDeadBodyRemove(ClientID id, u16 GameID);
     void SpawnWeapon4Actor(u16 actorId, LPCSTR N, u8 Addons, game_PlayerState::PLAYER_ITEMS_LIST& playerItems);

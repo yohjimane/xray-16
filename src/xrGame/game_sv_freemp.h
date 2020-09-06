@@ -15,7 +15,7 @@ public:
 	virtual		void				Create(shared_str &options);
 
 
-	virtual		bool				UseSKin() const { return false; }
+	virtual		bool				UseSkin() const { return false; }
 
 	virtual		LPCSTR				type_name() const { return "freemp"; };
     void __stdcall		net_Relcase(IGameObject* O) {};
