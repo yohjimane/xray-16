@@ -49,6 +49,25 @@ class action;
 }
 }
 
+namespace stalker_interpolation {
+    struct InterpData
+    {
+        Fvector Pos;
+        Fvector Vel;
+        SRotation o_torso;
+        SRotation head;
+        float o_model;
+    };
+
+    struct net_update_A
+    {
+        SPHNetState State;
+        SRotation o_torso;
+        SRotation head;
+        u32 dwTimeStamp = 0;
+    };
+};
+
 enum ECriticalWoundType : u32;
 
 class CALifeSimulator;
@@ -111,6 +130,27 @@ private:
     float m_power_fx_factor;
 
 private:
+    SPHNetState LastState;
+    SPHNetState RecalculatedState;
+    SPHNetState PredictedState;
+
+    float SCoeff[3][4];
+    float HCoeff[3][4];
+    Fvector IPosS, IPosH, IPosL;
+
+    xr_deque<stalker_interpolation::net_update_A> NET_A;
+    stalker_interpolation::net_update_A NET_A_Last;
+    stalker_interpolation::InterpData IStart;
+    stalker_interpolation::InterpData IEnd;
+
+    bool m_bInInterpolation;
+    bool m_bInterpolate;
+    u32 m_dwIStartTime;
+    u32 m_dwIEndTime;
+    u32 m_dwILastUpdateTime;
+    void CalculateInterpolationParams();
+    virtual void make_Interpolation();
+
     float m_fRankDisperison;
     float m_fRankVisibility;
     float m_fRankImmunity;
@@ -174,11 +214,16 @@ public:
     virtual bool net_SaveRelevant();
     virtual void net_Relcase(IGameObject* O);
 
-    //For MP sync
-    u16 u_last_torso_motion_idx;
-    u16 u_last_legs_motion_idx;
-    u16 u_last_head_motion_idx;
-    u16 u_last_script_motion_idx;
+	//For MP sync
+    virtual void PH_B_CrPr(); // actions & operations before physic correction-prediction steps
+    virtual void PH_I_CrPr(); // actions & operations after correction before prediction steps
+    virtual void PH_A_CrPr(); // actions & operations after phisic correction-prediction steps
+    void postprocess_packet(stalker_interpolation::net_update_A& packet);
+
+	u16 u_last_torso_motion_idx;
+	u16 u_last_legs_motion_idx;
+	u16 u_last_head_motion_idx;
+	u16 u_last_script_motion_idx;
 
     // save/load server serialization
     virtual void save(NET_Packet& output_packet);

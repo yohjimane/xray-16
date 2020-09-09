@@ -895,6 +895,7 @@
     <ClInclude Include="mp_config_sections.h" />
     <ClInclude Include="mt_config.h" />
     <ClInclude Include="Needles.h" />
+    <ClInclude Include="net_physics_state.h" />
     <ClInclude Include="NET_Queue.h" />
     <ClInclude Include="NoGravityZone.h" />
     <ClInclude Include="object_actions.h" />
@@ -2499,6 +2500,7 @@
     <ClCompile Include="MPPlayersBag.cpp" />
     <ClCompile Include="mp_config_sections.cpp" />
     <ClCompile Include="Needles.cpp" />
+    <ClCompile Include="net_physics_state.cpp" />
     <ClCompile Include="NoGravityZone.cpp" />
     <ClCompile Include="object_actions.cpp" />
     <ClCompile Include="object_handler.cpp">

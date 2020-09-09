@@ -2251,6 +2251,9 @@
     <Filter Include="Core\Server\Games\server\freemp">
       <UniqueIdentifier>{f00d869a-eacc-47e3-a6f6-2897883ecdbd}</UniqueIdentifier>
     </Filter>
+    <Filter Include="AI\AMonsters\common\net">
+      <UniqueIdentifier>{42a510f5-61ad-444a-adc1-1265ba85a6cc}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="mt_config.h">
@@ -6362,6 +6365,9 @@
     <ClInclude Include="script_event.h">
       <Filter>Core\Server</Filter>
     </ClInclude>
+    <ClInclude Include="net_physics_state.h">
+      <Filter>AI\AMonsters\common\net</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="damage_manager.cpp">
@@ -9602,6 +9608,9 @@
     </ClCompile>
     <ClCompile Include="ai\stalker\ai_stalker_net.cpp">
       <Filter>AI\AMonsters\humans\stalker</Filter>
+    </ClCompile>
+    <ClCompile Include="net_physics_state.cpp">
+      <Filter>AI\AMonsters\common\net</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>

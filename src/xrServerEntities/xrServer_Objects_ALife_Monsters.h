@@ -16,6 +16,7 @@
 #include "xrCore/Containers/AssociativeVector.hpp"
 #include "alife_movement_manager_holder.h"
 #include "xrCommon/misc_math_types.h"
+#include "net_physics_state.h"
 
 class CALifeMonsterBrain;
 class CALifeHumanBrain;
@@ -645,6 +646,7 @@ class CSE_ALifeHumanStalker : public CSE_ALifeHumanAbstract, public CSE_PHSkelet
 
 public:
     shared_str m_start_dialog;
+    net_physics_state physics_state;
 
     CSE_ALifeHumanStalker(LPCSTR caSection);
     virtual ~CSE_ALifeHumanStalker();
@@ -667,6 +669,7 @@ public:
     u16 u_head_anm_slot;
     u16 u_script_anm_idx;
     u16 u_script_anm_slot;
+    u8 phSyncFlag = 0;
     virtual BOOL Net_Relevant();
 
     SERVER_ENTITY_EDITOR_METHODS

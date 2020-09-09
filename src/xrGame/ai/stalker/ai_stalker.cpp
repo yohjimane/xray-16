@@ -557,6 +557,9 @@ bool CAI_Stalker::net_Spawn(CSE_Abstract* DC)
         "There is no AI-Map, level graph, cross table, or graph is not compiled into the game graph!");
 
     setEnabled(TRUE);
+    m_bInInterpolation = false;
+    m_bInterpolate = false;
+    m_dwILastUpdateTime = 0;
 
     if (!Level().CurrentViewEntity())
         Level().SetEntity(this);
@@ -728,6 +731,11 @@ void CAI_Stalker::UpdateCL()
     START_PROFILE("stalker")
     START_PROFILE("stalker/client_update")
     VERIFY2(PPhysicsShell() || getEnabled(), *cName());
+
+    if (g_Alive() && Remote() && !IsGameTypeSingle())
+    {
+        make_Interpolation();
+    }
 
     if (g_Alive())
     {
