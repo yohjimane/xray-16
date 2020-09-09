@@ -35,10 +35,12 @@ void CPHActorCharacter::Create(dVector3 sizes)
     if (b_exist)
         return;
     inherited::Create(sizes);
+    /*
     if (!b_single_game)
     {
         ClearRestrictors();
     }
+    */
     RESTRICTOR_I i = begin(m_restrictors), e = end(m_restrictors);
     for (; e != i; ++i)
     {
