@@ -56,7 +56,6 @@ namespace stalker_interpolation {
         Fvector Vel;
         SRotation o_torso;
         SRotation head;
-        float o_model;
     };
 
     struct net_update_A
@@ -150,6 +149,12 @@ private:
     u32 m_dwILastUpdateTime;
     void CalculateInterpolationParams();
     virtual void make_Interpolation();
+    void ApplyAnimation(
+        u16 u_torso_motion_idx, u8 u_torso_motion_slot,
+        u16 u_legs_motion_idx, u8 u_legs_motion_slot,
+        u16 u_head_motion_idx, u8 u_head_motion_slot,
+        u16 u_script_motion_idx, u8 u_script_motion_slot
+    );
 
     float m_fRankDisperison;
     float m_fRankVisibility;

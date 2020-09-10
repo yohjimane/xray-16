@@ -1880,7 +1880,6 @@ void CSE_ALifeHumanStalker::UPDATE_Write(NET_Packet& tNetPacket)
 
         tNetPacket.w_float(get_health());
         tNetPacket.w_float(o_torso.pitch);
-        tNetPacket.w_float(o_torso.roll);
         tNetPacket.w_float(o_torso.yaw);
         tNetPacket.w_float(f_head_dir_pitch);
         tNetPacket.w_float(f_head_dir_yaw);
@@ -1919,7 +1918,6 @@ void CSE_ALifeHumanStalker::UPDATE_Read(NET_Packet& tNetPacket)
 
         tNetPacket.r_float(f_health);
         tNetPacket.r_float(o_torso.pitch);
-        tNetPacket.r_float(o_torso.roll);
         tNetPacket.r_float(o_torso.yaw);
         tNetPacket.r_float(f_head_dir_pitch);
         tNetPacket.r_float(f_head_dir_yaw);
