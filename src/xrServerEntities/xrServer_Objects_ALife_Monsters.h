@@ -548,6 +548,9 @@ class CSE_ALifeMonsterBase : public CSE_ALifeMonsterAbstract, public CSE_PHSkele
 
 public:
     u16 m_spec_object_id;
+    net_physics_state physics_state;
+    u8 phSyncFlag = 0;
+
     float f_health;
     u16 u_motion_idx;
     u16 u_motion_slot;

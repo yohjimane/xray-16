@@ -55,6 +55,23 @@ class text_tree;
 
 class anti_aim_ability;
 
+
+namespace monster_interpolation {
+	struct InterpData
+	{
+		Fvector Pos;
+		Fvector Vel;
+		SRotation o_torso;
+	};
+
+	struct net_update_A
+	{
+		SPHNetState State;
+		SRotation o_torso;
+		u32 dwTimeStamp = 0;
+	};
+};
+
 class CBaseMonster : public CCustomMonster, public CStepManager, public CInventoryOwner
 {
 protected:
@@ -106,6 +123,10 @@ public:
     //NET MP simple Sync
     u16 u_last_motion_idx;
     u16 u_last_motion_slot;
+    virtual void PH_B_CrPr(); // actions & operations before physic correction-prediction steps
+    virtual void PH_I_CrPr(); // actions & operations after correction before prediction steps
+    virtual void PH_A_CrPr(); // actions & operations after phisic correction-prediction steps
+    void postprocess_packet(monster_interpolation::net_update_A& packet);
 
     // save/load server serialization
     virtual void save(NET_Packet& output_packet) { inherited::save(output_packet); }
@@ -229,7 +250,31 @@ public:
     bool GetCoverCloseToPoint(const Fvector& dest_pos, float min_dist, float max_dist, float deviation, float radius,
         Fvector& position, u32& vertex_id);
 
-    // Movement Manager
+
+private:
+    // for interpolation
+    SPHNetState	LastState;
+    SPHNetState	RecalculatedState;
+	SPHNetState	PredictedState;
+    float SCoeff[3][4];
+	float HCoeff[3][4];
+	Fvector IPosS, IPosH, IPosL;
+    xr_deque<monster_interpolation::net_update_A> NET_A;
+	monster_interpolation::net_update_A	NET_A_Last;
+
+	monster_interpolation::InterpData IStart;
+	monster_interpolation::InterpData IEnd;
+
+	bool m_bInInterpolation;
+	bool m_bInterpolate;
+	u32	m_dwIStartTime;
+	u32	m_dwIEndTime;
+	u32	m_dwILastUpdateTime;
+
+	void CalculateInterpolationParams();
+	void ApplyAnimation(u16 motion_idx, u8 motion_slot);
+	virtual void make_Interpolation();
+
 protected:
     CControlPathBuilder* m_movement_manager;
 

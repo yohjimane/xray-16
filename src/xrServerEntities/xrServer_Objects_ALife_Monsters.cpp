@@ -1696,8 +1696,19 @@ void CSE_ALifeMonsterBase::UPDATE_Read(NET_Packet& tNetPacket)
     }
     else
     {
+        tNetPacket.r_u8(phSyncFlag);
+        if (phSyncFlag)
+        {
+            physics_state.read(tNetPacket);
+            o_Position.set(physics_state.physics_position);
+        }
+        else
+        {
+            o_Position.set(tNetPacket.r_vec3());
+        }
+
         tNetPacket.r_float(f_health);
-        tNetPacket.r_vec3(o_Position);
+        tNetPacket.r_float(o_torso.pitch);
         tNetPacket.r_float(o_torso.yaw);
         tNetPacket.r_u16(u_motion_idx);
         tNetPacket.r_u16(u_motion_slot);
@@ -1714,8 +1725,18 @@ void CSE_ALifeMonsterBase::UPDATE_Write(NET_Packet& tNetPacket)
     }
     else
     {
+        tNetPacket.w_u8(phSyncFlag);
+        if (phSyncFlag)
+        {
+            physics_state.write(tNetPacket);
+        }
+        else
+        {
+            tNetPacket.w_vec3(o_Position);
+        }
+
         tNetPacket.w_float(get_health());
-        tNetPacket.w_vec3(o_Position);
+        tNetPacket.w_float(o_torso.pitch);
         tNetPacket.w_float(o_torso.yaw);
         tNetPacket.w_u16(u_motion_idx);
         tNetPacket.w_u16(u_motion_slot);
