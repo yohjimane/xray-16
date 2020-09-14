@@ -1820,7 +1820,7 @@ float CActor::Radius() const
 
 bool CActor::use_bolts() const
 {
-    if (!IsGameTypeSingle())
+    if (!CheckGameFlag(F_USE_BOLT))
         return false;
     return CInventoryOwner::use_bolts();
 };

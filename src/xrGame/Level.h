@@ -515,7 +515,8 @@ IC CPHCommander& CLevel::ph_commander_physics_worldstep()
 enum EGameFlags
 {
 	F_DISABLE_LEANING,
-	GAME_FLAGS_COUNT
+    F_USE_BOLT,
+    GAME_FLAGS_COUNT
 };
 
 extern bool g_bDebugEvents;
