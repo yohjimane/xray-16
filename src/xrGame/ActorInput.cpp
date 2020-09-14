@@ -31,6 +31,7 @@
 #include "HUDManager.h"
 #include "Weapon.h"
 #include "GamePersistent.h"
+#include "game_type.h"
 
 bool g_bAutoClearCrouch = true;
 
@@ -55,7 +56,7 @@ void CActor::IR_OnKeyboardPress(int cmd)
     {
     case kWPN_FIRE:
     {
-        if ((mstate_wishful & mcLookout) && !IsGameTypeSingle())
+        if ((mstate_wishful & mcLookout) && CheckGameFlag(F_DISABLE_LEANING))
             return;
 
         u16 slot = inventory().GetActiveSlot();

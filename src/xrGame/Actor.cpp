@@ -1213,7 +1213,7 @@ void CActor::UpdateCL()
             HUD().SetFirstBulletCrosshairDisp(pWeapon->GetFirstBulletDisp());
 #endif
 
-            BOOL B = !((mstate_real & mcLookout) && !IsGameTypeSingle());
+            BOOL B = !((mstate_real & mcLookout) && CheckGameFlag(F_DISABLE_LEANING));
 
             psHUD_Flags.set(HUD_WEAPON_RT, B);
 
@@ -1657,7 +1657,7 @@ float CActor::missile_throw_force() { return 0.f; }
 void CActor::OnHUDDraw(u32 context_id, CCustomHUD* hud, IRenderable* root)
 {
     R_ASSERT(IsFocused());
-    if (!((mstate_real & mcLookout) && !IsGameTypeSingle()))
+    if (!((mstate_real & mcLookout) && CheckGameFlag(F_DISABLE_LEANING)))
         g_player_hud->render_hud(context_id, root);
 }
 

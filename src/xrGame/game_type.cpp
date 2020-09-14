@@ -16,3 +16,8 @@ bool IsGameTypeSingle() noexcept
 {
     return g_pGamePersistent->GameType() == eGameIDSingle;
 }
+
+bool CheckGameFlag(u64 flag) noexcept
+{
+    return g_game_flags[flag] & g_pGamePersistent->GameType();
+}

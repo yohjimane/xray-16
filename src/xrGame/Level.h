@@ -48,6 +48,7 @@ class CDebugRenderer;
 #endif
 
 extern ENGINE_API float g_fov;
+extern u32 g_game_flags[];
 
 const int maxRP = 64;
 const int maxTeams = 32;
@@ -429,6 +430,7 @@ public:
 public:
     void remove_objects();
     void OnSessionTerminate(pcstr reason) override;
+    void setup_game_flags();
     file_transfer::client_site* m_file_transfer = nullptr;
     compression::ppmd_trained_stream* m_trained_stream = nullptr;
     compression::lzo_dictionary_buffer m_lzo_dictionary;
@@ -509,5 +511,11 @@ IC CPHCommander& CLevel::ph_commander_physics_worldstep()
     VERIFY(m_ph_commander_scripts);
     return *m_ph_commander_physics_worldstep;
 }
+
+enum EGameFlags
+{
+	F_DISABLE_LEANING,
+	GAME_FLAGS_COUNT
+};
 
 extern bool g_bDebugEvents;

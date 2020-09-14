@@ -66,6 +66,7 @@ extern CUISequencer* g_tutorial2;
 
 float g_cl_lvInterp = 0.1;
 u32 lvInterpSteps = 0;
+u32 g_game_flags[GAME_FLAGS_COUNT];
 
 CLevel::CLevel()
     : IPureClient(Device.GetTimerGlobal())
@@ -108,6 +109,7 @@ CLevel::CLevel()
     pHUD = xr_new<CHUDManager>();
     g_player_hud = xr_new<player_hud>();
     g_player_hud->load_default();
+    setup_game_flags();
 }
 
 CLevel::~CLevel()
@@ -1079,6 +1081,12 @@ void CLevel::OnAlifeSimulatorLoaded()
 }
 
 void CLevel::OnSessionTerminate(pcstr reason) { MainMenu()->OnSessionTerminate(reason); }
+
+void CLevel::setup_game_flags()
+{
+    g_game_flags[F_DISABLE_LEANING] = eGameIDDeathmatch | eGameIDTeamDeathmatch | eGameIDArtefactHunt | eGameIDCaptureTheArtefact;
+}
+
 u32 GameID() { return Game().Type(); }
 CZoneList* CLevel::create_hud_zones_list()
 {
