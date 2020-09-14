@@ -1086,6 +1086,7 @@ void CLevel::setup_game_flags()
 {
     g_game_flags[F_DISABLE_LEANING] = eGameIDDeathmatch | eGameIDTeamDeathmatch | eGameIDArtefactHunt | eGameIDCaptureTheArtefact;
     g_game_flags[F_USE_BOLT] = eGameIDSingle | eGameIDFreeMp;
+    g_game_flags[F_USE_NO_ACTIVE_SLOT] = eGameIDSingle | eGameIDFreeMp;
 }
 
 u32 GameID() { return Game().Type(); }

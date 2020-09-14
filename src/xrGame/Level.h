@@ -516,6 +516,7 @@ enum EGameFlags
 {
 	F_DISABLE_LEANING,
     F_USE_BOLT,
+    F_USE_NO_ACTIVE_SLOT,
     GAME_FLAGS_COUNT
 };
 
