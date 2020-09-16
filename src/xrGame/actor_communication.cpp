@@ -146,14 +146,10 @@ bool CActor::OnReceiveInfo(shared_str info_id) const
 
     if (!CurrentGameUI())
         return false;
-    //только если находимся в режиме single
-    CUIGameSP* pGameSP = smart_cast<CUIGameSP*>(CurrentGameUI());
-    if (!pGameSP)
-        return false;
 
-    if (pGameSP->TalkMenu->IsShown())
+    if (CurrentGameUI()->TalkMenu->IsShown())
     {
-        pGameSP->TalkMenu->NeedUpdateQuestions();
+        CurrentGameUI()->TalkMenu->NeedUpdateQuestions();
     }
 
     return true;
@@ -166,24 +162,14 @@ void CActor::OnDisableInfo(shared_str info_id) const
     if (!CurrentGameUI())
         return;
 
-    //только если находимся в режиме single
-    CUIGameSP* pGameSP = smart_cast<CUIGameSP*>(CurrentGameUI());
-    if (!pGameSP)
-        return;
-
-    if (pGameSP->TalkMenu->IsShown())
-        pGameSP->TalkMenu->NeedUpdateQuestions();
+    if (CurrentGameUI()->TalkMenu->IsShown())
+        CurrentGameUI()->TalkMenu->NeedUpdateQuestions();
 }
 
 void CActor::ReceivePhrase(DIALOG_SHARED_PTR& phrase_dialog)
 {
-    //только если находимся в режиме single
-    CUIGameSP* pGameSP = smart_cast<CUIGameSP*>(CurrentGameUI());
-    if (!pGameSP)
-        return;
-
-    if (pGameSP->TalkMenu->IsShown())
-        pGameSP->TalkMenu->NeedUpdateQuestions();
+    if (CurrentGameUI()->TalkMenu->IsShown())
+        CurrentGameUI()->TalkMenu->NeedUpdateQuestions();
 
     CPhraseDialogManager::ReceivePhrase(phrase_dialog);
 }
@@ -236,8 +222,7 @@ void CActor::RunTalkDialog(CInventoryOwner* talk_partner, bool disable_break)
         if (CurrentGameUI()->TopInputReceiver())
             CurrentGameUI()->TopInputReceiver()->HideDialog();
 
-        //		smart_cast<CUIGameSP*>(CurrentGameUI())->StartTalk(disable_break);
-        smart_cast<CUIGameSP*>(CurrentGameUI())->StartTalk(talk_partner->bDisableBreakDialog);
+        CurrentGameUI()->StartTalk(talk_partner->bDisableBreakDialog);
     }
 }
 

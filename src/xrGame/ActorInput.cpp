@@ -668,12 +668,11 @@ void CActor::ActorUse()
 
     if (m_pInvBoxWeLookingAt && m_pInvBoxWeLookingAt->nonscript_usable())
     {
-        CUIGameSP* pGameSP = smart_cast<CUIGameSP*>(CurrentGameUI());
-        if (pGameSP) // single
+        if (CheckGameFlag(F_USE_DIALOG)) // single
         {
             if (!m_pInvBoxWeLookingAt->closed())
             {
-                pGameSP->StartCarBody(this, m_pInvBoxWeLookingAt);
+                CurrentGameUI()->StartCarBody(this, m_pInvBoxWeLookingAt);
             }
         }
         return;
@@ -687,7 +686,7 @@ void CActor::ActorUse()
 
             VERIFY(pEntityAliveWeLookingAt);
 
-            if (IsGameTypeSingle())
+            if (CheckGameFlag(F_USE_DIALOG))
             {
                 if (pEntityAliveWeLookingAt->g_Alive())
                 {
@@ -695,17 +694,12 @@ void CActor::ActorUse()
                 }
                 else
                 {
-                    //только если находимся в режиме single
-                    CUIGameSP* pGameSP = smart_cast<CUIGameSP*>(CurrentGameUI());
-                    if (pGameSP)
+                    if (!m_pPersonWeLookingAt->deadbody_closed_status())
                     {
-                        if (!m_pPersonWeLookingAt->deadbody_closed_status())
-                        {
-                            if (pEntityAliveWeLookingAt->AlreadyDie() &&
-                                pEntityAliveWeLookingAt->GetLevelDeathTime() + 3000 < Device.dwTimeGlobal)
-                                // 99.9% dead
-                                pGameSP->StartCarBody(this, m_pPersonWeLookingAt);
-                        }
+                        if (pEntityAliveWeLookingAt->AlreadyDie() &&
+                            pEntityAliveWeLookingAt->GetLevelDeathTime() + 3000 < Device.dwTimeGlobal)
+                            // 99.9% dead
+                            CurrentGameUI()->StartCarBody(this, m_pPersonWeLookingAt);
                     }
                 }
             }

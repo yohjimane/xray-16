@@ -375,7 +375,6 @@ void CInventoryOwner::SetCommunity(CHARACTER_COMMUNITY_INDEX new_community)
         EA->ChangeTeam(CharacterInfo().Community().team(), EA->g_Squad(), EA->g_Group());
     }
 
-
     CSE_Abstract* e_entity = ai().alife().objects().object(EA->ID(), false);
     if (!e_entity)
         return;

@@ -1545,7 +1545,7 @@ void CActor::shedule_Update(u32 DT)
         m_pVehicleWeLookingAt = smart_cast<CHolderCustom*>(game_object);
         CEntityAlive* pEntityAlive = smart_cast<CEntityAlive*>(game_object);
 
-        if (GameID() == eGameIDSingle)
+        if (CheckGameFlag(F_USE_DIALOG))
         {
             if (m_pUsableObject && m_pUsableObject->tip_text())
             {
