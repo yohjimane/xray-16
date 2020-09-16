@@ -21,6 +21,7 @@ class CUIPdaWnd;
 struct KillMessageStruct;
 class CUIMainIngameWnd;
 class CUIMessagesWindow;
+class CUITalkWnd;
 
 class StaticDrawableWrapper : public IPureDestroyableObject
 {
@@ -91,6 +92,7 @@ public:
     // XXX nitrocaster: make not public
     CUIMainIngameWnd* UIMainIngameWnd;
     CUIMessagesWindow* m_pMessagesWnd;
+    CUITalkWnd* TalkMenu;
 
     CUIGameCustom();
     virtual ~CUIGameCustom();
@@ -114,7 +116,7 @@ public:
     bool GameIndicatorsShown() { return showGameIndicators; }
     void ShowCrosshair(bool show) { psHUD_Flags.set(HUD_CROSSHAIR_RT, show); }
     bool CrosshairShown() { return !!psHUD_Flags.test(HUD_CROSSHAIR_RT); }
-    virtual void HideShownDialogs() {}
+    virtual void HideShownDialogs();
     virtual void ReinitDialogs() {}
     StaticDrawableWrapper* AddCustomStatic(const char* id, bool singleInstance, float ttlDefault = -1.0f);
     StaticDrawableWrapper* GetCustomStatic(const char* id);
@@ -133,6 +135,12 @@ public:
     pcstr GetDebugType() override { return "CUIGameCustom"; }
     bool FillDebugTree(const CUIDebugState& debugState) override;
     void FillDebugInfo() override;
+
+    void StartTalk(bool disable_break);
+    void StartTrade(CInventoryOwner* pActorInv, CInventoryOwner* pOtherOwner);
+    void StartUpgrade(CInventoryOwner* pActorInv, CInventoryOwner* pMech);
+    void StartCarBody(CInventoryOwner* pActorInv, CInventoryOwner* pOtherOwner);
+    void StartCarBody(CInventoryOwner* pActorInv, CInventoryBox* pBox);
 };
 
 extern CUIGameCustom* CurrentGameUI();

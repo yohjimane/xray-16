@@ -14,6 +14,7 @@
 #include "Actor.h"
 #include "Inventory.h"
 #include "game_cl_base.h"
+#include "ui/UITalkWnd.h"
 
 #include "ui/UICellItem.h" //Alundaio
 //#include "script_game_object.h" //Alundaio
@@ -39,6 +40,7 @@ CUIGameCustom::CUIGameCustom()
     ShowCrosshair(true);
 
     InventoryUtilities::CreateShaders();
+	TalkMenu = xr_new<CUITalkWnd>();
 }
 
 bool g_b_ClearGameCaptions = false;
@@ -49,6 +51,7 @@ CUIGameCustom::~CUIGameCustom()
 
     delete_data(CustomStatics);
     g_b_ClearGameCaptions = false;
+    delete_data(TalkMenu);
 }
 
 void CUIGameCustom::OnUIReset()
@@ -512,4 +515,67 @@ const xr_vector<MPWeatherDesc>& CMapListHelper::GetGameWeathers()
     if (m_weathers.size() == 0)
         Load();
     return m_weathers;
+}
+
+void CUIGameCustom::HideShownDialogs()
+{
+    HideActorMenu();
+    HidePdaMenu();
+    CUIDialogWnd* mir = TopInputReceiver();
+    if (mir && mir == TalkMenu)
+    {
+        mir->HideDialog();
+    }
+}
+
+void CUIGameCustom::StartTrade(CInventoryOwner* pActorInv, CInventoryOwner* pOtherOwner)
+{
+    ActorMenu->SetActor(pActorInv);
+    ActorMenu->SetPartner(pOtherOwner);
+
+    ActorMenu->SetMenuMode(mmTrade);
+    ActorMenu->ShowDialog(true);
+}
+
+void CUIGameCustom::StartUpgrade(CInventoryOwner* pActorInv, CInventoryOwner* pMech)
+{
+    ActorMenu->SetActor(pActorInv);
+    ActorMenu->SetPartner(pMech);
+
+    ActorMenu->SetMenuMode(mmUpgrade);
+    ActorMenu->ShowDialog(true);
+}
+
+void CUIGameCustom::StartTalk(bool disable_break)
+{
+    RemoveCustomStatic("main_task");
+    RemoveCustomStatic("secondary_task");
+
+    TalkMenu->b_disable_break = disable_break;
+    TalkMenu->ShowDialog(true);
+}
+
+void CUIGameCustom::StartCarBody(CInventoryOwner* pActorInv, CInventoryOwner* pOtherOwner) // Deadbody search
+{
+    if (TopInputReceiver())
+        return;
+
+    ActorMenu->SetActor(pActorInv);
+    ActorMenu->SetPartner(pOtherOwner);
+
+    ActorMenu->SetMenuMode(mmDeadBodySearch);
+    ActorMenu->ShowDialog(true);
+}
+
+void CUIGameCustom::StartCarBody(CInventoryOwner* pActorInv, CInventoryBox* pBox) // Deadbody search
+{
+    if (TopInputReceiver())
+        return;
+
+    ActorMenu->SetActor(pActorInv);
+    ActorMenu->SetInvBox(pBox);
+    VERIFY(pBox);
+
+    ActorMenu->SetMenuMode(mmDeadBodySearch);
+    ActorMenu->ShowDialog(true);
 }

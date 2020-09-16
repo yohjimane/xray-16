@@ -24,26 +24,13 @@
 
 CUIGameSP::CUIGameSP() : m_game(NULL), m_game_objective(NULL)
 {
-    TalkMenu = xr_new<CUITalkWnd>();
     UIChangeLevelWnd = xr_new<CChangeLevelWnd>();
 }
 
 CUIGameSP::~CUIGameSP()
 {
-    delete_data(TalkMenu);
     delete_data(UIChangeLevelWnd);
     CloseTimeDilator();
-}
-
-void CUIGameSP::HideShownDialogs()
-{
-    HideActorMenu();
-    HidePdaMenu();
-    CUIDialogWnd* mir = TopInputReceiver();
-    if (mir && mir == TalkMenu)
-    {
-        mir->HideDialog();
-    }
 }
 
 void CUIGameSP::ReinitDialogs()
@@ -191,62 +178,6 @@ void CUIGameSP::Render()
     inherited::Render();
 }
 #endif
-
-void CUIGameSP::StartTrade(CInventoryOwner* pActorInv, CInventoryOwner* pOtherOwner)
-{
-    //.	if( MainInputReceiver() )	return;
-
-    ActorMenu->SetActor(pActorInv);
-    ActorMenu->SetPartner(pOtherOwner);
-
-    ActorMenu->SetMenuMode(mmTrade);
-    ActorMenu->ShowDialog(true);
-}
-
-void CUIGameSP::StartUpgrade(CInventoryOwner* pActorInv, CInventoryOwner* pMech)
-{
-    //.	if( MainInputReceiver() )	return;
-
-    ActorMenu->SetActor(pActorInv);
-    ActorMenu->SetPartner(pMech);
-
-    ActorMenu->SetMenuMode(mmUpgrade);
-    ActorMenu->ShowDialog(true);
-}
-
-void CUIGameSP::StartTalk(bool disable_break)
-{
-    RemoveCustomStatic("main_task");
-    RemoveCustomStatic("secondary_task");
-
-    TalkMenu->b_disable_break = disable_break;
-    TalkMenu->ShowDialog(true);
-}
-
-void CUIGameSP::StartCarBody(CInventoryOwner* pActorInv, CInventoryOwner* pOtherOwner) // Deadbody search
-{
-    if (TopInputReceiver())
-        return;
-
-    ActorMenu->SetActor(pActorInv);
-    ActorMenu->SetPartner(pOtherOwner);
-
-    ActorMenu->SetMenuMode(mmDeadBodySearch);
-    ActorMenu->ShowDialog(true);
-}
-
-void CUIGameSP::StartCarBody(CInventoryOwner* pActorInv, CInventoryBox* pBox) // Deadbody search
-{
-    if (TopInputReceiver())
-        return;
-
-    ActorMenu->SetActor(pActorInv);
-    ActorMenu->SetInvBox(pBox);
-    VERIFY(pBox);
-
-    ActorMenu->SetMenuMode(mmDeadBodySearch);
-    ActorMenu->ShowDialog(true);
-}
 
 extern ENGINE_API bool bShowPauseString;
 void CUIGameSP::ChangeLevel(GameGraph::_GRAPH_ID game_vert_id, u32 level_vert_id, Fvector pos, Fvector ang,

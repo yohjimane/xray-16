@@ -5,13 +5,11 @@
 #include "UITimeDilator.h"
 
 class CUITradeWnd;
-class CUITalkWnd;
 class CInventory;
 
 class game_cl_Single;
 class CChangeLevelWnd;
 class CUIMessageBox;
-class CInventoryBox;
 class CInventoryOwner;
 
 extern UITimeDilator* TimeDilator();
@@ -32,15 +30,9 @@ public:
     virtual void OnFrame();
     void OnUIReset() override;
 
-    void StartTalk(bool disable_break);
-    void StartTrade(CInventoryOwner* pActorInv, CInventoryOwner* pOtherOwner);
-    void StartUpgrade(CInventoryOwner* pActorInv, CInventoryOwner* pMech);
-    void StartCarBody(CInventoryOwner* pActorInv, CInventoryOwner* pOtherOwner);
-    void StartCarBody(CInventoryOwner* pActorInv, CInventoryBox* pBox);
     void ChangeLevel(GameGraph::_GRAPH_ID game_vert_id, u32 level_vert_id, Fvector pos, Fvector ang, Fvector pos2,
         Fvector ang2, bool b, const shared_str& message, bool b_allow_change_level);
 
-    void HideShownDialogs() override;
     void ReinitDialogs() override;
 
     void StartDialog(CUIDialogWnd* pDialog, bool bDoHideIndicators) override;
@@ -49,7 +41,6 @@ public:
 #ifdef DEBUG
     virtual void Render();
 #endif
-    CUITalkWnd* TalkMenu;
     CChangeLevelWnd* UIChangeLevelWnd;
 
     StaticDrawableWrapper* m_game_objective;

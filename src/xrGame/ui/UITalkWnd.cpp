@@ -336,7 +336,7 @@ void CUITalkWnd::SwitchToUpgrade()
 {
     // if ( m_pOurInvOwner->IsInvUpgradeEnabled() && m_pOthersInvOwner->IsInvUpgradeEnabled() )
     {
-        CUIGameSP* pGameSP = smart_cast<CUIGameSP*>(CurrentGameUI());
+        CUIGameCustom* pGameSP = smart_cast<CUIGameCustom*>(CurrentGameUI());
         if (pGameSP)
         {
             UITalkDialogWnd->Hide();
