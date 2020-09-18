@@ -1111,8 +1111,7 @@ bool CInventory::Eat(PIItem pIItem)
     CActor* pActor = smart_cast<CActor*>(Level().CurrentControlEntity());
     if (pActor && pActor->m_inventory == this)
     {
-        if (IsGameTypeSingle())
-            pActor->callback(GameObject::eUseObject)(smart_cast<CGameObject*>(pIItem)->lua_game_object());
+        pActor->callback(GameObject::eUseObject)(smart_cast<CGameObject*>(pIItem)->lua_game_object());
 
         if (pItemToEat->IsUsingCondition() && pItemToEat->GetRemainingUses() < 1 && pItemToEat->CanDelete())
             CurrentGameUI()->GetActorMenu().RefreshCurrentItemCell();
