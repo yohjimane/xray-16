@@ -44,7 +44,7 @@ public:
 #ifndef AI_COMPILER
     shared_str character_profile();
     void set_character_profile(shared_str);
-    shared_str specific_character();
+    virtual shared_str specific_character();
     void set_specific_character(shared_str);
 #endif
 

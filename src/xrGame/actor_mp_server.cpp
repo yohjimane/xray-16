@@ -1,5 +1,6 @@
 #include "StdAfx.h"
 #include "actor_mp_server.h"
+#include "Level.h"
 
 CSE_ActorMP::CSE_ActorMP(LPCSTR section) : inherited(section) { m_ready_to_update = false; }
 void CSE_ActorMP::STATE_Read(NET_Packet& packet, u16 size)
@@ -38,3 +39,11 @@ void CSE_ActorMP::on_death(CSE_Abstract* killer)
     m_state_holder.relevant(state);
 }
 #endif
+
+shared_str CSE_ActorMP::specific_character()
+{
+	if (g_pGameLevel && Level().game && (GameID() != eGameIDSingle))
+		return m_SpecificCharacter;
+
+	return inherited::specific_character();
+}
