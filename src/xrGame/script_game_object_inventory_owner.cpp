@@ -846,14 +846,9 @@ void CScriptGameObject::SwitchToTrade()
     if (!pActor)
         return;
 
-    //только если находимся в режиме single
-    CUIGameSP* pGameSP = smart_cast<CUIGameSP*>(CurrentGameUI());
-    if (!pGameSP)
-        return;
-
-    if (pGameSP->TalkMenu->IsShown())
+    if (CurrentGameUI()->TalkMenu->IsShown())
     {
-        pGameSP->TalkMenu->SwitchToTrade();
+        CurrentGameUI()->TalkMenu->SwitchToTrade();
     }
 }
 

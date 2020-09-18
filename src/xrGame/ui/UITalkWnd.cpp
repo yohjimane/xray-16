@@ -56,8 +56,16 @@ void CUITalkWnd::InitTalkDialog()
     m_pOthersDialogManager = smart_cast<CPhraseDialogManager*>(m_pOthersInvOwner);
 
     //имена собеседников
-    UITalkDialogWnd->UICharacterInfoLeft.InitCharacter(m_pOurInvOwner->object_id());
-    UITalkDialogWnd->UICharacterInfoRight.InitCharacter(m_pOthersInvOwner->object_id());
+    if (IsGameTypeSingle())
+    {
+        UITalkDialogWnd->UICharacterInfoLeft.InitCharacter(m_pOurInvOwner->object_id());
+        UITalkDialogWnd->UICharacterInfoRight.InitCharacter(m_pOthersInvOwner->object_id());
+    }
+    else
+    {
+        UITalkDialogWnd->UICharacterInfoLeft.InitCharacterMP(m_pOurInvOwner);
+        UITalkDialogWnd->UICharacterInfoRight.InitCharacterMP(m_pOthersInvOwner);
+    }
 
     //.	UITalkDialogWnd->UIDialogFrame.UITitleText.SetText		(m_pOthersInvOwner->Name());
     //.	UITalkDialogWnd->UIOurPhrasesFrame.UITitleText.SetText	(m_pOurInvOwner->Name());
@@ -203,10 +211,9 @@ void CUITalkWnd::Update()
             HideDialog();
     }
 
-    CUIGameSP* pGameSP = smart_cast<CUIGameSP*>(CurrentGameUI());
-    if (pGameSP)
+    if (CurrentGameUI())
     {
-        if (pGameSP->TopInputReceiver() == this && !UITalkDialogWnd->IsShown())
+        if (CurrentGameUI()->TopInputReceiver() == this && !UITalkDialogWnd->IsShown())
             UITalkDialogWnd->Show();
     }
 
@@ -321,14 +328,9 @@ void CUITalkWnd::SwitchToTrade()
 {
     if (m_pOurInvOwner->IsTradeEnabled() && m_pOthersInvOwner->IsTradeEnabled())
     {
-        CUIGameSP* pGameSP = smart_cast<CUIGameSP*>(CurrentGameUI());
-        if (pGameSP)
-        {
-            UITalkDialogWnd->Hide();
-            StopSnd();
-
-            pGameSP->StartTrade(m_pOurInvOwner, m_pOthersInvOwner);
-        }
+        UITalkDialogWnd->Hide();
+        StopSnd();
+        CurrentGameUI()->StartTrade(m_pOurInvOwner, m_pOthersInvOwner);
     }
 }
 
