@@ -148,7 +148,22 @@ void CLevel::net_Stop()
     else if (IsDemoSave() && !IsDemoInfoSaved())
         SaveDemoInfo();
 
-    remove_objects();
+
+	if (!IsGameTypeSingle() || CoopEnabled())
+	{
+		luabind::functor<void> funct;
+		R_ASSERT(GEnv.ScriptEngine->functor("mp_disconnect.before_remove_objects", funct));
+		funct();
+	}
+
+	remove_objects();
+
+	if (!IsGameTypeSingle() || CoopEnabled())
+	{
+		luabind::functor<void> funct2;
+		R_ASSERT(GEnv.ScriptEngine->functor("mp_disconnect.after_remove_objects", funct2));
+		funct2();
+	}
 
     // WARNING ! remove_objects() uses this flag, so position of this line must e here ..
     game_configured = FALSE;
