@@ -162,7 +162,7 @@ void CHUDTarget::Render()
             CEntityAlive* pCurEnt = smart_cast<CEntityAlive*>(Level().CurrentEntity());
             PIItem l_pI = smart_cast<PIItem>(PP.RQ.O);
 
-            if (IsGameTypeSingle())
+            if (true)
             {
                 CInventoryOwner* our_inv_owner = smart_cast<CInventoryOwner*>(pCurEnt);
 
@@ -170,7 +170,7 @@ void CHUDTarget::Render()
                 {
                     C = C_ON_ENEMY;
                 }
-                else if (E && E->g_Alive() && !E->cast_base_monster())
+                else if (E && E->g_Alive() && !E->cast_base_monster() && !E->cast_actor())
                 {
                     CInventoryOwner* others_inv_owner = smart_cast<CInventoryOwner*>(E);
 
@@ -207,7 +207,7 @@ void CHUDTarget::Render()
             {
                 if (E && (E->GetfHealth() > 0))
                 {
-                    if (pCurEnt && GameID() == eGameIDSingle)
+                    if (pCurEnt)
                     {
                         if (GameID() == eGameIDDeathmatch)
                             C = C_ON_ENEMY;
