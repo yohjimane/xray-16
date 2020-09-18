@@ -84,7 +84,14 @@ void CUIActorMenu::InitPartnerInfo()
         }
         else
         {
-            GetModeSpecificPartnerInfo(m_currMenuMode)->InitCharacter(m_pPartnerInvOwner->object_id());
+            if (IsGameTypeSingle())
+            {
+                GetModeSpecificPartnerInfo(m_currMenuMode)->InitCharacter(m_pPartnerInvOwner->object_id());
+            }
+            else
+            {
+                GetModeSpecificPartnerInfo(m_currMenuMode)->InitCharacterMP(m_pPartnerInvOwner);
+            }
         }
 
         SetInvBox(nullptr);

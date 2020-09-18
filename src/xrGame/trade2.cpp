@@ -228,14 +228,18 @@ u32 CTrade::GetItemPrice(PIItem pItem, bool b_buying, bool bFree /*= false*/)
     u32 result = iFloor(base_cost * condition_factor * action_factor * deficit_factor);
 
     // use some script discounts
-    luabind::functor<float> func;
-    if (b_buying)
-        GEnv.ScriptEngine->functor("trade_manager.get_buy_discount", func);
-    else
-        GEnv.ScriptEngine->functor("trade_manager.get_sell_discount", func);
+    if (IsGameTypeSingle())
+    {
+        luabind::functor<float> func;
+        if (b_buying)
+            GEnv.ScriptEngine->functor("trade_manager.get_buy_discount", func);
+        else
+            GEnv.ScriptEngine->functor("trade_manager.get_sell_discount", func);
 
-    if (func)
-        result = iFloor(result * func(smart_cast<const CGameObject*>(pThis.inv_owner)->ID()));
+        if (func)
+            result = iFloor(result * func(smart_cast<const CGameObject*>(pThis.inv_owner)->ID()));
+    }
+
     // if(result>500)
     //	result		= iFloor(result/10+0.5f)*10;
 
