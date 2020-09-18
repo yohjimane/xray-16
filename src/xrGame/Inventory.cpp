@@ -318,7 +318,16 @@ bool CInventory::DropItem(CGameObject* pObj, bool just_before_destroy, bool dont
         IGameObject* pActor_owner = smart_cast<IGameObject*>(m_pOwner);
 
         if (Level().CurrentViewEntity() == pActor_owner)
+        {
             CurrentGameUI()->OnInventoryAction(pIItem, GE_OWNERSHIP_REJECT);
+        }
+        else if (!IsGameTypeSingle() && CurrentGameUI()->GetActorMenu().GetMenuMode() == mmDeadBodySearch)
+        {
+            if (m_pOwner == CurrentGameUI()->GetActorMenu().GetPartner())
+            {
+                CurrentGameUI()->OnInventoryAction(pIItem, GE_OWNERSHIP_REJECT);
+            }
+        }
     };
     pObj->H_SetParent(0, dont_create_shell);
     return true;
