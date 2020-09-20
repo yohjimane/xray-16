@@ -50,6 +50,7 @@ void CScriptBinder::reinit()
         }
         catch (...)
         {
+            R_ASSERT3(0, "Script binder crashed during reinit", m_object->m_object->Name());
             clear();
         }
     }
@@ -76,6 +77,7 @@ void CScriptBinder::reload(LPCSTR section)
     }
     catch (...)
     {
+        R_ASSERT3(0, "Script binder crashed during reload", m_object->m_object->Name());
         clear();
         return;
     }
@@ -88,6 +90,7 @@ void CScriptBinder::reload(LPCSTR section)
         }
         catch (...)
         {
+            R_ASSERT3(0, "Script binder crashed during reload", m_object->m_object->Name());
             clear();
         }
     }
@@ -106,6 +109,7 @@ BOOL CScriptBinder::net_Spawn(CSE_Abstract* DC)
         }
         catch (...)
         {
+            R_ASSERT3(0, "Script binder crashed during net_Spawn", m_object->m_object->Name());
             clear();
         }
     }
@@ -126,6 +130,7 @@ void CScriptBinder::net_Destroy()
         }
         catch (...)
         {
+            R_ASSERT3(0, "Script binder crashed during net_Destroy", m_object->m_object->Name());
             clear();
         }
     }
@@ -151,6 +156,7 @@ void CScriptBinder::shedule_Update(u32 time_delta)
         }
         catch (...)
         {
+            R_ASSERT3(0, "Script binder crashed during shedule_Update", m_object->m_object->Name());
             clear();
         }
     }
@@ -166,6 +172,7 @@ void CScriptBinder::save(NET_Packet& output_packet)
         }
         catch (...)
         {
+            R_ASSERT3(0, "Script binder crashed during save", m_object->m_object->Name());
             clear();
         }
     }
@@ -181,6 +188,7 @@ void CScriptBinder::load(IReader& input_packet)
         }
         catch (...)
         {
+            R_ASSERT3(0, "Script binder crashed during load", m_object->m_object->Name());
             clear();
         }
     }
@@ -196,6 +204,7 @@ BOOL CScriptBinder::net_SaveRelevant()
         }
         catch (...)
         {
+            R_ASSERT3(0, "Script binder crashed during net_SaveRelevant", m_object->m_object->Name());
             clear();
         }
     }
@@ -213,6 +222,7 @@ void CScriptBinder::net_Relcase(IGameObject* object)
         }
         catch (...)
         {
+            R_ASSERT3(0, "Script binder crashed during net_Relcase", m_object->m_object->Name());
             clear();
         }
     }
