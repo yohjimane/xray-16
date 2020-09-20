@@ -27,6 +27,7 @@
 #include "CustomOutfit.h"
 #include "Bolt.h"
 #include "xrNetServer/NET_Messages.h"
+#include "actor_mp_server.h"
 
 CInventoryOwner::CInventoryOwner()
     : m_inventory(xr_new<CInventory>()),
@@ -105,7 +106,7 @@ bool CInventoryOwner::net_Spawn(CSE_Abstract* DC)
         return FALSE;
     CSE_Abstract* E = (CSE_Abstract*)(DC);
 
-    if (!smart_cast<CSE_ALifeCreatureActor*>(E))
+    if (IsGameTypeSingle() || !smart_cast<CSE_ActorMP*)
     {
         CSE_ALifeTraderAbstract* pTrader = NULL;
         if (E)
