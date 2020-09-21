@@ -518,6 +518,7 @@ enum EGameFlags
     F_USE_BOLT,
     F_USE_NO_ACTIVE_SLOT,
     F_USE_DIALOG,
+    F_RENDER_ACTOR_HUD_INFO,
     GAME_FLAGS_COUNT
 };
 

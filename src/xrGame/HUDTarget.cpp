@@ -21,6 +21,7 @@
 #include "Inventory.h"
 
 #include "ai/monsters/poltergeist/poltergeist.h"
+#include "Actor.h"
 
 namespace detail::hud_target
 {
@@ -161,14 +162,44 @@ void CHUDTarget::Render()
             CEntityAlive* E = smart_cast<CEntityAlive*>(PP.RQ.O);
             CEntityAlive* pCurEnt = smart_cast<CEntityAlive*>(Level().CurrentEntity());
             PIItem l_pI = smart_cast<PIItem>(PP.RQ.O);
+            CActor* pActor = smart_cast<CActor*>(PP.RQ.O);
 
             if (true)
             {
                 CInventoryOwner* our_inv_owner = smart_cast<CInventoryOwner*>(pCurEnt);
 
-                if (E && E->g_Alive() && E->cast_base_monster())
+                if (E && E->g_Alive())
                 {
-                    C = C_ON_ENEMY;
+                    if (E->cast_base_monster())
+                    {
+                        C = C_ON_ENEMY;
+                    }
+                    else if (!pActor || (pActor && CheckGameFlag(F_RENDER_ACTOR_HUD_INFO)))
+                    {
+                        CInventoryOwner* others_inv_owner = smart_cast<CInventoryOwner*>(E);
+
+                        if (our_inv_owner && others_inv_owner) {
+
+                            switch (RELATION_REGISTRY().GetRelationType(others_inv_owner, our_inv_owner))
+                            {
+                            case ALife::eRelationTypeEnemy:
+                                C = C_ON_ENEMY; break;
+                            case ALife::eRelationTypeNeutral:
+                                C = C_ON_NEUTRAL; break;
+                            case ALife::eRelationTypeFriend:
+                                C = C_ON_FRIEND; break;
+                            }
+
+                            if (fuzzyShowInfo > 0.5f)
+                            {
+                                CStringTable	strtbl;
+                                F->SetColor(subst_alpha(C, u8(iFloor(255.f * (fuzzyShowInfo - 0.5f) * 2.f))));
+                                F->OutNext("%s", *strtbl.translate(others_inv_owner->Name()));
+                                F->OutNext("%s", *strtbl.translate(others_inv_owner->CharacterInfo().Community().id()));
+                            }
+                        }
+                    }
+                    fuzzyShowInfo += SHOW_INFO_SPEED * Device.fTimeDelta;
                 }
                 else if (E && E->g_Alive() && !E->cast_base_monster() && !E->cast_actor())
                 {
