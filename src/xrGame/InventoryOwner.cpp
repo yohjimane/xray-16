@@ -356,6 +356,11 @@ LPCSTR CInventoryOwner::Name() const
     return m_game_name.c_str();
 }
 
+void CInventoryOwner::SetName(LPCSTR name)
+{
+    m_game_name = name;
+}
+
 LPCSTR CInventoryOwner::IconName() const { return CharacterInfo().IconName().c_str(); }
 void CInventoryOwner::NewPdaContact(CInventoryOwner* pInvOwner) {}
 void CInventoryOwner::LostPdaContact(CInventoryOwner* pInvOwner) {}
