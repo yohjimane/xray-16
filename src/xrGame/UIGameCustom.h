@@ -22,6 +22,7 @@ struct KillMessageStruct;
 class CUIMainIngameWnd;
 class CUIMessagesWindow;
 class CUITalkWnd;
+class CInventoryOwner;
 
 class StaticDrawableWrapper : public IPureDestroyableObject
 {

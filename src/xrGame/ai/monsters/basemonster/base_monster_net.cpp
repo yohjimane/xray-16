@@ -6,7 +6,7 @@
 #include "Hit.h"
 #include "PHDestroyable.h"
 #include "CharacterPhysicsSupport.h"
-
+#include "xrPhysics/phvalide.h"
 extern int g_cl_InterpolationType;
 
 void CBaseMonster::net_Save(NET_Packet& P)

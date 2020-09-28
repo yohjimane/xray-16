@@ -11,6 +11,7 @@
 #include "stalker_animation_manager.h"
 #include "Weapon.h"
 #include "xrGame/net_physics_state.h"
+#include "xrPhysics/phvalide.h"
 
 extern int g_cl_InterpolationType;
 
