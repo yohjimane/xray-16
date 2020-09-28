@@ -188,7 +188,10 @@ void CGameTaskManager::UpdateTasks()
         return;
 
     ZoneScoped;
-    Level().MapManager().DisableAllPointers();
+    if (IsGameTypeSingle())
+    {
+        Level().MapManager().DisableAllPointers();
+    }
 
     u32 task_count = GetGameTasks().size();
     if (0 == task_count)
