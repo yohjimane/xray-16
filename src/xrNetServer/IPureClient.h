@@ -7,36 +7,20 @@
 #include "Common/Noncopyable.hpp"
 #include "xrCore/xrstring.h"
 #include "IClientStatistic.h"
+#include "INetQueue.h"
 
 struct ip_address;
 
-class XRNETSERVER_API INetQueue : Noncopyable
+struct ClConnectionOptions
 {
-    Lock cs;
-    xr_deque<NET_Packet*> ready;
-    xr_vector<NET_Packet*> unused;
-
-public:
-    INetQueue();
-    ~INetQueue();
-
-    NET_Packet* Create();
-    NET_Packet* Create(const NET_Packet& _other);
-    NET_Packet* Retreive();
-    void Release();
-    void Lock() { cs.Enter(); }
-    void Unlock() { cs.Leave(); }
+    string256 server_name = "";
+    string64 password_str = "";
+    string64 user_name_str = "";
+    string64 user_pass = "";
+    int psSV_Port = 0;
+    int psCL_Port = 0;
+    bool bClPortWasSet = false;
 };
-
-//==============================================================================
-
-// DPlay
-extern "C"
-{
-    typedef struct _DPN_APPLICATION_DESC DPN_APPLICATION_DESC;
-    struct IDirectPlay8Address;
-    struct IDirectPlay8Client;
-}
 
 class XRNETSERVER_API IPureClient : MultipacketReciever, MultipacketSender, Noncopyable
 {
@@ -99,6 +83,7 @@ public:
     HRESULT net_Handler(u32 dwMessageType, PVOID pMessage);
 
     bool Connect(pcstr server_name);
+    bool Connect_DP(ClConnectionOptions& opt);
     void Disconnect();
 
     void net_Syncronize();

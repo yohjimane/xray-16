@@ -2,13 +2,7 @@
 
 #include "xrEngine/IGame_Level.h"
 #include "xrEngine/IGame_Persistent.h"
-#if defined(XR_PLATFORM_WINDOWS)
-#include "xrNetServer/NET_Client.h"
-#elif defined(XR_PLATFORM_LINUX) || defined(XR_PLATFORM_BSD) || defined(XR_PLATFORM_APPLE)
-#include "xrNetServer/empty/NET_Client.h"
-#else
-#   error Select or add implementation for your platform
-#endif
+#include "xrNetServer/IPureClient.h"
 #include "xrEngine/StatGraph.h"
 #include "xrMessages.h"
 #include "alife_space.h"
