@@ -1,7 +1,7 @@
 #include "stdafx.h"
 #include "xrCore/Debug/dxerr.h"
 #include "NET_Common.h"
-#include "NET_Server.h"
+#include "IPureServer.h"
 #include <functional>
 //#include "xrCore/net_utils.h"
 #include <dplay/dplay8.h>
@@ -16,166 +16,14 @@ static INetLog* pSvNetLog = nullptr;
 #define NET_PROTECTED_SERVER_STR "Access denied by protected server for this player!"
 #define NET_NOTFOR_SUBNET_STR "Your IP does not present in server's subnet"
 
-void dump_URL(pcstr p, IDirectPlay8Address* A);
-
-pcstr nameTraffic = "traffic.net";
-
 XRNETSERVER_API int psNET_ServerUpdate = 30; // FPS
 XRNETSERVER_API int psNET_ServerPending = 3;
-
 XRNETSERVER_API ClientID BroadcastCID(0xffffffff);
 
-void ip_address::set(pcstr src_string)
+static HRESULT WINAPI Handler(PVOID pvUserContext, DWORD dwMessageType, PVOID pMessage)
 {
-    u32 buff[4];
-    int cnt = sscanf(src_string, "%d.%d.%d.%d", &buff[0], &buff[1], &buff[2], &buff[3]);
-    if (cnt == 4)
-    {
-        m_data.a1 = u8(buff[0] & 0xff);
-        m_data.a2 = u8(buff[1] & 0xff);
-        m_data.a3 = u8(buff[2] & 0xff);
-        m_data.a4 = u8(buff[3] & 0xff);
-    }
-    else
-    {
-        Msg("! Bad ipAddress format [%s]", src_string);
-        m_data.data = 0;
-    }
-}
-
-xr_string ip_address::to_string() const
-{
-    string128 res;
-    xr_sprintf(res, sizeof(res), "%d.%d.%d.%d", m_data.a1, m_data.a2, m_data.a3, m_data.a4);
-    return res;
-}
-
-void IBannedClient::Load(CInifile& ini, const shared_str& sect)
-{
-    HAddr.set(sect.c_str());
-
-    tm _tm_banned;
-    const shared_str& time_to = ini.r_string(sect, "time_to");
-    int res_t = sscanf(time_to.c_str(), "%02d.%02d.%d_%02d:%02d:%02d", &_tm_banned.tm_mday, &_tm_banned.tm_mon,
-        &_tm_banned.tm_year, &_tm_banned.tm_hour, &_tm_banned.tm_min, &_tm_banned.tm_sec);
-    VERIFY(res_t == 6);
-
-    _tm_banned.tm_mon -= 1;
-    _tm_banned.tm_year -= 1900;
-
-    BanTime = mktime(&_tm_banned);
-
-    Msg("- loaded banned client %s to %s", HAddr.to_string().c_str(), BannedTimeTo().c_str());
-}
-
-void IBannedClient::Save(CInifile& ini)
-{
-    ini.w_string(HAddr.to_string().c_str(), "time_to", BannedTimeTo().c_str());
-}
-
-xr_string IBannedClient::BannedTimeTo() const
-{
-    string256 res;
-    tm* _tm_banned = _localtime64(&BanTime);
-    xr_sprintf(res, sizeof(res), "%02d.%02d.%d_%02d:%02d:%02d", _tm_banned->tm_mday, _tm_banned->tm_mon + 1,
-        _tm_banned->tm_year + 1900, _tm_banned->tm_hour, _tm_banned->tm_min, _tm_banned->tm_sec);
-
-    return res;
-}
-
-IClient::IClient(CTimer* timer) : stats(timer), server(nullptr)
-{
-    dwTime_LastUpdate = 0;
-    flags.bLocal = FALSE;
-    flags.bConnected = FALSE;
-    flags.bReconnect = FALSE;
-    flags.bVerified = TRUE;
-}
-
-IClient::~IClient() {}
-
-struct ClientStatisticImpl
-{
-    DPN_CONNECTION_INFO ci_last;
-    u32 mps_receive, mps_receive_base;
-    u32 mps_send, mps_send_base;
-    u32 dwBaseTime;
-    CTimer* device_timer;
-};
-
-IClientStatistic::IClientStatistic() :
-    m_pimpl(xr_new<ClientStatisticImpl>()) {}
-
-IClientStatistic::IClientStatistic(CTimer* timer)
-{
-    ZeroMemory(this, sizeof(*this));
-    m_pimpl = xr_new<ClientStatisticImpl>();
-    m_pimpl->device_timer = timer;
-    m_pimpl->dwBaseTime = TimeGlobal(m_pimpl->device_timer);
-}
-
-IClientStatistic::IClientStatistic(const IClientStatistic& rhs) :
-    m_pimpl(xr_new<ClientStatisticImpl>())
-{
-    *m_pimpl = *rhs.m_pimpl;
-}
-
-IClientStatistic::~IClientStatistic()
-{
-    xr_delete(m_pimpl);
-}
-
-void IClientStatistic::Update(DPN_CONNECTION_INFO& CI)
-{
-    const u32 time_global = TimeGlobal(m_pimpl->device_timer);
-    if (time_global - m_pimpl->dwBaseTime >= 999)
-    {
-        m_pimpl->dwBaseTime = time_global;
-
-        m_pimpl->mps_receive = CI.dwMessagesReceived - m_pimpl->mps_receive_base;
-        m_pimpl->mps_receive_base = CI.dwMessagesReceived;
-
-        u32 cur_msend = CI.dwMessagesTransmittedHighPriority + CI.dwMessagesTransmittedNormalPriority +
-            CI.dwMessagesTransmittedLowPriority;
-        m_pimpl->mps_send = cur_msend - m_pimpl->mps_send_base;
-        m_pimpl->mps_send_base = cur_msend;
-
-        dwBytesSendedPerSec = dwBytesSended;
-        dwBytesSended = 0;
-        dwBytesReceivedPerSec = dwBytesReceived;
-        dwBytesReceived = 0;
-    }
-    m_pimpl->ci_last = CI;
-}
-
-u32 IClientStatistic::getPing() const { return m_pimpl->ci_last.dwRoundTripLatencyMS; }
-u32 IClientStatistic::getBPS() const { return m_pimpl->ci_last.dwThroughputBPS; }
-u32 IClientStatistic::getPeakBPS() const { return m_pimpl->ci_last.dwPeakThroughputBPS; }
-u32 IClientStatistic::getDroppedCount() const { return m_pimpl->ci_last.dwPacketsDropped; }
-u32 IClientStatistic::getRetriedCount() const { return m_pimpl->ci_last.dwPacketsRetried; }
-u32 IClientStatistic::getMPS_Receive() const { return m_pimpl->mps_receive; }
-u32 IClientStatistic::getMPS_Send() const { return m_pimpl->mps_send; }
-u32 IClientStatistic::getReceivedPerSec() const { return dwBytesReceivedPerSec; }
-u32 IClientStatistic::getSendedPerSec() const { return dwBytesSendedPerSec; }
-
-void IClientStatistic::Clear()
-{
-    // XXX: Ugly, ugly hack (just following the lead of original code). FIX!
-    ClientStatisticImpl* const saved_impl = m_pimpl;
-    CTimer* const saved_timer = m_pimpl->device_timer;
-    ZeroMemory(this, sizeof(*this));
-    ZeroMemory(m_pimpl, sizeof(*m_pimpl));
-    m_pimpl = saved_impl;
-    m_pimpl->device_timer = saved_timer;
-    m_pimpl->dwBaseTime = TimeGlobal(m_pimpl->device_timer);
-}
-
-//------------------------------------------------------------------------------
-
-void IClient::_SendTo_LL(const void* data, u32 size, u32 flags, u32 timeout)
-{
-    R_ASSERT(server);
-    server->IPureServer::SendTo_LL(ID, const_cast<void*>(data), size, flags, timeout);
+    IPureServer* C = (IPureServer*)pvUserContext;
+    return C->net_Handler(dwMessageType, pMessage);
 }
 
 //------------------------------------------------------------------------------
@@ -229,8 +77,8 @@ void IPureServer::_Recieve(const void* data, u32 data_size, u32 param)
 //==============================================================================
 #ifdef CONFIG_PROFILE_LOCKS
 IPureServer::IPureServer(CTimer* timer, bool Dedicated) : m_bDedicated(Dedicated),
-                                                          csPlayers(MUTEX_PROFILE_ID(IPureServer::csPlayers)),
-                                                          csMessage(MUTEX_PROFILE_ID(csMessage))
+csPlayers(MUTEX_PROFILE_ID(IPureServer::csPlayers)),
+csMessage(MUTEX_PROFILE_ID(csMessage))
 #else
 IPureServer::IPureServer(CTimer* timer, bool Dedicated) : m_bDedicated(Dedicated)
 #endif
@@ -261,34 +109,33 @@ IPureServer::~IPureServer()
     psNET_direct_connect = false;
 }
 
-IPureServer::EConnect IPureServer::Connect(pcstr options, GameDescriptionData& game_descr)
+IPureServer::EConnect IPureServer::Connect(LPCSTR options, GameDescriptionData& game_descr)
 {
     connect_options = options;
-    psNET_direct_connect = false;
+    psNET_direct_connect = FALSE;
 
-    if (strstr(options, "/single") && !game_descr.coop_enabled)
-        psNET_direct_connect = true;
+    if (strstr(options, "/single"))
+        psNET_direct_connect = TRUE;
 
     // Parse options
-    string4096 session_name;
+    SvConnectionOptions connectOpt;
 
-    string64 password_str = "";
-    u32 dwMaxPlayers = 0;
-
-    // certainly we can use game_descr structure for determining level_name,
+    // SESSION NAME
+    xr_strcpy(connectOpt.session_name, options); //sertanly we can use game_descr structure for determinig level_name,
     // but for backward compatibility we save next line...
-    xr_strcpy(session_name, options);
-    if (strchr(session_name, '/'))
-        *strchr(session_name, '/') = 0;
+    if (strchr(connectOpt.session_name, '/'))	*strchr(connectOpt.session_name, '/') = 0;
 
+    // PASSWORD
     if (strstr(options, "psw="))
     {
         const char* PSW = strstr(options, "psw=") + 4;
         if (strchr(PSW, '/'))
-            strncpy_s(password_str, PSW, strchr(PSW, '/') - PSW);
+            strncpy_s(connectOpt.password_str, PSW, strchr(PSW, '/') - PSW);
         else
-            strncpy_s(password_str, PSW, 63);
+            strncpy_s(connectOpt.password_str, PSW, 63);
     }
+
+    // MAX PLAYERS
     if (strstr(options, "maxplayers="))
     {
         const char* sMaxPlayers = strstr(options, "maxplayers=") + 11;
@@ -297,17 +144,17 @@ IPureServer::EConnect IPureServer::Connect(pcstr options, GameDescriptionData& g
             strncpy_s(tmpStr, sMaxPlayers, strchr(sMaxPlayers, '/') - sMaxPlayers);
         else
             strncpy_s(tmpStr, sMaxPlayers, 63);
-        dwMaxPlayers = atol(tmpStr);
+        connectOpt.dwMaxPlayers = atol(tmpStr);
     }
-    if (dwMaxPlayers > 32 || dwMaxPlayers < 1)
-        dwMaxPlayers = 32;
-#ifdef DEBUG
-    Msg("MaxPlayers = %d", dwMaxPlayers);
-#endif // #ifdef DEBUG
 
-    //-------------------------------------------------------------------
-    bool bPortWasSet = false;
-    u32 dwServerPort = START_PORT_LAN_SV;
+    if (connectOpt.dwMaxPlayers > 32 || connectOpt.dwMaxPlayers < 1)
+    {
+        connectOpt.dwMaxPlayers = 32;
+    }
+
+    // SERVER PORT
+    connectOpt.bPortWasSet = false;
+    connectOpt.dwServerPort = START_PORT_LAN_SV;
     if (strstr(options, "portsv="))
     {
         const char* ServerPort = strstr(options, "portsv=") + 7;
@@ -316,151 +163,141 @@ IPureServer::EConnect IPureServer::Connect(pcstr options, GameDescriptionData& g
             strncpy_s(tmpStr, ServerPort, strchr(ServerPort, '/') - ServerPort);
         else
             strncpy_s(tmpStr, ServerPort, 63);
-        dwServerPort = atol(tmpStr);
-        clamp(dwServerPort, u32(START_PORT), u32(END_PORT));
-        bPortWasSet = true; // this is not casual game
+        connectOpt.dwServerPort = atol(tmpStr);
+        clamp(connectOpt.dwServerPort, u32(START_PORT), u32(END_PORT));
+        connectOpt.bPortWasSet = true; //this is not casual game
     }
-    //-------------------------------------------------------------------
 
     if (!psNET_direct_connect)
     {
-        //---------------------------
-#ifdef DEBUG
-        string1024 tmp;
-#endif // DEBUG
-        //HRESULT CoInitializeExRes = CoInitializeEx(nullptr, 0);
-        //if (CoInitializeExRes != S_OK && CoInitializeExRes != S_FALSE)
-        //{
-        //    DXTRACE_ERR(tmp, CoInitializeExRes);
-        //    CHK_DX(CoInitializeExRes);
-        //}
-        //---------------------------
-        // Create the IDirectPlay8Client object.
-        HRESULT CoCreateInstanceRes = CoCreateInstance(
-            CLSID_DirectPlay8Server, nullptr, CLSCTX_INPROC_SERVER, IID_IDirectPlay8Server, (LPVOID*)&NET);
-        //---------------------------
-        if (CoCreateInstanceRes != S_OK)
+        bool success = Connect_DP(game_descr, connectOpt);
+        if (!success)
         {
-            DXTRACE_ERR(tmp, CoCreateInstanceRes);
-            CHK_DX(CoCreateInstanceRes);
+            return ErrNoError;
         }
-        //---------------------------
-
-        const auto Handler = (PFNDPNMESSAGEHANDLER)[](PVOID pvUserContext, DWORD dwMessageType, PVOID pMessage)
-        {
-            auto* C = (IPureServer*)pvUserContext;
-            return C->net_Handler(dwMessageType, pMessage);
-        };
-
-        // Initialize IDirectPlay8Client object.
-#ifdef DEBUG
-        CHK_DX(NET->Initialize(this, Handler, 0));
-#else
-        CHK_DX(NET->Initialize(this, Handler, DPNINITIALIZE_DISABLEPARAMVAL));
-#endif
-
-        bool bSimulator = false;
-        if (strstr(Core.Params, "-netsim"))
-            bSimulator = true;
-
-        //dump_URL("! sv ", net_Address_device);
-
-        // Set server-player info
-        DPN_APPLICATION_DESC dpAppDesc;
-        DPN_PLAYER_INFO dpPlayerInfo;
-        WCHAR wszName[] = L"XRay Server";
-
-        ZeroMemory(&dpPlayerInfo, sizeof(DPN_PLAYER_INFO));
-        dpPlayerInfo.dwSize = sizeof(DPN_PLAYER_INFO);
-        dpPlayerInfo.dwInfoFlags = DPNINFO_NAME;
-        dpPlayerInfo.pwszName = wszName;
-        dpPlayerInfo.pvData = nullptr;
-        dpPlayerInfo.dwDataSize = NULL;
-        dpPlayerInfo.dwPlayerFlags = 0;
-
-        CHK_DX(NET->SetServerInfo(&dpPlayerInfo, NULL, NULL, DPNSETSERVERINFO_SYNC));
-
-        // Set server/session description
-        WCHAR SessionNameUNICODE[4096];
-        CHK_DX(MultiByteToWideChar(CP_ACP, 0, session_name, -1, SessionNameUNICODE, 4096));
-        // Set server/session description
-
-        // Now set up the Application Description
-        ZeroMemory(&dpAppDesc, sizeof(DPN_APPLICATION_DESC));
-        dpAppDesc.dwSize = sizeof(DPN_APPLICATION_DESC);
-        dpAppDesc.dwFlags = DPNSESSION_CLIENT_SERVER | DPNSESSION_NODPNSVR;
-        dpAppDesc.guidApplication = NET_GUID;
-        dpAppDesc.pwszSessionName = SessionNameUNICODE;
-        dpAppDesc.dwMaxPlayers = (m_bDedicated) ? (dwMaxPlayers + 2) : (dwMaxPlayers + 1);
-        dpAppDesc.pvApplicationReservedData = &game_descr;
-        dpAppDesc.dwApplicationReservedDataSize = sizeof(game_descr);
-
-        WCHAR SessionPasswordUNICODE[4096];
-        if (xr_strlen(password_str))
-        {
-            CHK_DX(MultiByteToWideChar(CP_ACP, 0, password_str, -1, SessionPasswordUNICODE, 4096));
-            dpAppDesc.dwFlags |= DPNSESSION_REQUIREPASSWORD;
-            dpAppDesc.pwszPassword = SessionPasswordUNICODE;
-        }
-
-        // Create our IDirectPlay8Address Device Address, --- Set the SP for our Device Address
-        net_Address_device = nullptr;
-        CHK_DX(CoCreateInstance(CLSID_DirectPlay8Address, nullptr, CLSCTX_INPROC_SERVER,
-            IID_IDirectPlay8Address, (LPVOID*)&net_Address_device));
-
-        CHK_DX(net_Address_device->SetSP(bSimulator ? &CLSID_NETWORKSIMULATOR_DP8SP_TCPIP : &CLSID_DP8SP_TCPIP));
-
-        u32 dwTraversalMode = DPNA_TRAVERSALMODE_NONE;
-        CHK_DX(net_Address_device->AddComponent(DPNA_KEY_TRAVERSALMODE,
-            &dwTraversalMode, sizeof(dwTraversalMode), DPNA_DATATYPE_DWORD));
-
-        HRESULT HostSuccess = S_FALSE;
-        // We are now ready to host the app and will try different ports
-        psNET_Port = dwServerPort;
-        while (HostSuccess != S_OK)
-        {
-            CHK_DX(net_Address_device->AddComponent(DPNA_KEY_PORT, &psNET_Port, sizeof(psNET_Port), DPNA_DATATYPE_DWORD));
-
-            HostSuccess = NET->Host(&dpAppDesc, // AppDesc
-                &net_Address_device, 1, // Device Address
-                nullptr, nullptr, // Reserved
-                nullptr, // Player Context
-                0); // dwFlags
-
-            if (HostSuccess != S_OK)
-            {
-                //			xr_string res = xrDebug::ErrorToString(HostSuccess);
-                if (bPortWasSet)
-                {
-                    Msg("! IPureServer : port %d is BUSY!", psNET_Port);
-                    return ErrConnect;
-                }
-                Msg("! IPureServer : port %d is BUSY!", psNET_Port);
-
-                psNET_Port++;
-                if (psNET_Port > END_PORT_LAN)
-                {
-                    return ErrConnect;
-                }
-            }
-            else
-            {
-                Msg("- IPureServer : created on port %d!", psNET_Port);
-            }
-        }
-
-        CHK_DX(HostSuccess);
-    } // psNET_direct_connect
-
-    //config_Load();
-
-    if (!psNET_direct_connect)
-    {
         BannedList_Load();
         IpList_Load();
     }
 
     return ErrNoError;
+}
+
+bool IPureServer::Connect_DP(GameDescriptionData& game_descr, SvConnectionOptions& opt)
+{
+    HRESULT CoCreateInstanceRes = CoCreateInstance(
+        CLSID_DirectPlay8Server,
+        NULL,
+        CLSCTX_INPROC_SERVER,
+        IID_IDirectPlay8Server,
+        (LPVOID*)&NET
+    );
+
+    if (CoCreateInstanceRes != S_OK)
+    {
+        DXTRACE_ERR(TEXT("Instance could not be created"), CoCreateInstanceRes);
+        CHK_DX(CoCreateInstanceRes);
+    }
+
+    // Initialize IDirectPlay8Client object.
+#ifdef DEBUG
+    CHK_DX(NET->Initialize(this, Handler, 0));
+#else
+    CHK_DX(NET->Initialize(this, Handler, DPNINITIALIZE_DISABLEPARAMVAL));
+#endif
+
+    BOOL bSimulator = FALSE;
+    if (strstr(Core.Params, "-netsim"))
+    {
+        bSimulator = TRUE;
+    }
+
+    // Set server-player info
+    DPN_APPLICATION_DESC		dpAppDesc;
+    DPN_PLAYER_INFO				dpPlayerInfo;
+    WCHAR						wszName[] = L"XRay Server";
+
+    ZeroMemory(&dpPlayerInfo, sizeof(DPN_PLAYER_INFO));
+    dpPlayerInfo.dwSize = sizeof(DPN_PLAYER_INFO);
+    dpPlayerInfo.dwInfoFlags = DPNINFO_NAME;
+    dpPlayerInfo.pwszName = wszName;
+    dpPlayerInfo.pvData = NULL;
+    dpPlayerInfo.dwDataSize = NULL;
+    dpPlayerInfo.dwPlayerFlags = 0;
+
+    CHK_DX(NET->SetServerInfo(&dpPlayerInfo, NULL, NULL, DPNSETSERVERINFO_SYNC));
+
+    // Set server/session description
+    WCHAR	SessionNameUNICODE[4096];
+    CHK_DX(MultiByteToWideChar(CP_ACP, 0, opt.session_name, -1, SessionNameUNICODE, 4096));
+    // Set server/session description
+
+    // Now set up the Application Description
+    ZeroMemory(&dpAppDesc, sizeof(DPN_APPLICATION_DESC));
+    dpAppDesc.dwSize = sizeof(DPN_APPLICATION_DESC);
+    dpAppDesc.dwFlags = DPNSESSION_CLIENT_SERVER | DPNSESSION_NODPNSVR;
+    dpAppDesc.guidApplication = NET_GUID;
+    dpAppDesc.pwszSessionName = SessionNameUNICODE;
+    dpAppDesc.dwMaxPlayers = (m_bDedicated) ? (opt.dwMaxPlayers + 2) : (opt.dwMaxPlayers + 1);
+    dpAppDesc.pvApplicationReservedData = &game_descr;
+    dpAppDesc.dwApplicationReservedDataSize = sizeof(game_descr);
+
+    WCHAR	SessionPasswordUNICODE[4096];
+    if (xr_strlen(opt.password_str))
+    {
+        CHK_DX(MultiByteToWideChar(CP_ACP, 0, opt.password_str, -1, SessionPasswordUNICODE, 4096));
+        dpAppDesc.dwFlags |= DPNSESSION_REQUIREPASSWORD;
+        dpAppDesc.pwszPassword = SessionPasswordUNICODE;
+    };
+
+    // Create our IDirectPlay8Address Device Address, --- Set the SP for our Device Address
+    net_Address_device = NULL;
+    CHK_DX(CoCreateInstance(CLSID_DirectPlay8Address, NULL, CLSCTX_INPROC_SERVER, IID_IDirectPlay8Address, (LPVOID*)&net_Address_device));
+    CHK_DX(net_Address_device->SetSP(bSimulator ? &CLSID_NETWORKSIMULATOR_DP8SP_TCPIP : &CLSID_DP8SP_TCPIP));
+
+    DWORD dwTraversalMode = DPNA_TRAVERSALMODE_NONE;
+    CHK_DX(net_Address_device->AddComponent(DPNA_KEY_TRAVERSALMODE, &dwTraversalMode, sizeof(dwTraversalMode), DPNA_DATATYPE_DWORD));
+
+    HRESULT HostSuccess = S_FALSE;
+    // We are now ready to host the app and will try different ports
+    psNET_Port = opt.dwServerPort;
+    while (HostSuccess != S_OK)
+    {
+        CHK_DX(net_Address_device->AddComponent(DPNA_KEY_PORT, &psNET_Port, sizeof(psNET_Port), DPNA_DATATYPE_DWORD));
+
+        HostSuccess = NET->Host
+        (
+            &dpAppDesc,				// AppDesc
+            &net_Address_device, 1, // Device Address
+            NULL, NULL,             // Reserved
+            NULL,                   // Player Context
+            0);						// dwFlags
+        if (HostSuccess != S_OK)
+        {
+            if (opt.bPortWasSet)
+            {
+                Msg("! IPureServer : port %d is BUSY!", psNET_Port);
+                return false; //ErrConnect;
+            }
+            else
+            {
+                Msg("! IPureServer : port %d is BUSY!", psNET_Port);
+            }
+
+            psNET_Port++;
+            if (psNET_Port > END_PORT_LAN)
+            {
+                return false; ErrConnect;
+            }
+        }
+        else
+        {
+            Msg("- IPureServer : created on port %d!", psNET_Port);
+        }
+    };
+
+    CHK_DX(HostSuccess);
+
+    return true;
 }
 
 void IPureServer::Disconnect()
@@ -706,7 +543,8 @@ void IPureServer::SendBroadcast_LL(ClientID exclude, void* data, u32 size, u32 d
         u32 m_dwFlags;
 
         ClientSenderFunctor(IPureServer* owner, void* data, u32 size, u32 dwFlags)
-            : m_owner(owner), m_data(data), m_size(size), m_dwFlags(dwFlags) {}
+            : m_owner(owner), m_data(data), m_size(size), m_dwFlags(dwFlags) {
+        }
 
         void operator()(IClient* client) { m_owner->SendTo_LL(client->ID, m_data, m_size, m_dwFlags); }
     };
@@ -846,7 +684,8 @@ bool IPureServer::DisconnectAddress(const ip_address& Address, pcstr reason)
 
         ToDisconnectFillerFunctor(
             IPureServer* owner, buffer_vector<IClient*>* dest_disconnect, ip_address const* address)
-            : m_owner(owner), dest(dest_disconnect), address_to_disconnect(address) {}
+            : m_owner(owner), dest(dest_disconnect), address_to_disconnect(address) {
+        }
 
         void operator()(IClient* client)
         {
@@ -874,7 +713,7 @@ bool IPureServer::DisconnectAddress(const ip_address& Address, pcstr reason)
 
 bool IPureServer::GetClientAddress(IDirectPlay8Address* pClientAddress, ip_address& Address, DWORD* pPort)
 {
-    WCHAR wstrHostname[256] = {0};
+    WCHAR wstrHostname[256] = { 0 };
     DWORD dwSize = sizeof(wstrHostname);
     DWORD dwDataType = 0;
     CHK_DX(pClientAddress->GetComponentByName(DPNA_KEY_HOSTNAME, wstrHostname, &dwSize, &dwDataType));
@@ -1046,5 +885,3 @@ void IPureServer::UpdateBannedList()
         UnBanAddress(Address);
     }
 }
-
-constexpr pcstr IPureServer::GetBannedListName() const { return "banned_list_ip.ltx"; }

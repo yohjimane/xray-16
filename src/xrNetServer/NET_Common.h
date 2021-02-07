@@ -47,10 +47,9 @@ class XRNETSERVER_API MultipacketSender
 public:
     MultipacketSender();
     virtual ~MultipacketSender();
-
-protected:
     void SendPacket(const void* packet_data, u32 packet_sz, u32 flags, u32 timeout);
     void FlushSendBuffer(u32 timeout);
+protected:
     virtual void _SendTo_LL(const void* data, u32 size, u32 flags, u32 timeout) = 0;
 
 private:

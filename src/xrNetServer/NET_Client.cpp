@@ -1,7 +1,7 @@
 #include "stdafx.h"
 #include "NET_Common.h"
 #include "NET_Client.h"
-#include "NET_Server.h"
+#include "IPureServer.h"
 #include "NET_Messages.h"
 #include "NET_Log.h"
 #include "xrCore/Threading/Lock.hpp"
@@ -9,6 +9,7 @@
 #include "xrGameSpy/xrGameSpy_MainDefs.h"
 
 #include "xrCore/Debug/dxerr.h"
+#include "ip_address.h"
 
 #include <WINSOCK2.H>
 #include <Ws2tcpip.h>

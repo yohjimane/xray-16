@@ -6,6 +6,7 @@
 #include "xrCommon/xr_vector.h"
 #include "Common/Noncopyable.hpp"
 #include "xrCore/xrstring.h"
+#include "IClientStatistic.h"
 
 struct ip_address;
 

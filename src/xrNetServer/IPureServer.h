@@ -3,132 +3,55 @@
 #include "NET_Shared.h"
 #include "ip_filter.h"
 #include "NET_Common.h"
-#include "NET_PlayersMonitor.h"
-
-struct SClientConnectData
-{
-    ClientID clientID;
-    string64 name;
-    string64 pass;
-    xrpid_t process_id{};
-
-    SClientConnectData()
-    {
-        name[0] = pass[0] = 0;
-    }
-};
-
-// -----------------------------------------------------
+#include "PlayersMonitor.h"
+#include "IClient.h"
+#include "IBannedClient.h"
 
 class IPureServer;
 
-struct XRNETSERVER_API ip_address
+struct SvConnectionOptions
 {
-    union
-    {
-        struct
-        {
-            u8 a1;
-            u8 a2;
-            u8 a3;
-            u8 a4;
-        };
-
-        u32 data;
-    } m_data;
-
-    void set(pcstr src_string);
-    xr_string to_string() const;
-
-    bool operator==(const ip_address& other) const
-    {
-        return m_data.data == other.m_data.data
-            || m_data.a1 == other.m_data.a1
-            && m_data.a2 == other.m_data.a2
-            && m_data.a3 == other.m_data.a3
-            && m_data.a4 == 0;
-    }
+	string4096 session_name;
+	string64 password_str = "";
+	u32 dwMaxPlayers = 0;
+	u32 dwServerPort;
+	bool bPortWasSet = false;
 };
 
-class XRNETSERVER_API IClient : public MultipacketSender
+struct SClientConnectData
 {
-public:
-    struct Flags
-    {
-        u32 bLocal : 1;
-        u32 bConnected : 1;
-        u32 bReconnect : 1;
-        u32 bVerified : 1;
-    };
+	ClientID		clientID;
+	string64		name;
+	string64		pass;
+	u32				process_id;
 
-    IClient(CTimer* timer);
-    virtual ~IClient();
-
-    IClientStatistic stats;
-
-    ClientID ID;
-    string128 m_guid;
-    shared_str name;
-    shared_str pass;
-
-    Flags flags; // local/host/normal
-    u32 dwTime_LastUpdate;
-
-    ip_address m_cAddress;
-    u32 m_dwPort;
-    xrpid_t process_id;
-
-    IPureServer* server;
-
-public:
-    using MultipacketSender::SendPacket;
-    using MultipacketSender::FlushSendBuffer;
-
-private:
-    void _SendTo_LL(const void* data, u32 size, u32 flags, u32 timeout) override;
+	SClientConnectData()
+	{
+		name[0] = pass[0] = 0;
+		process_id = 0;
+	}
 };
-
-IC bool operator==(IClient const* pClient, ClientID const& ID) { return pClient->ID == ID; }
 
 class XRNETSERVER_API IServerStatistic
 {
 public:
-    void clear()
-    {
-        bytes_out = bytes_out_real = 0;
-        bytes_in = bytes_in_real = 0;
+	void    clear()
+	{
+		bytes_out = bytes_out_real = 0;
+		bytes_in = bytes_in_real = 0;
 
-        dwBytesSended = 0;
-        dwSendTime = 0;
-        dwBytesPerSec = 0;
-    }
+		dwBytesSended = 0;
+		dwSendTime = 0;
+		dwBytesPerSec = 0;
+	}
 
-    u32 bytes_out, bytes_out_real;
-    u32 bytes_in, bytes_in_real;
+	u32		bytes_out, bytes_out_real;
+	u32		bytes_in, bytes_in_real;
 
-    u32 dwBytesSended;
-    u32 dwSendTime;
-    u32 dwBytesPerSec;
+	u32		dwBytesSended;
+	u32		dwSendTime;
+	u32		dwBytesPerSec;
 };
-
-class XRNETSERVER_API IBannedClient
-{
-public:
-    ip_address HAddr;
-    time_t BanTime;
-
-    IBannedClient()
-    {
-        HAddr.m_data.data = 0;
-        BanTime = 0;
-    }
-    void Load(CInifile& ini, const shared_str& sect);
-    void Save(CInifile& ini);
-
-    xr_string BannedTimeTo() const;
-};
-
-//==============================================================================
 
 struct ClientIdSearchPredicate
 {
@@ -197,7 +120,7 @@ protected:
     void BannedList_Load();
     void IpList_Load();
     void IpList_Unload();
-    constexpr pcstr GetBannedListName() const;
+    constexpr pcstr GetBannedListName() const { return "banned_list_ip.ltx"; }
 
     void UpdateBannedList();
 
@@ -207,6 +130,7 @@ public:
     HRESULT net_Handler(u32 dwMessageType, PVOID pMessage);
 
     virtual EConnect Connect(pcstr session_name, GameDescriptionData& game_descr);
+    bool Connect_DP(GameDescriptionData& game_descr, SvConnectionOptions& opt);
     virtual void Disconnect();
 
     // send

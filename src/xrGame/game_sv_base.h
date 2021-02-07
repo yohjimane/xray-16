@@ -7,13 +7,7 @@
 #include "game_sv_base_console_vars.h"
 #include "game_sv_event_queue.h"
 #include "game_sv_item_respawner.h"
-#if defined(XR_PLATFORM_WINDOWS)
-#include "xrNetServer/NET_Server.h"
-#elif defined(XR_PLATFORM_LINUX) || defined(XR_PLATFORM_BSD) || defined(XR_PLATFORM_APPLE)
-#include "xrNetServer/empty/NET_Server.h"
-#else
-#   error Select of add implementation for your platform
-#endif
+#include "xrNetServer/IPureServer.h"
 
 #define MAX_PLAYERS_COUNT 32
 

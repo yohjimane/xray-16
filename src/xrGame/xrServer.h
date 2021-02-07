@@ -7,11 +7,7 @@
 #define AFX_XRSERVER_H__65728A25_16FC_4A7B_8CCE_D798CA5EC64E__INCLUDED_
 #pragma once
 
-#if defined(XR_PLATFORM_WINDOWS)
-#include "xrNetServer/NET_Server.h"
-#elif defined(XR_PLATFORM_LINUX) || defined(XR_PLATFORM_BSD) || defined(XR_PLATFORM_APPLE)
-#include "xrNetServer/empty/NET_Server.h"
-#endif
+#include "xrNetServer/IPureServer.h"
 #include "game_sv_base.h"
 #include "id_generator.h"
 #include "xrEngine/mp_logging.h"

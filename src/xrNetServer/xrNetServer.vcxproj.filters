@@ -7,9 +7,23 @@
     <ClCompile Include="NET_Common.cpp" />
     <ClCompile Include="NET_Compressor.cpp" />
     <ClCompile Include="NET_Log.cpp" />
-    <ClCompile Include="NET_Server.cpp" />
     <ClCompile Include="stdafx.cpp" />
     <ClCompile Include="guids.cpp" />
+    <ClCompile Include="IClientStatistic.cpp">
+      <Filter>NET_Common</Filter>
+    </ClCompile>
+    <ClCompile Include="IBannedClient.cpp">
+      <Filter>NET_Server</Filter>
+    </ClCompile>
+    <ClCompile Include="IClient.cpp">
+      <Filter>NET_Server</Filter>
+    </ClCompile>
+    <ClCompile Include="ip_address.cpp">
+      <Filter>NET_Server</Filter>
+    </ClCompile>
+    <ClCompile Include="IPureServer.cpp">
+      <Filter>NET_Server</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="ip_filter.h" />
@@ -20,11 +34,36 @@
     <ClInclude Include="NET_Log.h" />
     <ClInclude Include="NET_Messages.h" />
     <ClInclude Include="NET_PlayersMonitor.h" />
-    <ClInclude Include="NET_Server.h" />
     <ClInclude Include="NET_Shared.h" />
     <ClInclude Include="stdafx.h" />
+    <ClInclude Include="IClientStatistic.h">
+      <Filter>NET_Common</Filter>
+    </ClInclude>
+    <ClInclude Include="IBannedClient.h">
+      <Filter>NET_Server</Filter>
+    </ClInclude>
+    <ClInclude Include="IClient.h">
+      <Filter>NET_Server</Filter>
+    </ClInclude>
+    <ClInclude Include="ip_address.h">
+      <Filter>NET_Server</Filter>
+    </ClInclude>
+    <ClInclude Include="IPureServer.h">
+      <Filter>NET_Server</Filter>
+    </ClInclude>
+    <ClInclude Include="PlayersMonitor.h">
+      <Filter>NET_Server</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <Natvis Include="..\OpenXRay.natvis" />
+  </ItemGroup>
+  <ItemGroup>
+    <Filter Include="NET_Common">
+      <UniqueIdentifier>{3a7aff7f-9fde-4f6e-8a9c-c2e925bd54a0}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="NET_Server">
+      <UniqueIdentifier>{a91bf06c-08d1-4aa5-b48b-a29aaeae6c37}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
 </Project>
