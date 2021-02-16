@@ -13,7 +13,7 @@ void xrServer::Disconnect()
 
     script_server_events.clear();
 
-    IPureServer::Disconnect();
+    inherited::Disconnect();
     SLS_Clear();
     xr_delete(game);
 }

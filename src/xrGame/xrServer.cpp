@@ -42,7 +42,7 @@ void xrClientData::Clear()
 };
 
 xrClientData::~xrClientData() { xr_delete(ps); }
-xrServer::xrServer() : IPureServer(Device.GetTimerGlobal(), GEnv.isDedicatedServer)
+xrServer::xrServer() : inherited(Device.GetTimerGlobal(), GEnv.isDedicatedServer)
 {
     m_file_transfers = NULL;
     m_aDelayedPackets.clear();
@@ -703,7 +703,7 @@ u32 xrServer::OnMessage(NET_Packet& P, ClientID sender) // Non-Zero means broadc
 
     VERIFY(verify_entities());
 
-    return IPureServer::OnMessage(P, sender);
+    return inherited::OnMessage(P, sender);
 }
 
 bool xrServer::CheckAdminRights(const shared_str& user, const shared_str& pass, string512& reason)
@@ -749,7 +749,7 @@ void xrServer::SendTo_LL(ClientID ID, void* data, u32 size, u32 dwFlags, u32 dwT
         if (!pClient || !pClient->flags.bConnected)
             return;
 
-        IPureServer::SendTo_Buf(ID, data, size, dwFlags, dwTimeout);
+        inherited::SendTo_Buf(ID, data, size, dwFlags, dwTimeout);
     }
 }
 void xrServer::SendBroadcast(ClientID exclude, NET_Packet& P, u32 dwFlags)

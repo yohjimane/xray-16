@@ -2,7 +2,7 @@
 
 #include "xrEngine/IGame_Level.h"
 #include "xrEngine/IGame_Persistent.h"
-#include "xrNetServer/IPureClient.h"
+#include "xrNetServer/NET_Client.h"
 #include "xrEngine/StatGraph.h"
 #include "xrMessages.h"
 #include "alife_space.h"
@@ -56,7 +56,7 @@ namespace file_transfer
 class client_site;
 }
 
-class CLevel : public IGame_Level, public IPureClient
+class CLevel : public IGame_Level, public NET_CLIENT_CLASS
 {
 public:
     struct AIStatistics

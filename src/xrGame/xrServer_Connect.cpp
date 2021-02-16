@@ -84,7 +84,7 @@ xrServer::EConnect xrServer::Connect(shared_str& session_name, GameDescriptionDa
     game_descr.coop_enabled = CoopEnabled();
     game->Create(session_name);
 
-    return IPureServer::Connect(*session_name, game_descr);
+    return inherited::Connect(*session_name, game_descr);
 }
 
 IClient* xrServer::new_client(SClientConnectData* cl_data)
