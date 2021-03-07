@@ -21,7 +21,8 @@
 //#include "NET_Messages.h"
 
 #include "NET_Compressor.h"
-#define USE_DIRECT_PLAY
+
+// #define USE_DIRECT_PLAY
 
 XRNETSERVER_API extern ClientID BroadcastCID;
 

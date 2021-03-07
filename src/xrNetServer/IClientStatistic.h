@@ -6,9 +6,10 @@
 #include <DPlay/dplay8.h>
 #pragma warning(pop)
 
+struct SteamNetworkingQuickConnectionStatus;
+
 class XRNETSERVER_API IClientStatistic
 {
-	DPN_CONNECTION_INFO	ci_last;
 	u32 mps_recive, mps_receive_base;
 	u32 mps_send, mps_send_base;
 	u32 dwBaseTime;
@@ -28,9 +29,15 @@ public:
 	IC u32 getSendedPerSec() const { return dwBytesSendedPerSec; }
 	IC void	Clear() { CTimer* timer = device_timer; ZeroMemory(this, sizeof(*this)); device_timer = timer; dwBaseTime = TimeGlobal(device_timer); }
 
-	u32 dwTimesBlocked;
-	u32 dwBytesSended;
-	u32 dwBytesSendedPerSec;
-	u32	dwBytesReceived;
-	u32 dwBytesReceivedPerSec;
+	u32		dwRoundTripLatencyMS = 0;
+	u32		dwThroughputBPS = 0;
+	u32		dwPeakThroughputBPS = 0;
+	u32		dwPacketsDropped = 0;
+	u32		dwPacketsRetried = 0;
+
+	u32		dwTimesBlocked = 0;
+	u32		dwBytesSended = 0;
+	u32		dwBytesSendedPerSec = 0;
+	u32		dwBytesReceived = 0;
+	u32		dwBytesReceivedPerSec = 0;
 };

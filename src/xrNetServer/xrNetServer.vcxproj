@@ -47,6 +47,8 @@
     <ClCompile Include="stdafx.cpp">
       <PrecompiledHeader>Create</PrecompiledHeader>
     </ClCompile>
+    <ClCompile Include="SteamNetClient.cpp" />
+    <ClCompile Include="SteamNetServer.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="BaseClient.h" />
@@ -72,6 +74,8 @@
     <ClInclude Include="PlayersMonitor.h" />
     <ClInclude Include="ServerConnectionOptions.h" />
     <ClInclude Include="stdafx.h" />
+    <ClInclude Include="SteamNetClient.h" />
+    <ClInclude Include="SteamNetServer.h" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="$(SolutionDir)xrCore\xrCore.vcxproj">

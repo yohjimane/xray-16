@@ -360,9 +360,9 @@ const int ConnectionTimeOut = 60000; // 1 min
 
 bool CLevel::Connect2Server(const char* options)
 {
-    //NET_Packet P;
-    m_bConnectResultReceived = false;
-    m_bConnectResult = true;
+	NET_Packet P;
+	m_bConnectResultReceived = false;
+	m_bConnectResult = true;
 
     if (!psNET_direct_connect)
     {
@@ -372,70 +372,90 @@ bool CLevel::Connect2Server(const char* options)
         FS.auth_generate(tmp_ignore, tmp_check);
     }
 
-    if (!Connect(options))
-        return FALSE;
-    //---------------------------------------------------------------------------
-    if (psNET_direct_connect)
-        m_bConnectResultReceived = true;
+	if (!Connect(options))
+	{
+		return	FALSE;
+	}
 
-    u32 EndTime = CPU::GetTicks() + ConnectionTimeOut;
-    while (!m_bConnectResultReceived)
+	if (psNET_direct_connect)
+	{
+		m_bConnectResultReceived = true;
+	}
+	else
+	{
+		u32 EndTime = GetTickCount() + ConnectionTimeOut;
+		while (!HasSessionName())
+		{
+			Sleep(5);
+			u32 CurTime = GetTickCount();
+			if (CurTime > EndTime || net_isFails_Connect())
+			{
+				OnConnectRejected();
+				Disconnect();
+				return	FALSE;
+			}
+		}
+
+		EndTime = GetTickCount() + ConnectionTimeOut;
+		while (!m_bConnectResultReceived)
+		{
+			ClientReceive();
+			Sleep(5);
+			if (Server)
+				Server->Update();
+
+			u32 CurTime = GetTickCount();
+			if (CurTime > EndTime)
+			{
+				NET_Packet	P;
+				P.B.count = 0;
+				P.r_pos = 0;
+
+				P.w_u8(0);
+				P.w_u8(0);
+				P.w_stringZ("Data verification failed. Cheater?");
+
+				OnConnectResult(&P);
+			}
+
+			if (net_isFails_Connect())
+			{
+				OnConnectRejected();
+				Disconnect();
+				return	FALSE;
+			}
+		}
+	}
+
+	Msg ("%c client : connection %s - <%s>", m_bConnectResult ?'*':'!', m_bConnectResult ? "accepted" : "rejected", m_sConnectResult.c_str());
+
+	if(!m_bConnectResult) 
+	{
+		if(Server)
+		{
+			Server->Disconnect		();
+			xr_delete				(Server);
+		}
+		OnConnectRejected			();	
+		Disconnect					();
+		return FALSE		;
+	};
+	
+	if (psNET_direct_connect)
+		net_Syncronised = TRUE;
+	else
+		net_Syncronize(); // parallel
+
+	while (!net_IsSyncronised()) 
     {
-        ClientReceive();
-        Sleep(5);
-        if (Server)
-            Server->Update();
-        //-----------------------------------------
-        u32 CurTime = CPU::GetTicks();
-        if (CurTime > EndTime)
-        {
-            NET_Packet P;
-            P.B.count = 0;
-            P.r_pos = 0;
-
-            P.w_u8(0);
-            P.w_u8(0);
-            P.w_stringZ("Data verification failed. Cheater?");
-
-            OnConnectResult(&P);
-        }
-        if (net_isFails_Connect())
-        {
-            OnConnectRejected();
-            Disconnect();
-            return FALSE;
-        }
-        //-----------------------------------------
-    }
-    Msg("%c client : connection %s - <%s>", m_bConnectResult ? '*' : '!', m_bConnectResult ? "accepted" : "rejected",
-        m_sConnectResult.c_str());
-    if (!m_bConnectResult)
-    {
-        if (Server)
-        {
-            Server->Disconnect();
-            xr_delete(Server);
-        }
-        OnConnectRejected();
-        Disconnect();
-        return FALSE;
-    };
-
-    if (psNET_direct_connect)
-        net_Syncronised = TRUE;
-    else
-        net_Syncronize();
-
-    while (!net_IsSyncronised())
-    {
-        Sleep(1);
-        if (net_Disconnected)
-        {
-            OnConnectRejected();
-            Disconnect();
-            return FALSE;
-        }
-    };
+		Sleep(1);
+		if (net_Disconnected)
+		{
+			OnConnectRejected();
+			Disconnect();
+			return FALSE;
+		}
+	};
 
     //---------------------------------------------------------------------------
     // P.w_begin	(M_CLIENT_REQUEST_CONNECTION_DATA);
