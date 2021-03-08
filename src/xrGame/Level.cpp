@@ -1080,7 +1080,7 @@ void CLevel::OnAlifeSimulatorLoaded()
     GameTaskManager().ResetStorage();
 }
 
-void CLevel::OnSessionTerminate(pcstr reason) { MainMenu()->OnSessionTerminate(reason); }
+void CLevel::OnSessionTerminate(pcstr reason) { MainMenu()->OnSessionTerminate(StringTable().translate(reason).c_str()); }
 
 void CLevel::setup_game_flags()
 {
