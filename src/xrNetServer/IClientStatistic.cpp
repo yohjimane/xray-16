@@ -50,4 +50,7 @@ void IClientStatistic::Update(SteamNetConnectionRealTimeStatus_t& status)
 	}
 
 	dwRoundTripLatencyMS = status.m_nPing;
+
+	qualityLocal = status.m_flConnectionQualityLocal;
+	qualityRemote = status.m_flConnectionQualityRemote;
 }

@@ -122,6 +122,7 @@ extern s32 lag_simmulator_max_ping;
 extern BOOL g_sv_write_updates_bin;
 extern Flags8 g_sv_traffic_optimization_level;
 extern Flags8 g_sv_available_traffic_optimization_level;
+extern BOOL	g_cl_draw_mp_statistic;
 
 void XRNETSERVER_API DumpNetCompressorStats(bool brief);
 extern BOOL XRNETSERVER_API g_net_compressor_enabled;
@@ -2068,6 +2069,7 @@ void register_mp_console_commands()
     CMD1(CCC_Net_SV_ClearStats, "net_sv_clearstats");
 
 // Network
+    CMD4(CCC_Integer, "draw_mp_statistic", &g_cl_draw_mp_statistic, 0, 1);
 #ifdef DEBUG
     CMD4(CCC_Integer, "net_cl_update_rate", &psNET_ClientUpdate, 20, 100);
     CMD4(CCC_Integer, "net_cl_pending_lim", &psNET_ClientPending, 0, 10);
