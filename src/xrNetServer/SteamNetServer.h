@@ -36,7 +36,7 @@ private:
 
 	// Using in update thread!
 	xr_vector<HSteamNetConnection> m_players;
-	xr_vector<SClientConnectData> m_awaiting_clients;
+	xr_vector<SClientConnectData> m_pending_clients;
 
 public:
 	SteamNetServer(CTimer* timer, BOOL	dedicated);
@@ -47,6 +47,10 @@ private:
 
 	void							ProcessConnection(SteamNetConnectionStatusChangedCallback_t * pInfo);
 	void							FinishConnection(SClientConnectData &cl_data);
+
+	void							AddPendingClient(SClientConnectData &cl_data);
+	void							HandlePendingClients();
+	void							OnClientDataReceived(HSteamNetConnection connection, SteamNetworkingIdentity &identity, MSYS_CLIENT_DATA* data);
 
 	// update thread
 	void              OnSteamNetConnectionStatusChanged(SteamNetConnectionStatusChangedCallback_t *pInfo);
@@ -59,8 +63,6 @@ private:
 	void			        DestroyCleint(ClientID clientId);
 
 	void			        GetIpAddress(SteamNetConnectionInfo_t& info, ip_address& out);
-
-	bool			        ParseClientConnectionData(SteamNetworkingIdentity& identity, SClientConnectData& out);
 
 protected:
 	virtual bool			CreateConnection(GameDescriptionData& game_descr, ServerConnectionOptions& opt) override;
