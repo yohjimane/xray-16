@@ -17,6 +17,7 @@
 #include "PHDebug.h"
 #include "xrEngine/ObjectDump.h"
 #endif
+#include "script_game_object.h"
 BOOL dbg_draw_doors = false;
 CPhysicObject::CPhysicObject(void)
     : m_type(epotBox), m_mass(10.f), m_collision_hit_callback(nullptr), m_anim_blend(nullptr),
@@ -335,7 +336,12 @@ void CPhysicObject::UpdateCL()
 
     if (!IsGameTypeSingle())
     {
-        Interpolate();
+        CGameObject const* const game_object = smart_cast<CGameObject const*>(this);
+        VERIFY(game_object);
+        if (game_object->lua_game_object() && !game_object->lua_game_object()->m_door)
+        {
+            Interpolate();
+        }
     }
 
     m_anim_script_callback.update(*this);
