@@ -6359,6 +6359,12 @@
     <ClInclude Include="game_sv_freemp.h">
       <Filter>Core\Server\Games\server\freemp</Filter>
     </ClInclude>
+    <ClInclude Include="net_physics_state.h">
+      <Filter>AI\AMonsters\common\net</Filter>
+    </ClInclude>
+    <ClInclude Include="script_event.h">
+      <Filter>Core\Server</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="damage_manager.cpp">
@@ -9593,6 +9599,12 @@
     </ClCompile>
     <ClCompile Include="game_sv_freemp.cpp">
       <Filter>Core\Server\Games\server\freemp</Filter>
+    </ClCompile>
+    <ClCompile Include="net_physics_state.cpp">
+      <Filter>AI\AMonsters\common\net</Filter>
+    </ClCompile>
+    <ClCompile Include="script_event.cpp">
+      <Filter>Core\Server</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>

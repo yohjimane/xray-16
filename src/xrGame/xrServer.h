@@ -19,6 +19,7 @@
 #include "xrServer_updates_compressor.h"
 #include "xrClientsPool.h"
 #include "xrCommon/xr_unordered_map.h"
+#include "script_event.h"
 
 #ifdef DEBUG
 //. #define SLOW_VERIFY_ENTITIES
@@ -100,6 +101,7 @@ private:
     xr_multiset<svs_respawn> q_respawn;
     xr_vector<u16> conn_spawned_ids;
     cheaters_t m_cheaters;
+    xr_deque<ScriptEvent> script_server_events;
 
     file_transfer::server_site* m_file_transfers;
     clientdata_proxy* m_screenshot_proxies[MAX_PLAYERS_COUNT * 2];
@@ -299,6 +301,14 @@ public:
     void verify_entity(const CSE_Abstract* entity) const;
 #endif
     void DumpStatistics(class IGameFont& font, class IPerformanceAlert* alert);
+
+private:
+    void OnScriptEvent(NET_Packet& P, ClientID sender);
+
+public:
+    ScriptEvent* GetLastServerScriptEvent();
+    void PopLastServerScriptEvent();
+    u32 GetSizeServerScriptEvent();
 };
 
 #ifdef DEBUG

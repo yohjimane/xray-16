@@ -18,6 +18,8 @@
 #include "Level_network_map_sync.h"
 #include "secure_messaging.h"
 #include "traffic_optimization.h"
+// Pavel: this include is required
+#include "script_event.h"
 
 class CHUDManager;
 class CParticlesObject;
@@ -435,6 +437,15 @@ public:
     u8* m_lzo_working_buffer = nullptr;
     void init_compression();
     void deinit_compression();
+
+    // script events
+private:
+    xr_deque<NET_Packet> script_client_events;
+public:
+    NET_Packet* GetLastClientScriptEvent();
+    void PopLastClientScriptEvent();
+    u32 GetSizeClientScriptEvent();
+
 #ifdef DEBUG
     LevelGraphDebugRender* GetLevelGraphDebugRender() const { return levelGraphDebugRender; }
 #endif
