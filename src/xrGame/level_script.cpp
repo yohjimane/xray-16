@@ -770,16 +770,14 @@ void send_script_event_broadcast(NET_Packet& P)
 	Level().Server->SendBroadcast(BroadcastCID, P, net_flags(TRUE, TRUE));
 }
 
-ScriptEvent* get_last_server_event()
+ScriptEvent* get_front_server_event()
 {
-	return Level().Server->GetLastServerScriptEvent();
+	return Level().Server->GetFrontServerScriptEvent();
 }
-
-void pop_last_server_event()
+void pop_front_server_event()
 {
-	Level().Server->PopLastServerScriptEvent();
+	Level().Server->PopFrontServerScriptEvent();
 }
-
 u32 get_size_server_events()
 {
 	return Level().Server->GetSizeServerScriptEvent();
