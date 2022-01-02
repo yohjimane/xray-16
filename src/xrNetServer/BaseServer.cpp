@@ -11,9 +11,10 @@ XRNETSERVER_API bool psNET_direct_connect = false;
 static INetLog* pSvNetLog = nullptr;
 
 BaseServer::BaseServer(CTimer* timer, BOOL	Dedicated)
-    : m_bDedicated(Dedicated)
+	: m_bDedicated(Dedicated)
 #ifdef PROFILE_CRITICAL_SECTIONS
-    , csMessage(MUTEX_PROFILE_ID(BaseServer::csMessage))
+	, csMessage(MUTEX_PROFILE_ID(BaseServer::csMessage))
+	, csMessagesQueue(MUTEX_PROFILE_ID(BaseServer::csMessagesQueue))
 #endif
 {
     SV_Client = nullptr;
@@ -379,29 +380,32 @@ void BaseServer::_Recieve(const void* data, u32 data_size, u32 param)
         return;
     }
 
-    NET_Packet  packet;
-    ClientID    id;
+    csMessagesQueue.Enter();
+    m_messagesQueue.emplace_back(data, data_size, param);
+    csMessagesQueue.Leave();
+}
 
-    id.set(param);
-    packet.construct(data, data_size);
+void BaseServer::ProcessMessagesQueue()
+{
+    // Pavel: Calls from xrServer (from game thread)
+    csMessagesQueue.Enter();
 
-    csMessage.Enter();
-
-    /*if (psNET_Flags.test(NETFLAG_LOG_SV_PACKETS))
+    if (!m_messagesQueue.empty())
     {
-        if (!pSvNetLog)
-            pSvNetLog = xr_new<INetLog>("logs\\net_sv_log.log", TimeGlobal(device_timer));
+        for (auto& msg : m_messagesQueue)
+        {
+            csMessage.Enter();
+            u32	result = OnMessage(msg.P, msg.Id);
+            csMessage.Leave();
 
-        if (pSvNetLog)
-            pSvNetLog->LogPacket(TimeGlobal(device_timer), &packet, TRUE);
-    }*/
+            if (result)
+                SendBroadcast(msg.Id, msg.P, result);
+        }
+        m_messagesQueue.clear();
+    }
 
-    u32	result = OnMessage(packet, id);
+    csMessagesQueue.Leave();
 
-    csMessage.Leave();
-
-    if (result)
-        SendBroadcast(id, packet, result);
 }
 
 bool BaseServer::HasBandwidth(IClient* C)

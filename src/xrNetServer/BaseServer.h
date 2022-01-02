@@ -6,6 +6,7 @@
 #include "ServerConnectionOptions.h"
 #include "xrCore/buffer_vector.h"
 #include "IClient.h"
+#include "xrCommon/xr_deque.h"
 
 class CServerInfo;
 class IBannedClient;
@@ -35,6 +36,17 @@ public:
 class XRNETSERVER_API BaseServer : public MultipacketReciever
 {
 public:
+	struct ServerMessage
+	{
+		NET_Packet P;
+		ClientID Id;
+
+		ServerMessage(const void* data, u32 data_size, u32 id)
+		{
+			P.construct(data, data_size);
+			Id.set(id);
+		}
+	};
 
     struct ClientIdSearchPredicate
     {
@@ -129,6 +141,8 @@ protected:
 	PlayersMonitor net_players;
 
     Lock csMessage;
+	Lock csMessagesQueue;
+	xr_deque<ServerMessage> m_messagesQueue;
 
 	int psNET_Port;
 	bool m_bDedicated;
@@ -162,7 +176,8 @@ protected:
 
 	virtual void _Recieve(const void* data, u32 data_size, u32 param) override;
 	virtual void _SendTo_LL(ClientID ID, void* data, u32 size, u32 dwFlags = DPNSEND_GUARANTEED, u32 dwTimeout = 0) = 0;
-
+	// Pavel: Calls from xrServer (from game thread)
+	virtual void ProcessMessagesQueue();
 	virtual IClient* new_client(SClientConnectData* cl_data) = 0;
 
 public:
