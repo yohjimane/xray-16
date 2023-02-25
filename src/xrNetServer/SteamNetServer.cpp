@@ -494,7 +494,7 @@ bool SteamNetServer::GetClientPendingMessagesCount(ClientID ID, DWORD & dwPendin
 	R_ASSERT(m_pInterface);
 
     SteamNetConnectionRealTimeStatus_t status;
-	if (m_pInterface->GetConnectionRealTimeStatus(ID.value(), &status, 0, 0))
+	if (m_pInterface->GetConnectionRealTimeStatus(ID.value(), &status, 0, nullptr))
 	{
 		dwPending = status.m_cbPendingReliable + status.m_cbPendingUnreliable;
 		return true;
@@ -506,7 +506,7 @@ bool SteamNetServer::GetClientPendingMessagesCount(ClientID ID, DWORD & dwPendin
 void SteamNetServer::UpdateClientStatistic(IClient* C)
 {
     SteamNetConnectionRealTimeStatus_t status;
-	if (!m_pInterface->GetConnectionRealTimeStatus(C->ID.value(), &status, 0, 0))
+	if (!m_pInterface->GetConnectionRealTimeStatus(C->ID.value(), &status, 0, nullptr))
 	{
 		return;
 	}
