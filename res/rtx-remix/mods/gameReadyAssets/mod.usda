@@ -1,0 +1,28 @@
+#usda 1.0
+(
+    upAxis = "Y"
+)
+
+over "RootNode"
+{
+    over "meshes"
+    {
+        over "mesh_15D1DC7C8D6B1003" (
+            delete references = @../../captures/meshes/mesh_15D1DC7C8D6B1003.usd@
+        )
+        {
+        }
+
+        over "mesh_82FD18A21FC8BFE5" (
+            delete references = @../../captures/meshes/mesh_82FD18A21FC8BFE5.usd@
+        )
+        {
+            token visibility
+            float3 xformOp:rotateXYZ = (0, 0, 0)
+            float3 xformOp:scale = (1, 1, 1)
+            double3 xformOp:translate = (0, 0, 0)
+            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:rotateXYZ", "xformOp:scale"]
+        }
+    }
+}
+
