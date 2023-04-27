@@ -7,22 +7,78 @@ over "RootNode"
 {
     over "meshes"
     {
-        over "mesh_15D1DC7C8D6B1003" (
-            delete references = @../../captures/meshes/mesh_15D1DC7C8D6B1003.usd@
-        )
+        over "mesh_313EDB602B8E2E99"
         {
+            custom int preserveOriginalDrawCall = 1
+
+            def RectLight "RectLight" (
+                prepend apiSchemas = ["ShapingAPI"]
+                instanceable = false
+            )
+            {
+                color3f color = (0.99999, 1, 1)
+                float diffuse = 1
+                float height = 100
+                float intensity = 100000
+                bool isProjector = 0
+                bool light:enableCaustics = 1
+                float shaping:cone:angle = 180
+                float shaping:cone:softness
+                float shaping:focus
+                color3f shaping:focusTint
+                asset shaping:ies:file
+                bool shaping:ies:normalize = 1
+                float specular = 1
+                bool visibleInPrimaryRay = 0
+                float width = 100
+                double3 xformOp:rotateXYZ = (0, 0, 0)
+                double3 xformOp:scale = (0.001, 0.001, 0.001)
+                double3 xformOp:translate = (0, 0, -4.000000059604645)
+                uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:rotateXYZ", "xformOp:scale"]
+            }
         }
 
-        over "mesh_82FD18A21FC8BFE5" (
-            delete references = @../../captures/meshes/mesh_82FD18A21FC8BFE5.usd@
-        )
+        over "mesh_B3836680D30679BC"
         {
-            token visibility
-            float3 xformOp:rotateXYZ = (0, 0, 0)
-            float3 xformOp:scale = (1, 1, 1)
+            custom int preserveOriginalDrawCall = 1
+
+            def SphereLight "SphereLight" (
+                prepend apiSchemas = ["ShapingAPI"]
+            )
+            {
+                color3f color = (1, 0.99999, 0.99999)
+                bool disableFogInteraction = 0
+                bool enableColorTemperature = 0
+                float exposure = 0
+                float intensity = 0
+                bool light:enableCaustics = 0
+                float radius = 35.100002
+                float shaping:cone:angle = 1
+                float shaping:cone:softness = 10
+                float shaping:focus = 0
+                color3f shaping:focusTint
+                asset shaping:ies:file
+                bool treatAsPoint = 0
+                bool visibleInPrimaryRay = 0
+                double3 xformOp:rotateXYZ = (-120, 0, 0)
+                double3 xformOp:scale = (0.01, 0.01, 0.01)
+                double3 xformOp:translate = (-41.358020782470724, 18.520192998671213, 411.7657470703125)
+                uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:rotateXYZ", "xformOp:scale"]
+            }
+        }
+
+        over "mesh_82FD18A21FC8BFE5"
+        {
+            double3 xformOp:rotateXYZ = (0, 0, 0)
+            double3 xformOp:scale = (100000, 100000, 100000)
             double3 xformOp:translate = (0, 0, 0)
             uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:rotateXYZ", "xformOp:scale"]
         }
+    }
+
+    over "Camera"
+    {
+        token visibility = "invisible"
     }
 }
 
