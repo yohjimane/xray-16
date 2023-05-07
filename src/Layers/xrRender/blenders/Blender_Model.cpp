@@ -106,14 +106,7 @@ void CBlender_Model::CompileFFP(CBlender_Compile& C) const
                 C.PassSET_ZB(TRUE, TRUE);
                 C.PassSET_Blend_SET();
                 C.PassSET_LightFog(TRUE, TRUE);
-#if 1
-                C.StageBegin();
-                C.StageSET_Color(D3DTA_TEXTURE, D3DTOP_SELECTARG1, D3DTA_DIFFUSE);
-                C.StageSET_Alpha(D3DTA_TEXTURE, D3DTOP_SELECTARG1, D3DTA_DIFFUSE);
-                C.StageSET_TMC("$user$projector", "$user$projector", "$null", 0);
-                C.StageEnd();
-#else
-                // https://github.com/OpenXRay/xray-soc-history/commit/de357fa58d7a6aaf14fe1626cf00d48850ced36f
+
                 C.StageBegin();
                 C.StageSET_Color(D3DTA_TEXTURE, D3DTOP_ADD, D3DTA_DIFFUSE);
                 C.StageSET_Alpha(D3DTA_TEXTURE, D3DTOP_SELECTARG1, D3DTA_DIFFUSE);
@@ -125,7 +118,6 @@ void CBlender_Model::CompileFFP(CBlender_Compile& C) const
                 C.StageSET_Alpha(D3DTA_TEXTURE, D3DTOP_SELECTARG1, D3DTA_CURRENT);
                 C.StageSET_TMC(oT_Name, "$null", "$null", 0);
                 C.StageEnd();
-#endif
             }
             C.PassEnd();
             break;

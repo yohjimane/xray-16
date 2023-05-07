@@ -52,8 +52,6 @@ void CBlender_Model_EbB::Compile(CBlender_Compile& C)
 void CBlender_Model_EbB::CompileFFP(CBlender_Compile& C) const
 {
     const bool constant_lighting = !ps_r1_flags.is_any(R1FLAG_FFP_LIGHTMAPS | R1FLAG_DLIGHTS);
-    const size_t element = constant_lighting ? SE_R1_NORMAL_LQ : C.iElement;
-    const auto modulate = constant_lighting ? D3DTOP_MODULATE : D3DTOP_MODULATE2X;
 
     C.PassBegin();
     {
@@ -69,27 +67,31 @@ void CBlender_Model_EbB::CompileFFP(CBlender_Compile& C) const
         }
         C.PassSET_LightFog(TRUE, TRUE);
 
-        switch (element)
+        switch (C.iElement)
         {
         case SE_R1_NORMAL_HQ:
         {
             // Stage0 - projector
             C.StageBegin();
+            C.StageSET_Color(D3DTA_TEXTURE, D3DTOP_ADD, D3DTA_DIFFUSE);
+            C.StageSET_Alpha(D3DTA_TEXTURE, D3DTOP_SELECTARG1, D3DTA_DIFFUSE);
             C.StageSET_TMC("$user$projector", "$user$projector", "$null", 0);
             C.StageEnd();
 
-            // Stage1 - Env texture
+            //// Stage1 - Env texture
             C.StageBegin();
-            C.StageSET_Address(D3DTADDRESS_CLAMP);
+            C.StageSET_Color(D3DTA_TEXTURE, D3DTOP_MODULATE, D3DTA_DIFFUSE);
+            C.StageSET_Alpha(D3DTA_TEXTURE, D3DTOP_MODULATE, D3DTA_DIFFUSE);
             C.StageSET_TMC(oT2_Name, oT2_xform, "$null", 0);
             C.StageEnd();
 
             // Stage2 - Base texture
             C.StageBegin();
-            C.StageSET_TMC(oT_Name, oT_xform, "$null", 0);
+            C.StageSET_Color(D3DTA_TEXTURE, D3DTOP_MODULATE2X, D3DTA_CURRENT);
+            C.StageSET_Alpha(D3DTA_TEXTURE, D3DTOP_SELECTARG1, D3DTA_CURRENT);
+            C.StageSET_TMC(oT_Name, "$null", "$null", 0);
             C.StageEnd();
 
-            C.PassSET_Shaders("null", "model_env");
             break;
         }
         case SE_R1_NORMAL_LQ:
@@ -104,14 +106,14 @@ void CBlender_Model_EbB::CompileFFP(CBlender_Compile& C) const
 
             // Stage2 - Base texture
             C.StageBegin();
-            C.StageSET_Color(D3DTA_TEXTURE, D3DTOP_BLENDTEXTUREALPHA, D3DTA_CURRENT);
+            C.StageSET_Color(D3DTA_TEXTURE, D3DTOP_MODULATE2X, D3DTA_CURRENT);
             C.StageSET_Alpha(D3DTA_TEXTURE, D3DTOP_SELECTARG1, D3DTA_CURRENT);
-            C.StageSET_TMC(oT_Name, oT_xform, "$null", 0);
+            C.StageSET_TMC(oT_Name, "oT_xform", "$null", 0);
             C.StageEnd();
 
             // Stage3 - Lighting - should work on all 2tex hardware
             C.StageBegin();
-            C.StageSET_Color(D3DTA_DIFFUSE, modulate, D3DTA_CURRENT);
+            C.StageSET_Color(D3DTA_DIFFUSE, D3DTOP_MODULATE2X, D3DTA_CURRENT);
             C.StageSET_Alpha(D3DTA_DIFFUSE, D3DTOP_SELECTARG2, D3DTA_CURRENT);
             C.Stage_Texture("$null");
             C.Stage_Matrix("$null", 0);
