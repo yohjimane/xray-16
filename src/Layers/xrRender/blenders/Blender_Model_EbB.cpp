@@ -127,9 +127,6 @@ void CBlender_Model_EbB::CompileFFP(CBlender_Compile& C) const
 
             break;
         }
-
-        default:
-            break;
         } // switch (C.iElement)
     }
     C.PassEnd();

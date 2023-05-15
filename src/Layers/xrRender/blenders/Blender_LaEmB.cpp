@@ -136,14 +136,10 @@ void CBlender_LaEmB::Compile(CBlender_Compile& C)
         return;
     }
 
-    if (2 == C.iElement)
+    switch (C.iElement)
     {
-        if (bConstant)
-            compile_Lc(C);
-        else
-            compile_L(C);
-    }
-    else
+    case SE_R1_NORMAL_HQ:
+    case SE_R1_NORMAL_LQ:
     {
         switch (HW.Caps.raster.dwStages)
         {
@@ -161,7 +157,17 @@ void CBlender_LaEmB::Compile(CBlender_Compile& C)
                 compile_3(C);
             break;
         } // switch (HW.Caps.raster.dwStages)
+        break;
     }
+    case SE_R1_LMODELS:
+    {
+        if (bConstant)
+            compile_Lc(C);
+        else
+            compile_L(C);
+        break;
+    }
+    } // switch (C.iElement)
 }
 //
 void CBlender_LaEmB::compile_2(CBlender_Compile& C)
@@ -178,6 +184,10 @@ void CBlender_LaEmB::compile_2(CBlender_Compile& C)
         {
             C.StageBegin();
             C.StageTemplate_LMAP0();
+            C.StageEnd();
+
+            C.StageBegin();
+            C.StageTemplate_HEMI();
             C.StageEnd();
         }
 
@@ -266,6 +276,10 @@ void CBlender_LaEmB::compile_3(CBlender_Compile& C)
             C.StageBegin();
             C.StageTemplate_LMAP0();
             C.StageEnd();
+
+            C.StageBegin();
+            C.StageTemplate_HEMI();
+            C.StageEnd();
         }
 
         // Stage1 - [+] Env-map
@@ -336,6 +350,10 @@ void CBlender_LaEmB::compile_L(CBlender_Compile& C)
         {
             C.StageBegin();
             C.StageTemplate_LMAP0();
+            C.StageEnd();
+
+            C.StageBegin();
+            C.StageTemplate_HEMI();
             C.StageEnd();
         }
 

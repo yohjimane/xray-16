@@ -110,6 +110,10 @@ void CBlender_default_aref::CompileFFP(CBlender_Compile& C) const
                     C.StageBegin();
                     C.StageTemplate_LMAP0();
                     C.StageEnd();
+
+                    C.StageBegin();
+                    C.StageTemplate_HEMI();
+                    C.StageEnd();
                 }
 
                 // Stage1 - Base texture
@@ -120,6 +124,7 @@ void CBlender_default_aref::CompileFFP(CBlender_Compile& C) const
                 C.StageEnd();
             }
             C.PassEnd();
+            break;
         }
         case SE_R1_LMODELS:
         {
@@ -136,14 +141,15 @@ void CBlender_default_aref::CompileFFP(CBlender_Compile& C) const
                     C.StageBegin();
                     C.StageTemplate_LMAP0();
                     C.StageEnd();
+
+                    C.StageBegin();
+                    C.StageTemplate_HEMI();
+                    C.StageEnd();
                 }
             }
             C.PassEnd();
             break;
         }
-
-        default:
-            break;
         } // switch (C.iElement)
     }
 }
