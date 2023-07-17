@@ -272,6 +272,7 @@ float ps_current_detail_height = 1.f;
 
 int ps_r2_mt_calculate = 0;
 int ps_r2_mt_render = 0;
+int ps_screen_space_shaders = 0;
 
 xr_token ext_quality_token[] = {{"qt_off", 0}, {"qt_low", 1}, {"qt_medium", 2},
     {"qt_high", 3}, {"qt_extreme", 4}, {nullptr, 0}};
