@@ -77,6 +77,9 @@ public:
     ref_rt rt_smap_rain;
     ref_rt rt_smap_depth_minmax; //	is used for min/max sm
 
+    // Gas Mask Drops Blur
+    ref_rt rt_mask_drops_blur;
+
     //	Igor: for async screenshots
     ID3DTexture2D* t_ss_async; // 32bit		(r,g,b,a) is situated in the system memory
 

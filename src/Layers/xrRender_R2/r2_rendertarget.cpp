@@ -768,6 +768,14 @@ CRenderTarget::CRenderTarget()
         u_setrt(RCache, Device.dwWidth, Device.dwHeight, get_base_rt(), 0, 0, get_base_zb());
     }
 
+    // GAS MASK DROPS BLUR
+    {
+#ifdef USE_DX11
+        const u32 w = Device.dwWidth, h = Device.dwHeight;
+        rt_mask_drops_blur.create(r2_RT_mask_drops_blur, w, h, D3DFMT_A8R8G8B8); //Create RT, without MSAA, full resolution
+#endif
+    }
+
     // COMBINE
     {
 #ifdef USE_DX9
