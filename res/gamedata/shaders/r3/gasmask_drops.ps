@@ -180,6 +180,8 @@ float4 main(p_screen I) : SV_Target
 
 
     float3 col = s_image.Sample(smp_nofilter, uv + n);
+    float3 blur = s_blur_2.SampleLevel(smp_rtlinear, uv + n, 4.0).xyz;
+    col = lerp(col, blur, c.x * 0.05);
 
 	return float4(col, 1.0);
 }

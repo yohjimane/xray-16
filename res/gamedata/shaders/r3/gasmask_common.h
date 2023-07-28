@@ -31,6 +31,12 @@ Texture2D s_mask_v_3;
 //Condensation droplets texture
 Texture2D s_mask_droplets;
 
+//Breath noise texture
+Texture2D s_breath_noise;
+
+//RT including drops
+Texture2D s_image_blurred;
+
 //Constants from engine
 float4 mask_control; 
 float3 drops_control;
