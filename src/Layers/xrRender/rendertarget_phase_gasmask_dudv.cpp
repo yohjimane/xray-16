@@ -100,7 +100,7 @@ void CRenderTarget::phase_gasmask_dudv()
     RCache.set_Element(s_gasmask_dudv->E[2]);
 
     //Set paramterers
-    RCache.set_c("mask_control", ps_r2_mask_control.x, ps_r2_mask_control.y, ps_r2_mask_control.z, ps_r2_mask_control.w);
+    RCache.set_c("breath_control", ps_r2_breath_control.x, ps_r2_breath_control.y, ps_r2_breath_control.z, ps_r2_breath_control.w);
 
     //Set geometry
     RCache.set_Geometry(g_combine);

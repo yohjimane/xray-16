@@ -595,6 +595,8 @@ ENGINE_API Fvector4 ps_dev_param_7 = { .0f, .0f, .0f, .0f };
 // TODO: put into it's own var, keep dev params for dev work 
 ENGINE_API Fvector4 ps_dev_param_8 = { .0f, .0f, .0f, .0f }; 
 
+ENGINE_API Fvector4 ps_r2_breath_control = { .33f, .0f, .1f, .0f }; // x = radius, y = speed, z = decay, w = rand seed
+
 // Ascii1457's Screen Space Shaders
 ENGINE_API Fvector4 ps_ssfx_hud_drops_1 = { 1.0f, 1.0f, 30.f, .05f }; // Anim Speed, Int, Reflection, Refraction
 ENGINE_API Fvector4 ps_ssfx_hud_drops_2 = { .0225f, 1.f, 0.0f, 2.0f }; // Density, Size, Extra Gloss, Gloss

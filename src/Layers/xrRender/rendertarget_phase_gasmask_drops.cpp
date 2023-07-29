@@ -44,8 +44,10 @@ void CRenderTarget::phase_gasmask_drops()
 	RCache.set_Element(s_gasmask_drops->E[0]);
 	
 	//Set parameters
-	RCache.set_c("drops_control", ps_r2_drops_control.x, ps_r2_drops_control.y, ps_r2_drops_control.z, 0.f);
 	RCache.set_c("mask_control", ps_r2_mask_control.x, ps_r2_mask_control.y, ps_r2_mask_control.z, ps_r2_mask_control.w);	
+    RCache.set_c("drops_control", ps_r2_drops_control.x, ps_r2_drops_control.y, ps_r2_drops_control.z, 0.f);
+    RCache.set_c("breath_control", ps_r2_drops_control.x, ps_r2_drops_control.y, ps_r2_drops_control.z, 0.f);
+
 
 	//Set geometry
 	RCache.set_Geometry(g_combine);

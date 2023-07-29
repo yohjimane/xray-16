@@ -206,6 +206,9 @@ extern ENGINE_API float ps_r2_img_exposure; // r2-only
 extern ENGINE_API float ps_r2_img_gamma; // r2-only
 extern ENGINE_API float ps_r2_img_saturation; // r2-only
 extern ENGINE_API Fvector ps_r2_img_cg; // r2-only
+extern ENGINE_API Fvector4 ps_r2_mask_control;
+extern ENGINE_API Fvector ps_r2_drops_control;
+extern ENGINE_API Fvector4 ps_r2_breath_control;
 
 extern ENGINE_API Fvector4 ps_r2_mask_control;
 extern ENGINE_API Fvector ps_r2_drops_control;

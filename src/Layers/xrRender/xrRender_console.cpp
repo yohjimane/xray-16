@@ -218,6 +218,7 @@ extern ENGINE_API Fvector ps_r2_img_cg; // r2-only
 extern ENGINE_API Fvector4 ps_r2_mask_control; // r2-only
 extern ENGINE_API Fvector ps_r2_drops_control; // r2-only
 extern ENGINE_API int ps_r2_nightvision;
+extern ENGINE_API Fvector4 ps_r2_breath_control; // x = radius, y = rate, z = ??? maybe decay, w = rand seed
 
 //debug
 extern ENGINE_API Fvector4 ps_dev_param_1;
@@ -1062,6 +1063,8 @@ void xrRender_initconsole()
     CMD4(CCC_Integer, "r__nightvision", &ps_r2_nightvision, 0, 3); //For beef's nightvision shader or other stuff
     CMD4(CCC_Vector4, "r2_mask_control", &ps_r2_mask_control, tw2_min, tw2_max);
     CMD4(CCC_Vector3, "r2_drops_control", &ps_r2_drops_control, tw_min, tw_max);
+    tw2_max.set(10.f, 10.f, 10.f, 10.f);
+    CMD4(CCC_Vector4, "r2_breath_control", &ps_r2_breath_control, tw2_min, tw2_max);
 
     tw2_max.set(-100.f, -100.f, -100.f, -100.f);
     tw2_max.set(100.f, 100.f, 100.f, 100.f);
