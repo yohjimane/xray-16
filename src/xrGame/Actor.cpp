@@ -85,6 +85,8 @@ constexpr float default_feedback_duration = 0.2f;
 
 extern float cammera_into_collision_shift;
 extern int g_first_person_death;
+extern ENGINE_API Fvector4 ps_r2_breath_control;
+extern ENGINE_API Fvector4 ps_r2_mask_control;
 extern ENGINE_API Fvector4 ps_ssfx_hud_drops_1;
 extern ENGINE_API Fvector4 ps_r2_mask_control;
 extern ENGINE_API Fvector ps_r2_drops_control;
@@ -234,6 +236,8 @@ CActor::~CActor()
     m_HeavyBreathSnd.destroy();
     m_BloodSnd.destroy();
     m_DangerSnd.destroy();
+    for (auto [name, snd]: m_GasMaskBreathSounds)
+        snd.destroy();
 
     xr_delete(m_pActorEffector);
 
@@ -405,6 +409,7 @@ void CActor::Load(LPCSTR section)
                 sndHit[hit_type].emplace_back().create(_GetItem(hit_snds, i, buf), st_Effect, sg_SourceType);
             }
         }
+        
 
         GEnv.Sound->create(sndDie[0], strconcat(buf, *cName(), "\\die0"), st_Effect, SOUND_TYPE_MONSTER_DYING);
         GEnv.Sound->create(sndDie[1], strconcat(buf, *cName(), "\\die1"), st_Effect, SOUND_TYPE_MONSTER_DYING);
@@ -421,6 +426,13 @@ void CActor::Load(LPCSTR section)
             m_DangerSnd.create(pSettings->r_string(section, "heavy_danger_snd"),
                 st_Effect, SOUND_TYPE_MONSTER_INJURING);
         }
+
+        for (int i = 0; i < 8; i++)
+            for (int j = 0; j < 8; j++)
+            {
+                xr_sprintf(buf, "gas_breath_snd_%d_%d", i+1, j+1);
+                m_GasMaskBreathSounds[buf].create(pSettings->r_string(section, buf), st_Effect, SOUND_TYPE_MONSTER_INJURING);
+            }
     }
     if (psActorFlags.test(AF_PSP))
         cam_Set(eacLookAt);
@@ -1294,6 +1306,9 @@ void CActor::UpdateCL()
     UpdateHudRainDrops();
     UpdateVisorRainDrops();
     UpdateVisor();
+
+    if (g_Alive())
+        UpdateBreath();
 }
 
 float NET_Jump = 0;
@@ -2267,6 +2282,82 @@ void CActor::On_SetEntity()
         g_player_hud->load_default();
     else
         pOutfit->ApplySkinModel(this, true, true);
+}
+
+void CActor::UpdateCurrentBreathSound(float health)
+{
+    //"actor\\gas_breath_" ..tostring((actor.health > 0.2) and math.ceil((1.01 - actor.power) * 3 + actor_speed_time / 8) or 8) .. "_" ..gas_play;
+    //tostring((actor.health > 0.2) and math.ceil((1.01 - actor.power) * 3 + actor_speed_time / 8) or 8);
+    if (Device.fTimeGlobal > m_lastBreathUpdateTime)
+    {
+        m_gasPlay++;
+        if (m_gasPlay > 8)
+            m_gasPlay = 1;
+
+        float actor_speed_time = __min(32., fCurAVelocity + conditions().BleedingSpeed());
+        int value = (GetfHealth() > 0.2) ? static_cast<int>(std::ceil((1.01 - conditions().GetPower()) * 3 + actor_speed_time / 8)) : 8;
+        string256 buf;
+        xr_sprintf(buf, "gas_breath_snd_%d_%d", value, m_gasPlay);
+        Msg("Yohji debug - play breath sound name = %s, breath id = %d %d", buf, int(ps_r2_breath_control.w), m_gasPlay);
+        if (m_GasMaskBreathSounds.find(buf) != m_GasMaskBreathSounds.end())
+            m_CurrentGasMaskBreathSound = &m_GasMaskBreathSounds[buf];
+    }
+}
+
+void CActor::UpdateBreath()
+{
+    CHelmet* pHelmet = smart_cast<CHelmet*>(inventory().ItemFromSlot(HELMET_SLOT));
+    if (!pHelmet || !ps_r2_mask_control.x)
+    {
+        m_CurrentGasMaskBreathSound = nullptr;
+        return;
+    }
+
+    float oscillator = 1.f + sin(Device.fTimeGlobal);
+    float healthInv = 1.f - GetfHealth();
+    float staminaInv = 1.f - conditions().GetPower();
+    float bleeding = conditions().BleedingSpeed();
+
+    float breathSize = 1.f; // increase size if we are low on health, stamina, or our bleeding is high
+    breathSize *= oscillator;
+    if (healthInv > 0.f)
+        breathSize *= (1.f + healthInv);
+    if (staminaInv > 0.f)
+        breathSize *= (1.f + staminaInv);
+    if (bleeding > 0.f)
+        breathSize *= (1.f + bleeding);
+    breathSize -= 1.f;
+
+    bool canUpdateBreath = fsimilar(breathSize, 0.f, 0.01) || fsimilar(breathSize, 1.f, 0.01);
+
+    if (canUpdateBreath)
+        UpdateCurrentBreathSound(healthInv);
+
+    if (oscillator < 1.f)
+    {
+        if (fsimilar(breathSize, -1.0f, 0.01) && (Device.fTimeGlobal > m_lastBreathUpdateTime))
+        {
+            ps_r2_breath_control.w++;
+        }
+        return;
+    }
+
+    if (m_CurrentGasMaskBreathSound && (Device.fTimeGlobal > m_lastBreathUpdateTime) && canUpdateBreath)
+    {
+        if (!m_CurrentGasMaskBreathSound->_feedback())
+        {
+            m_CurrentGasMaskBreathSound->play_at_pos(this, Fvector().set(0, ACTOR_HEIGHT, 0), sm_2D);
+            auto secs = m_CurrentGasMaskBreathSound->get_length_sec();
+            Msg("Yohji debug - play breath sound %f %f %f", Device.fTimeGlobal, secs, m_lastBreathUpdateTime);
+            m_lastBreathUpdateTime = Device.fTimeGlobal + (secs * 1.25);
+        }
+        else
+            m_CurrentGasMaskBreathSound->set_position(Fvector().set(0, ACTOR_HEIGHT, 0));
+    }
+
+    ps_r2_breath_control.x = breathSize;
+    
+
 }
 
 bool CActor::unlimited_ammo() { return !!psActorFlags.test(AF_UNLIMITEDAMMO); }

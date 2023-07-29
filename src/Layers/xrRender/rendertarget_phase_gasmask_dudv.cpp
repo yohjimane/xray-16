@@ -102,6 +102,31 @@ void CRenderTarget::phase_gasmask_dudv()
     //Set paramterers
     RCache.set_c("breath_control", ps_r2_breath_control.x, ps_r2_breath_control.y, ps_r2_breath_control.z, ps_r2_breath_control.w);
 
+    ref_constant array1 = RCache.get_c(c_slights_color);
+    ref_constant array2 = RCache.get_c(c_slights_pos);
+    ref_constant array3 = RCache.get_c(c_slights_dir);
+    xr_vector<ISpatial*> spatial_lights;
+    spatial_lights.erase(spatial_lights.begin(), spatial_lights.end());
+    g_SpatialSpace->q_sphere(spatial_lights, 0, STYPE_LIGHTSOURCE, Device.vCameraPosition, EPS_L);
+
+    RCache.set_c("s_num_lights", (float)spatial_lights.size());
+
+    for (u32 i = 0; i < spatial_lights.size(); i++)
+    {
+        ISpatial* spatial = spatial_lights[i];
+
+        light* pLight = (light*)spatial->dcast_Light();
+        VERIFY(pLight);
+        //calc attenuation
+        float att_R = pLight->range * .95f;
+        float att_factor = 1.f / (att_R * att_R);
+
+        //write down light data
+        RCache.set_ca(c_slights_color, i, pLight->color.r, pLight->color.g, pLight->color.b, 1.f);
+        RCache.set_ca(c_slights_pos, i, pLight->position.x, pLight->position.y, pLight->position.z, att_factor);
+        RCache.set_ca(c_slights_dir, i, pLight->direction.x, pLight->direction.y, pLight->direction.z, 1.f);
+    }
+
     //Set geometry
     RCache.set_Geometry(g_combine);
     RCache.Render(D3DPT_TRIANGLELIST, Offset, 0, 4, 0, 2);

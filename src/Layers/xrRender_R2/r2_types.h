@@ -80,6 +80,11 @@ static constexpr auto c_ssky0 = "s_sky0";
 static constexpr auto c_ssky1 = "s_sky1";
 static constexpr auto c_sclouds0 = "s_clouds0";
 static constexpr auto c_sclouds1 = "s_clouds1";
+static constexpr auto c_slights_color = "s_lights_color";
+static constexpr auto c_slights_pos = "s_lights_pos";
+static constexpr auto c_slights_dir = "s_lights_dir";
+static constexpr auto c_slights_att = "s_lights_att";
+
 
 #define JITTER(a) r2_jitter #a
 
