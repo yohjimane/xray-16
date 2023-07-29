@@ -40,6 +40,12 @@ Texture2D s_image_blurred;
 //Constants from engine
 float4 mask_control; 
 float3 drops_control;
+float4 breath_control;
+
+uniform float s_num_lights;
+float4 s_lights_color[64];
+float4 s_lights_pos[64];
+float4 s_lights_dir[64];
 
 //Gasmask settings
 #define GM_DIST_INT 0.05 //Refraction intensity
