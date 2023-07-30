@@ -6,6 +6,7 @@
 
 #include "common.h"
 #include "gasmask_common.h"
+//#define yohji_debug;
 
 float fbm(float2 texcoord, int iterations) 
 {
@@ -47,7 +48,11 @@ float4 main(p_screen I) : SV_Target
     circle_tc_pos.y -= 0.6; // push it down to bottom 1/3 of screen
     
     //circle settings
-    float radius = breath_control.x;
+    float radius = breath_control.x * 0.66;
+#ifdef yohji_debug
+    // set static size for breath fog
+    radius = 1.5;
+#endif
     float distFromCenter = distance(circle_tc_pos.xy, float2(0.5, 0.5)); // get distance between cur pos and approx center of circle
     float fbmFactor = fbm(texcoord * (0.1 * (1.0 / seed)), 15);
 
@@ -55,33 +60,49 @@ float4 main(p_screen I) : SV_Target
     radius *= fbmFactor; // apply wiggliness
     float circle = 1.0 - smoothstep(radius, radius + 0.08, length(circle_tc_pos.xy - circle_tc_pos.zw));
     float4 circleTex = float4(circle, circle, circle, 1.0); //cast to float3
-    
-    // debug
-    //image = float4(0.);
-    //image_blur = float4(0.);
 
     float centerRadius = clamp(radius - distFromCenter, 0.0, 1.0);
     circle_tc_pos.xy += radius; // todo: shift where we sample the texture randomly so each breath looks unique
     float4 glossyTex = s_breath_noise.Sample(smp_rtlinear, circle_tc_pos.xy); // reuse noise texture as regular one
+#ifdef yohji_debug
+    // set static color for breath fog
+    glossyTex = float4(0,0,0,1);
+#endif
+
+    float2 tmp_pos = I.tc0;
+    tmp_pos.xy = texcoord; //texcoord
+    tmp_pos.x -= 0.5;
+    tmp_pos.x *= screen_res.x * screen_res.w;
+    tmp_pos.x += 0.5;
 
     for (int i = 0; i < int(s_num_lights); i++)
     {
         float4 lightColor = s_lights_color[i];
         float4 lightPos = s_lights_pos[i];
+        float lightInfluenceRadius = fbmFactor * lightPos.z; // multiply by light range to get approx radius
 
-        float lightCircle = 1.0 - step(0.125, length(I.tc0.xy - lightPos.xy));
-
-        glossyTex += lightColor * lightCircle;
+        //smoothstep(radius, radius + 0.08, length(I.tc0.xy - lightPos.xy))
+        float lightCircle = 1.0 - smoothstep(lightInfluenceRadius, lightInfluenceRadius + lightInfluenceRadius, length(tmp_pos - lightPos.xy));
+#ifdef yohji_debug
+        lightColor = float4(0,1,0,1); // set light color to green in debug mode
+#endif
+        glossyTex += (lightColor * lightColor.w * lightPos.w) * lightCircle; // multiply by fade factor and reciprocal distance so the lit area grows as we get farther
     }
 
     // transform sun world space to view space
+    float sunRadius = 0.5;
     float4 sunProj = mul(m_VP, float4(L_sun_dir_w.xyz, 0.0));
     sunProj.xyz /= sunProj.w;
     sunProj.xy = sunProj.xy * float2(0.5, -0.5) + 0.5;
-    // make a circle
-    float sunCircle = 1.0 - step(0.125, length(I.tc0.xy - sunProj.xy));
-    // add the circle
-    glossyTex += float4(L_sun_color.xyz * L_sun_color.w, 1.0) * sunCircle * saturate(dot(-eye_direction, normalize(L_sun_dir_w.xyz - eye_position.xyz)));
+
+    float sunCircle = 1.0 - smoothstep(sunRadius, sunRadius + sunRadius, length(tmp_pos - sunProj.xy));
+    float3 sunColor = L_sun_color.xyz;
+#ifdef yohji_debug
+    sunColor = float3(1,0,0); // set sun color to red in debug mode
+#endif
+
+    sunColor *= L_sun_color.w; // multiply by fade factor
+    glossyTex += float4(sunColor, 1.0) * sunCircle * saturate(dot(-eye_direction, normalize(L_sun_dir_w.xyz - eye_position.xyz)));
 
     image_blur = lerp(image_blur, glossyTex, .25);
     image = lerp(image, image_blur, circleTex.xyz); // add our blurred area to the main texture
