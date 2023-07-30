@@ -6,7 +6,6 @@
 
 #include "common.h"
 #include "gasmask_common.h"
-float4 eye_direction;
 
 float fbm(float2 texcoord, int iterations) 
 {
@@ -66,20 +65,14 @@ float4 main(p_screen I) : SV_Target
     circle_tc_pos.xy += radius; // todo: shift where we sample the texture randomly so each breath looks unique
     float4 glossyTex = s_breath_noise.Sample(smp_rtlinear, circle_tc_pos.xy); // reuse noise texture as regular one
 
-    for (int i = 0; i < 64; i++)
+    for (int i = 0; i < int(s_num_lights); i++)
     {
         float4 lightColor = s_lights_color[i];
-        float4 lightDir = s_lights_dir[i];
         float4 lightPos = s_lights_pos[i];
 
-        // transform world space to view space
-        float4 proj = mul(m_VP, float4(lightPos.xyz, 1.0));
-        proj.xyz /= proj.w;
-        proj.xy = proj.xy * float2(0.5, -0.5) + 0.5;
+        float lightCircle = 1.0 - step(0.125, length(I.tc0.xy - lightPos.xy));
 
-        float lightCircle = 1.0 - step(0.125, length(I.tc0.xy - proj.xy));
-
-        glossyTex += lightColor * lightCircle * saturate(dot(eye_direction, normalize(lightPos.xyz-eye_position.xyz)));
+        glossyTex += lightColor * lightCircle;
     }
 
     image_blur = lerp(image_blur, glossyTex, .25);
