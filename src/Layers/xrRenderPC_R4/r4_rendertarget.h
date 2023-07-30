@@ -418,4 +418,7 @@ public:
     void dbg_addline(Fvector& /*P0*/, Fvector& /*P1*/, u32 /*c*/) {}
     void dbg_addplane(Fplane& /*P0*/, u32 /*c*/) {}
 #endif
+
+    xr_vector<Fvector4> m_miltaka_lfx_coords;
+	xr_vector<Fvector4> m_miltaka_lfx_color;
 };
