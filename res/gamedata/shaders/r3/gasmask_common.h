@@ -46,6 +46,7 @@ uniform float s_num_lights;
 float4 s_lights_color[64];
 float4 s_lights_pos[64];
 float4 s_lights_dir[64];
+uniform float3 eye_direction;
 
 //Gasmask settings
 #define GM_DIST_INT 0.05 //Refraction intensity

@@ -93,7 +93,7 @@ float2 unpack_tc_base( float2 tc, float du, float dv )
 
 float3 calc_sun_r1( float3 norm_w )    
 {
-	return L_sun_color*saturate(dot((norm_w),-L_sun_dir_w));                 
+	return L_sun_color.rgb*saturate(dot((norm_w),-L_sun_dir_w));                 
 }
 
 float3 calc_model_hemi_r1( float3 norm_w )    
@@ -140,7 +140,7 @@ float3	v_hemi(float3 n)
 
 float3	v_sun(float3 n)                        	
 {
-	return L_sun_color*dot(n,-L_sun_dir_w);                
+	return L_sun_color.rgb*dot(n,-L_sun_dir_w);                
 }
 
 float3	calc_reflection( float3 pos_w, float3 norm_w )

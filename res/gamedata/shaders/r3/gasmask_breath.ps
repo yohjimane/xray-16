@@ -28,7 +28,6 @@ float fbm(float2 texcoord, int iterations)
 float4 main(p_screen I) : SV_Target
 {
 	float3 image = s_image.Sample(smp_rtlinear, I.tc0).xyz;
-	// float3 image_blur = s_blur_2.Sample(smp_rtlinear, I.tc0).xyz;
 	float3 image_blur = s_image_blurred.Sample(smp_rtlinear, I.tc0).xyz;
     //texcoord
     float2 texcoord = I.tc0;
@@ -74,6 +73,15 @@ float4 main(p_screen I) : SV_Target
 
         glossyTex += lightColor * lightCircle;
     }
+
+    // transform sun world space to view space
+    float4 sunProj = mul(m_VP, float4(L_sun_dir_w.xyz, 0.0));
+    sunProj.xyz /= sunProj.w;
+    sunProj.xy = sunProj.xy * float2(0.5, -0.5) + 0.5;
+    // make a circle
+    float sunCircle = 1.0 - step(0.125, length(I.tc0.xy - sunProj.xy));
+    // add the circle
+    glossyTex += float4(L_sun_color.xyz * L_sun_color.w, 1.0) * sunCircle * saturate(dot(-eye_direction, normalize(L_sun_dir_w.xyz - eye_position.xyz)));
 
     image_blur = lerp(image_blur, glossyTex, .25);
     image = lerp(image, image_blur, circleTex.xyz); // add our blurred area to the main texture
