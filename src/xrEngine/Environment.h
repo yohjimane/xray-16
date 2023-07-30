@@ -164,6 +164,7 @@ public:
     Fvector3 ambient;
     Fvector4 hemi_color; // w = R2 correction
     Fvector3 sun_color;
+    float sun_fade{}; // value to see if sun is currently visible
     Fvector3 sun_dir;
     float sun_azimuth; // for dynamic sun dir
     bool use_dynamic_sun_dir;

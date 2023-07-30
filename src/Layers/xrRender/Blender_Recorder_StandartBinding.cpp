@@ -271,7 +271,7 @@ class cl_sun0_color : public R_constant_setup
         if (marker != Device.dwFrame)
         {
             const auto& desc = g_pGamePersistent->Environment().CurrentEnv;
-            result.set(desc.sun_color.x, desc.sun_color.y, desc.sun_color.z, 0);
+            result.set(desc.sun_color.x, desc.sun_color.y, desc.sun_color.z, desc.sun_fade);
         }
         cmd_list.set_c(C, result);
     }

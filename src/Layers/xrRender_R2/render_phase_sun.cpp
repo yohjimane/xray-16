@@ -55,6 +55,31 @@ void render_sun::calculate()
     L_right.crossproduct(L_up, L_dir).normalize();
     mdir_View.build_camera_dir(L_pos, L_dir, L_up);
 
+    // update sun fade
+    auto& desc = g_pGamePersistent->Environment().CurrentEnv;
+    Fvector4 pos;
+    Device.mFullTransform.transform(pos, sun->position);
+    Fvector sunDir = Fvector().set(sun->position).sub(Device.vCameraPosition);
+    float sunDist = sunDir.magnitude(); sunDir.normalize();
+    float cosLo = sunDir.dotproduct(Device.vCameraDirection);
+    if (cosLo > 0.0f)
+    {
+        float x = (1.f + pos.x) / 2.f;
+        float y = (1.f - pos.y) / 2.f;
+        collide::rq_result l_rq;
+
+        if (g_pGameLevel)
+        {
+            g_pGameLevel->ObjectSpace.RayPick(Device.vCameraPosition, sunDir, sunDist, collide::rqtBoth, l_rq, g_pGameLevel->CurrentViewEntity());
+            float fade = (sunDist - l_rq.range) / 0.4f;
+            clamp(fade, 0.0f, 1.0f);
+            fade = 1.0f - fade;
+            fade *= cosLo * 0.2f;
+            desc.sun_fade = fade;
+        }
+    }
+
+
     // THIS NEED TO BE A CONSTATNT
     Fplane light_top_plane;
     light_top_plane.build_unit_normal(L_pos, L_dir);
