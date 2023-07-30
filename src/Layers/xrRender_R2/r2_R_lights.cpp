@@ -335,7 +335,7 @@ void CRender::render_indirect(light* L) const
         float dist = ldir.magnitude(); ldir.normalize();
         float cosLo = ldir.dotproduct(Device.vCameraDirection);
 
-        if (dist <= 20.f && dist >= 2.0f && cosLo > 0.0f)
+        if (dist <= 300.f && dist >= .0f && cosLo > 0.0f)
         {
             float x = (1.f + pos.x) / 2.f;
             float y = (1.f - pos.y) / 2.f;
@@ -348,12 +348,15 @@ void CRender::render_indirect(light* L) const
                 clamp(fade, 0.0f, 1.0f);
                 fade = 1.0f - fade;
                 fade *= cosLo * 0.2f;
-
-                Fvector3 color = Fvector3().set(L->color.r, L->color.g, L->color.b); 
-                color.normalize();
+                if (fsimilar(fade, 0.0))
+                    return;
+                else
                 {
-                    Target->m_miltaka_lfx_coords.push_back(Fvector4().set(x, y, dist, dist));
-                    Target->m_miltaka_lfx_color.push_back(Fvector4().set(fade * color.x, fade * color.y, fade * color.z, dist));
+                    Fvector3 color = Fvector3().set(L->color.r, L->color.g, L->color.b);
+                    color.normalize();
+                    dist = 1.f / dist;
+                    Target->m_miltaka_lfx_coords.push_back(Fvector4().set(x, y, L->range * .04f, dist));
+                    Target->m_miltaka_lfx_color.push_back(Fvector4().set(color.x, color.y, color.z, fade));
                 }
             }
         }
