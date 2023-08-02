@@ -9,6 +9,10 @@
 	/////////////////
 	Anomaly Team 2020
 	/////////////////
+
+	Adapted by yohjimane for OpenXRay - Jul 2023
+	Original 2d to 3d rotation code by jaapboerhof: https://www.shadertoy.com/view/MlsfRj
+	Edited to account for z-axis rotation by yohjimane: https://www.shadertoy.com/view/mllyD7
 */
 
 //Main gasmask textures
@@ -47,6 +51,7 @@ float4 s_lights_color[64];
 float4 s_lights_pos[64];
 float4 s_lights_dir[64];
 uniform float3 eye_direction;
+float4 m_cam_inertia_smooth;
 
 //Gasmask settings
 #define GM_DIST_INT 0.05 //Refraction intensity
@@ -63,5 +68,67 @@ uniform float3 eye_direction;
 #define GM_VIS_NUM 16 //Reflection quality
 #define GM_VIS_RADIUS 0.45 //Reflection radius
 #define GM_VIS_INTENSITY 0.5 //Reflection intensity
+
+
+float2 rotate(float2 v, float2 o, float a) {
+    float s = sin(a);
+    float c = cos(a);
+    float2x2 m = float2x2(c, -s, s, c);
+    return mul(m, (v - o)) + o;
+}
+
+float3 rotateZ(float3 v, float3 o, float a) {
+    float s = sin(a);
+    float c = cos(a);
+    float2x2 m = float2x2(c, -s, s, c);
+    return float3(mul(m, (v.xy - o.xy) + o.xy), v.z);
+}
+
+float2 TransformPlane(float2 uv, float3 center, float XRot, float YRot, float ZRot) {
+    // First Rotate around Y axis
+    float2 RayDirection =  float2(uv.x, 0.0);
+    float2 A1 = float2(0.0, -1.0);
+    float2 B1 = RayDirection - A1;
+    float2 C1 = rotate(float2(-1.0, 0.0), float2(center.x, 0.0), YRot);
+    float2 D1 = rotate(float2(1.0, 0.0), float2(center.x, 0.0), YRot) - C1;
+
+    // calculate intersection point
+    float u = ( (C1.y + 1.0) * D1.x - C1.x * D1.y ) / (D1.x*B1.y-D1.y*B1.x);
+
+    // position on the XY plane after Y-axis rotation
+    float sx = u * B1.x;
+    float sy = u * uv.y;
+
+    // Now Rotate around X axis
+    RayDirection = float2(sy, 0.0);
+    float2 B2 = RayDirection - A1;
+    float2 C2 = rotate(float2(-1.0, 0.0), float2(center.y, 0.0), XRot);
+    float2 D2 = rotate(float2(1.0, 0.0), float2(center.y, 0.0), XRot) - C2;
+
+    // calculate intersection point
+    float v = ( (C2.y + 1.0) * D2.x - C2.x * D2.y ) / (D2.x*B2.y-D2.y*B2.x);
+
+	// the position after x and y rotations
+    float3 pos = float3(v * sx, v * B2.x, 0.0 );
+
+    // Now rotate the position around Z axis
+    float3 finalPos = rotateZ(pos, center, ZRot);
+
+    // final position on the 3D plane after Z-axis rotation
+    return finalPos.xy;
+}
+
+float2 applyInertia(float2 texcoord)
+{
+	float2 uv = (-1.0 + 2.0 * texcoord);
+	float3 pivotPoint = float3(0.0, 0.0, 0.0);
+    float R_X = m_cam_inertia_smooth.y * shader_param_3.y;
+    float R_Y = m_cam_inertia_smooth.x * shader_param_3.x;
+    float R_Z = m_cam_inertia_smooth.z * shader_param_3.z; // Adjust the value for Z-axis rotation
+    float3 MyCoords = float3(TransformPlane(uv, pivotPoint, R_X, R_Y, R_Z), 0.0);
+    float2 MyTexCoord = (MyCoords.xy + float2(1.0, 1.0)) / 2.0;
+    texcoord = MyTexCoord;
+    return texcoord;
+}
 
 #endif

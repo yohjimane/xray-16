@@ -2,34 +2,17 @@
 #include "gasmask_common.h"
 #include "screenspace_common.h"
 
-float3 fast_blur(float2 texcoord) {
-    float3 image = s_image_blurred.Sample(smp_rtlinear, texcoord).xyz;
-    float blur = texcoord.x*7.;
-    blur = s_image_blurred.Sample(smp_rtlinear, texcoord).x;
-    blur = blur *7.; 
-    
-    for(int i = -1;i<2;i++)
-    	for(int j = -1;j<2;j++)
-    		image += s_image_blurred.Sample(smp_rtlinear, texcoord).xyz;
+/*
+    Gasmask blur shader
+    Passes blurred result of previous shader (gasmask_drops) to next shader (gasmask_dudv)
+    Added so the breath fog blurs raindrops correctly.
 
-    image/=9.;
+    Credits: yohjimane
 
-    return image;
-    
-    //o.xyz = float3(blur,blur,blur);
-}
-
-float3 bokeh_pass_3 (float2 tc)
-{
-	float3 image = s_image.Sample(smp_rtlinear, tc).xyz;
-	float Pi = 6.28318530718; float blur_directions = 8.0; float blur_quality = 4.0; float blur_radius = 5; float3 color = 0.0f; float3 color_average = 0.0f;
-	float light_avgs = 0.0f; float weight = 0.0f; float total_weight = 0.0f;
-	for(float i=1.0; i<=blur_quality; i++) { for( float d=0.0; d<Pi; d+=Pi/blur_directions) {
-		color = s_blur_8.SampleLevel(smp_rtlinear, tc + (float2(cos(d),sin(d))*blur_radius*i/screen_res.xy),0).rgb;
-		color += s_blur_4.SampleLevel(smp_rtlinear, tc + (float2(cos(d),sin(d))*blur_radius*i/screen_res.xy),0).rgb;
-		if (color.g > 0.0f) { color.g *= 1.0f; light_avgs += 1.0f;}	else {light_avgs += 0.5;} color_average += color; } } image = color_average.g / light_avgs;
-	return image;
-}
+    /////////////////
+    OpenXRay Engine 2023
+    /////////////////
+*/
 
 float4 main(p_screen I) : SV_Target
 {
@@ -40,7 +23,8 @@ float4 main(p_screen I) : SV_Target
     circle_tc_pos.x += 0.5;
     circle_tc_pos.zw = float2(0.5, 0.5); //position (center of the screen)
     circle_tc_pos.y -= 0.6; // push it down to bottom 1/3 of screen
-    float distFromCenter = distance(circle_tc_pos.xy, float2(0.5, 0.5)); // get distance between cur pos and approx center of circle
+    circle_tc_pos.xy = applyInertia(circle_tc_pos.xy);
 
-	return float4(SSFX_Blur(I.tc0, shader_param_1.x).xyz, 1.0);
+    float distFromCenter = distance(circle_tc_pos.xy, float2(0.5, -0.1)); // get distance between cur pos and approx center of circle
+    return float4(SSFX_Blur(I.tc0, distFromCenter).xyz, 1.0); // todo use/add better blurring effect
 }

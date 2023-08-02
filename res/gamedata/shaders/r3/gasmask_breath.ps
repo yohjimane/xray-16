@@ -1,7 +1,11 @@
 /*
-	Gasmask breath shader			
-	Author: Yohjimane
-	OpenXRay Engine 2023
+    Gasmask breath shader
+    
+    Credits: yohjimane
+
+    /////////////////
+    OpenXRay Engine 2023
+    /////////////////
 */
 
 #include "common.h"
@@ -28,19 +32,20 @@ float fbm(float2 texcoord, int iterations)
 
 float4 main(p_screen I) : SV_Target
 {
-	float3 image = s_image.Sample(smp_rtlinear, I.tc0).xyz;
-	float3 image_blur = s_image_blurred.Sample(smp_rtlinear, I.tc0).xyz;
     //texcoord
     float2 texcoord = I.tc0;
+    float3 image = s_image.Sample(smp_rtlinear, texcoord).xyz;
+    float3 image_blur = s_image_blurred.Sample(smp_rtlinear, texcoord).xyz;
+    texcoord = applyInertia(texcoord);
 
-    float3 noise = s_breath_noise.Sample(smp_rtlinear, I.tc0).xyz;
-    float2 seed = noise.xy;
+    float3 breathNoise = s_breath_noise.Sample(smp_rtlinear, texcoord).xyz;
+    float2 seed = breathNoise.xy;
     float breath_idx = breath_control.w;
     seed = frac(seed + float2(breath_idx, breath_idx) * 0.38196601125); // disable to stop generating new versions
     
     //ratio correction (remember that only circle tc should be corrected)
     float4 circle_tc_pos;
-    circle_tc_pos.xy = texcoord; //texcoord
+    circle_tc_pos.xy = I.tc0; //texcoord
     circle_tc_pos.x -= 0.5;
     circle_tc_pos.x *= screen_res.x * screen_res.w;
     circle_tc_pos.x += 0.5;
@@ -51,7 +56,7 @@ float4 main(p_screen I) : SV_Target
     float radius = breath_control.x * 0.66;
 #ifdef yohji_debug
     // set static size for breath fog
-    radius = 1.5;
+    radius = 1.0;
 #endif
     float distFromCenter = distance(circle_tc_pos.xy, float2(0.5, 0.5)); // get distance between cur pos and approx center of circle
     float fbmFactor = fbm(texcoord * (0.1 * (1.0 / seed)), 15);
@@ -64,6 +69,7 @@ float4 main(p_screen I) : SV_Target
     float centerRadius = clamp(radius - distFromCenter, 0.0, 1.0);
     circle_tc_pos.xy += radius; // todo: shift where we sample the texture randomly so each breath looks unique
     float4 glossyTex = s_breath_noise.Sample(smp_rtlinear, circle_tc_pos.xy); // reuse noise texture as regular one
+    glossyTex = lerp(glossyTex, float4(1.0, 1.0, 1.0, 1.0), 0.5);
 #ifdef yohji_debug
     // set static color for breath fog
     glossyTex = float4(0,0,0,1);
