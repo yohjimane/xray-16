@@ -46,7 +46,7 @@ public:
     virtual void reinit();
 
     virtual bool ability_earthquake() { return true; }
-    virtual void event_on_step();
+    virtual void event_on_step(SStepInfo& stepInfo);
 
     virtual bool check_start_conditions(ControlCom::EControlType type);
     virtual void on_activate_control(ControlCom::EControlType);

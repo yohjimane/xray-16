@@ -34,6 +34,7 @@ struct SStepInfo
     bool disable;
 
     u8 cur_cycle;
+    u32 stepCount{};
 
     SStepInfo() { disable = true; }
 };

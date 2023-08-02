@@ -44,6 +44,7 @@ public:
     IC Fvector Direction() const { return vDirection; }
     IC Fvector Up() const { return vNormal; }
     IC Fvector Right() const { return Fvector().crossproduct(vNormal, vDirection); }
+    IC Fvector HPB() const { return Fvector().set(yaw, pitch, roll); }
     IC float Fov() const { return f_fov; }
     IC float Aspect() const { return f_aspect; }
     int tag;

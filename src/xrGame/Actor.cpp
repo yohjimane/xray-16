@@ -2298,7 +2298,7 @@ void CActor::UpdateCurrentBreathSound(float health)
         int value = (GetfHealth() > 0.2) ? static_cast<int>(std::ceil((1.01 - conditions().GetPower()) * 3 + actor_speed_time / 8)) : 8;
         string256 buf;
         xr_sprintf(buf, "gas_breath_snd_%d_%d", value, m_gasPlay);
-        Msg("Yohji debug - play breath sound name = %s, breath id = %d %d", buf, int(ps_r2_breath_control.w), m_gasPlay);
+        //Msg("Yohji debug - play breath sound name = %s, breath id = %d %d", buf, int(ps_r2_breath_control.w), m_gasPlay);
         if (m_GasMaskBreathSounds.find(buf) != m_GasMaskBreathSounds.end())
             m_CurrentGasMaskBreathSound = &m_GasMaskBreathSounds[buf];
     }
@@ -2348,7 +2348,7 @@ void CActor::UpdateBreath()
         {
             m_CurrentGasMaskBreathSound->play_at_pos(this, Fvector().set(0, ACTOR_HEIGHT, 0), sm_2D);
             auto secs = m_CurrentGasMaskBreathSound->get_length_sec();
-            Msg("Yohji debug - play breath sound %f %f %f", Device.fTimeGlobal, secs, m_lastBreathUpdateTime);
+            //Msg("Yohji debug - play breath sound %f %f %f", Device.fTimeGlobal, secs, m_lastBreathUpdateTime);
             m_lastBreathUpdateTime = Device.fTimeGlobal + (secs * 1.25);
         }
         else
@@ -2356,7 +2356,26 @@ void CActor::UpdateBreath()
     }
 
     ps_r2_breath_control.x = breathSize;
-    
+}
+
+void CActor::event_on_step(SStepInfo& stepInfo)
+{
+    auto movement = character_physics_support()->movement();
+    float velocity = movement->GetVelocityActual() / 10.f; // approx 0-1 
+    int footIndex = stepInfo.stepCount % 2 > 0 ? 1 : -1; // evaluates to -0 or 1, pseudo left step or right step, to decide which dir to push our mask
+    auto power = 1.f + (stepInfo.params.step->power * velocity);
+
+    float step = .01;
+    float easeYawFactor = 1.f / _max(abs(m_camHPBMagnitudeSmooth.z), 1.f);
+    float addStep = step * power * easeYawFactor;
+    //fFPCamRollMagnitudeSmooth += addStep * footIndex;
+    //fFPCamPitchMagnitudeSmooth += addStep * footIndex;
+    //fFPCamYawMagnitudeSmooth += addStep;
+
+    //m_camHPBMagnitudeSmooth.z *= addStep * m_camHPBMagnitudeSmooth.z < 0 ? -1.f : 1.f;
+    //Msg("yohji debug - step params %f %d %d incrementor = %f", power, footIndex, stepInfo.stepCount, addStep);
+
+    // TODO: Add some more wobble for gasmask here? Here we can sync with footstep almost perfectly.
 
 }
 

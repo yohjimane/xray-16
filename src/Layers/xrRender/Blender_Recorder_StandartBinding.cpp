@@ -353,6 +353,15 @@ static class cl_screen_res : public R_constant_setup
     }
 } binder_screen_res;
 
+static class cl_cam_inertia_smooth : public R_constant_setup
+{
+    void setup(CBackend& cmd_list, R_constant* C) override 
+    {
+        Msg("Yohji debug - cam inertia params [%f %f %f %f]", g_pGamePersistent->m_pGShaderConstants->cam_inertia_smooth.x, g_pGamePersistent->m_pGShaderConstants->cam_inertia_smooth.y, g_pGamePersistent->m_pGShaderConstants->cam_inertia_smooth.z, g_pGamePersistent->m_pGShaderConstants->cam_inertia_smooth.w);
+        cmd_list.set_c(C, g_pGamePersistent->m_pGShaderConstants->cam_inertia_smooth); 
+    }
+} binder_cam_inertia_smooth;
+
 // SM_TODO: cmd_list.hemi заменить на более "логичное" место
 static class cl_hud_params : public R_constant_setup //--#SM+#--
 {
@@ -577,6 +586,7 @@ void CBlender_Compile::SetMapping()
     r_Constant("m_hud_params", &binder_hud_params); //--#SM+#--
     r_Constant("m_script_params", &binder_script_params); //--#SM+#--
     r_Constant("m_blender_mode", &binder_blend_mode); //--#SM+#--
+    r_Constant("m_cam_inertia_smooth", &binder_cam_inertia_smooth); // yohji - smooth camera inertia
 
     // objects data
     r_Constant("m_obj_camo_data", &binder_camo_data); //--#SM+#--

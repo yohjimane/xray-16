@@ -39,7 +39,7 @@ public:
     void update(bool b_hud_view);
 
     // process event
-    virtual void event_on_step() {}
+    virtual void event_on_step(SStepInfo& stepInfo) {}
 protected:
     Fvector get_foot_position(ELegType leg_type);
     virtual bool is_on_ground() { return true; }

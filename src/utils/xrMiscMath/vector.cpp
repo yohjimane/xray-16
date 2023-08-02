@@ -55,6 +55,15 @@ float angle_difference(float a, float b)
 	return _abs(angle_difference_signed(a, b));
 }
 
+Fvector angle_difference_signed(Fvector const a, Fvector const b)
+{
+    Fvector diff;
+    diff.x = angle_difference_signed(a.x, b.x);
+    diff.y = angle_difference_signed(a.y, b.y);
+    diff.z = angle_difference_signed(a.z, b.z);
+    return diff;
+}
+
 bool are_ordered(float const value0, float const value1, float const value2)
 {
 	if ((value1 >= value0) && (value1 <= value2))

@@ -207,7 +207,7 @@ public:
     virtual bool ability_pitch_correction() { return true; }
     // ---------------------------------------------------------------------------------
 
-    virtual void event_on_step() {}
+    virtual void event_on_step(SStepInfo& stepInfo) {}
     virtual void on_threaten_execute() {}
     // ---------------------------------------------------------------------------------
     // Memory

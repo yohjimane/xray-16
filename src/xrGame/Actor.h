@@ -348,6 +348,14 @@ protected:
     float fCurAVelocity;
     CEffectorBobbing* pCamBobbing;
 
+    Fvector m_prevCamHPB{};
+    Fvector m_camHPBMagnitude{}; // camera movements from player input
+
+    Fvector m_prevCamHPBReal{}; // cached camera movements from EVERYTHING (e.g. player input, effectors, etc)
+    Fvector m_camHPBMagnitudeReal{}; // camera movement magnitudes from EVERYTHING (e.g. player input, effectors, etc)
+    Fvector m_camHPBMagnitudeSmooth{};
+    virtual void event_on_step(SStepInfo& stepInfo);
+
     //менеджер эффекторов, есть у каждого актрера
     CActorCameraManager* m_pActorEffector;
     static float f_Ladder_cam_limit;

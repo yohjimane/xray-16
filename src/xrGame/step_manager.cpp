@@ -222,8 +222,13 @@ void CStepManager::update(bool b_hud_view)
                 GamePersistent().ps_needtoplay.push_back(ps);
             }
 
+            // Increment step counter
+            if (m_step_info.stepCount == u32(-1))
+                m_step_info.stepCount = 0; // reset stepcount because we reached the limit!
+            m_step_info.stepCount++;
+
             // Play Camera FXs
-            event_on_step();
+            event_on_step(m_step_info);
 
             // обновить поле handle
             m_step_info.activity[i].handled = true;

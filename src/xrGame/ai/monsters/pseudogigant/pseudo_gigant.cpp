@@ -236,7 +236,7 @@ void CPseudoGigant::reinit()
 
 #define MAX_STEP_RADIUS 60.f
 
-void CPseudoGigant::event_on_step()
+void CPseudoGigant::event_on_step(SStepInfo& stepInfo)
 {
     //////////////////////////////////////////////////////////////////////////
     // Earthquake Effector	//////////////

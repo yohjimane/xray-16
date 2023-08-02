@@ -1725,9 +1725,7 @@ public:
         }
 
 #ifdef MASTER_GOLD
-        if (!OnServer())
-            return;
-        constexpr bool forced = false;
+        constexpr bool forced = true;
 #else
         constexpr bool forced = true;
 #endif

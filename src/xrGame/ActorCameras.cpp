@@ -24,6 +24,7 @@
 #include "xrPhysics/ActorCameraCollision.h"
 #include "IKLimbsController.h"
 #include "GamePersistent.h"
+#include "player_hud.h"
 
 void CActor::cam_Set(EActorCameras style)
 {
@@ -283,7 +284,7 @@ void CActor::cam_Update(float dt, float fFOV)
 {
     if (m_holder)
         return;
-
+    
     if ((mstate_real & mcClimb) && (cam_active != eacFreeLook))
         camUpdateLadder(dt);
     on_weapon_shot_update();
@@ -400,6 +401,48 @@ void CActor::cam_Update(float dt, float fFOV)
         {
             Cameras().ApplyDevice();
         }
+
+        // yohji: add extra camera vars for shaders
+        Fmatrix camMatrix;
+        Fvector camHPB = cam_Active()->HPB();
+        Fvector realCamHPB;
+        Cameras().camera_Matrix(camMatrix);
+        camMatrix.getHPB(realCamHPB);
+
+        m_camHPBMagnitude = angle_difference_signed(m_prevCamHPB, camHPB).div(Device.fTimeDelta);
+        m_camHPBMagnitudeReal = angle_difference_signed(realCamHPB, m_prevCamHPBReal).div(Device.fTimeDelta); // idk why, but we need to flip the values we pull from cam matrix otherwise the sign is flipped.
+        
+        // Dynamic lerp rate (2x as fast when we are returning to neutral)
+        auto returnRate = [this]()
+        {
+            if (m_camHPBMagnitude.magnitude() > 0.f || m_camHPBMagnitudeReal.magnitude() > 0.f)
+                return Device.fTimeDelta * 2;
+            else
+                return Device.fTimeDelta * 4;
+        };
+
+        // limit angles
+        float angleLimit = 0.015f;
+        auto angle_limit = [angleLimit](float curMagnitude)
+        {
+            float sign = curMagnitude > 0.f ? 1.f : -1.f;
+            return _min(abs(curMagnitude), angleLimit) * sign;
+        };
+
+        Msg("yohji debug - camHPB: [%f, %f, %f] prevCamHPB: [%f, %f, %f]", camHPB.x, camHPB.y, camHPB.z, m_prevCamHPB.x, m_prevCamHPB.y, m_prevCamHPB.z);
+        Msg("yohji debug - angle_limit: %f cur: %f return rate: %f", angle_limit(m_camHPBMagnitudeReal.x), m_camHPBMagnitudeSmooth.x, returnRate());
+        // use average of magnitudes for x/y target, using only realMagnitude is too strong since these values can change without mouse movement.
+        m_camHPBMagnitudeSmooth.x = angle_lerp(angle_limit(m_camHPBMagnitudeSmooth.x), angle_limit((m_camHPBMagnitudeReal.x + m_camHPBMagnitude.x) / 2.f), returnRate()); 
+        m_camHPBMagnitudeSmooth.y = angle_lerp(angle_limit(m_camHPBMagnitudeSmooth.y), angle_limit((m_camHPBMagnitudeReal.y + m_camHPBMagnitude.y) / 2.f), returnRate());
+        // use real magnitude for z target, to capture ALL movement on the z axis.
+        m_camHPBMagnitudeSmooth.z = angle_lerp(angle_limit(m_camHPBMagnitudeSmooth.z), angle_limit(m_camHPBMagnitudeReal.z), returnRate());
+
+        g_pGamePersistent->m_pGShaderConstants->cam_inertia_smooth.set(-m_camHPBMagnitudeSmooth.x, -m_camHPBMagnitudeSmooth.y, -m_camHPBMagnitudeSmooth.z, 0.f); // TODO: increase raindrop speed temporarily based on cam inertia magnitude
+
+        Cameras().camera_Matrix(camMatrix);
+        camMatrix.getHPB(realCamHPB);
+        m_prevCamHPBReal.set(realCamHPB);
+        m_prevCamHPB.set(camHPB);
     }
 }
 

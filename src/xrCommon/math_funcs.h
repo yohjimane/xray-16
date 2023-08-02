@@ -15,6 +15,9 @@ float angle_difference_signed(float a, float b);
 // 0..PI
 float angle_difference(float a, float b);
 
+// angle_difference_signed for entire vector
+Fvector angle_difference_signed(Fvector const a, Fvector const b);
+
 bool are_ordered(const float value0, const float value1, const float value2);
 
 bool is_between(const float value, const float left, const float right);

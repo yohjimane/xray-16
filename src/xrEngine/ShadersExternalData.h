@@ -8,11 +8,14 @@ public:
     Fvector4 hud_params;     // [zoom_rotate_factor, secondVP_zoom_factor, NULL, NULL] - Параметры худа оружия
     Fvector4 m_blender_mode; // x\y = [0 - default, 1 - night vision, 2 - thermo vision, ... см. common.h] - Режимы рендеринга
                              // x - основной вьюпорт, y - второй вьюпорт, z = ?, w = [0 - идёт рендер обычного объекта, 1 - идёт рендер детальных объектов (трава, мусор)]
+    Fvector4 cam_inertia_smooth;     // [fFPCamYawMagnitudeSmooth, fFPCamPitchMagnitudeSmooth, fFPCamRollMagnitudeSmooth, NULL]
+
 
     ShadersExternalData()
     {
         m_script_params = Fmatrix();
         hud_params.set(0.f, 0.f, 0.f, 0.f);
         m_blender_mode.set(0.f, 0.f, 0.f, 0.f);
+        cam_inertia_smooth.set(0.f, 0.f, 0.f, 0.f);
     }
 };
