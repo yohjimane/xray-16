@@ -110,8 +110,8 @@ float4 main(p_screen I) : SV_Target
 	float3 blurredImage = s_blur_2.Sample(smp_nofilter, refr_tc.xy).xyz;
 
     float2 center = float2(0.5, 0.5);
-	float distFromCenter = length(float2(refr_tc.x, visor_ratio(refr_tc.y)) - center);
-	image = lerp(image, blurredImage, abs(distFromCenter * 1.5));
+	float distFromCenter = length(refr_tc.xy - center);
+	image = lerp(image, blurredImage, (mask_control.x/10) * abs(distFromCenter * 1.5));
 
 
 	//Mix gasmask cracks with image
