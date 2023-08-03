@@ -429,8 +429,8 @@ void CActor::cam_Update(float dt, float fFOV)
             return _min(abs(curMagnitude), angleLimit) * sign;
         };
 
-        Msg("yohji debug - camHPB: [%f, %f, %f] prevCamHPB: [%f, %f, %f]", camHPB.x, camHPB.y, camHPB.z, m_prevCamHPB.x, m_prevCamHPB.y, m_prevCamHPB.z);
-        Msg("yohji debug - angle_limit: %f cur: %f return rate: %f", angle_limit(m_camHPBMagnitudeReal.x), m_camHPBMagnitudeSmooth.x, returnRate());
+        //Msg("yohji debug - camHPB: [%f, %f, %f] prevCamHPB: [%f, %f, %f]", camHPB.x, camHPB.y, camHPB.z, m_prevCamHPB.x, m_prevCamHPB.y, m_prevCamHPB.z);
+        //Msg("yohji debug - angle_limit: %f cur: %f return rate: %f", angle_limit(m_camHPBMagnitudeReal.x), m_camHPBMagnitudeSmooth.x, returnRate());
         // use average of magnitudes for x/y target, using only realMagnitude is too strong since these values can change without mouse movement.
         m_camHPBMagnitudeSmooth.x = angle_lerp(angle_limit(m_camHPBMagnitudeSmooth.x), angle_limit((m_camHPBMagnitudeReal.x + m_camHPBMagnitude.x) / 2.f), returnRate()); 
         m_camHPBMagnitudeSmooth.y = angle_lerp(angle_limit(m_camHPBMagnitudeSmooth.y), angle_limit((m_camHPBMagnitudeReal.y + m_camHPBMagnitude.y) / 2.f), returnRate());

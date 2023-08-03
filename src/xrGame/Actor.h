@@ -211,6 +211,8 @@ protected:
     ref_sound m_DangerSnd;
     ref_sound* m_CurrentGasMaskBreathSound{};
     xr_unordered_map<shared_str, ref_sound> m_GasMaskBreathSounds;
+    u32 m_lastSeedUpdateTime{};
+    float m_breathSize{};
 
     xr_vector<const CArtefact*> m_ArtefactsOnBelt;
 protected:
@@ -793,10 +795,10 @@ public:
     bool DisableHitMarks() { return m_disabled_hitmarks; };
     void set_inventory_disabled(bool is_disabled) { m_inventory_disabled = is_disabled; }
     bool inventory_disabled() const { return m_inventory_disabled; }
-    void UpdateCurrentBreathSound(float health);
+    void UpdateCurrentBreathSound();
     void UpdateBreath();
     float m_lastBreathUpdateTime{};
-    int m_gasPlay{};
+    int m_gasPlay{1};
 private:
     void set_state_box(u32 mstate);
 

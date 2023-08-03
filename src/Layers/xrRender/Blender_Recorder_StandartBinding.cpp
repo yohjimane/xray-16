@@ -357,7 +357,7 @@ static class cl_cam_inertia_smooth : public R_constant_setup
 {
     void setup(CBackend& cmd_list, R_constant* C) override 
     {
-        Msg("Yohji debug - cam inertia params [%f %f %f %f]", g_pGamePersistent->m_pGShaderConstants->cam_inertia_smooth.x, g_pGamePersistent->m_pGShaderConstants->cam_inertia_smooth.y, g_pGamePersistent->m_pGShaderConstants->cam_inertia_smooth.z, g_pGamePersistent->m_pGShaderConstants->cam_inertia_smooth.w);
+        //Msg("Yohji debug - cam inertia params [%f %f %f %f]", g_pGamePersistent->m_pGShaderConstants->cam_inertia_smooth.x, g_pGamePersistent->m_pGShaderConstants->cam_inertia_smooth.y, g_pGamePersistent->m_pGShaderConstants->cam_inertia_smooth.z, g_pGamePersistent->m_pGShaderConstants->cam_inertia_smooth.w);
         cmd_list.set_c(C, g_pGamePersistent->m_pGShaderConstants->cam_inertia_smooth); 
     }
 } binder_cam_inertia_smooth;

@@ -2284,7 +2284,9 @@ void CActor::On_SetEntity()
         pOutfit->ApplySkinModel(this, true, true);
 }
 
-void CActor::UpdateCurrentBreathSound(float health)
+// odd = breath in
+// even = breath out
+void CActor::UpdateCurrentBreathSound()
 {
     //"actor\\gas_breath_" ..tostring((actor.health > 0.2) and math.ceil((1.01 - actor.power) * 3 + actor_speed_time / 8) or 8) .. "_" ..gas_play;
     //tostring((actor.health > 0.2) and math.ceil((1.01 - actor.power) * 3 + actor_speed_time / 8) or 8);
@@ -2295,10 +2297,10 @@ void CActor::UpdateCurrentBreathSound(float health)
             m_gasPlay = 1;
 
         float actor_speed_time = __min(32., fCurAVelocity + conditions().BleedingSpeed());
-        int value = (GetfHealth() > 0.2) ? static_cast<int>(std::ceil((1.01 - conditions().GetPower()) * 3 + actor_speed_time / 8)) : 8;
+        int value = (GetfHealth() > 0.2) ? int(std::ceil((1.01 - conditions().GetPower()) * 3 + actor_speed_time / 8)) : 8;
         string256 buf;
         xr_sprintf(buf, "gas_breath_snd_%d_%d", value, m_gasPlay);
-        //Msg("Yohji debug - play breath sound name = %s, breath id = %d %d", buf, int(ps_r2_breath_control.w), m_gasPlay);
+        Msg("Yohji debug - play breath sound name = %s, breath id = %d gas_play= %d", buf, int(ps_r2_breath_control.w), m_gasPlay);
         if (m_GasMaskBreathSounds.find(buf) != m_GasMaskBreathSounds.end())
             m_CurrentGasMaskBreathSound = &m_GasMaskBreathSounds[buf];
     }
@@ -2313,49 +2315,53 @@ void CActor::UpdateBreath()
         return;
     }
 
-    float oscillator = 1.f + sin(Device.fTimeGlobal);
-    float healthInv = 1.f - GetfHealth();
-    float staminaInv = 1.f - conditions().GetPower();
-    float bleeding = conditions().BleedingSpeed();
+    float health = 1.f + (1.f - GetfHealth());
+    float stamina = 1.f + (1.f - conditions().GetPower());
+    float bleeding = 1.f + conditions().BleedingSpeed();
+    float maxBreathSize = 1.f * health * stamina * bleeding;
+    float breathingOut = m_gasPlay % 2 == 0;
+    float targetBreathSize = breathingOut ? maxBreathSize : 0.f;
 
-    float breathSize = 1.f; // increase size if we are low on health, stamina, or our bleeding is high
-    breathSize *= oscillator;
-    if (healthInv > 0.f)
-        breathSize *= (1.f + healthInv);
-    if (staminaInv > 0.f)
-        breathSize *= (1.f + staminaInv);
-    if (bleeding > 0.f)
-        breathSize *= (1.f + bleeding);
-    breathSize -= 1.f;
+    if (!fsimilar(m_breathSize, targetBreathSize))
+    {
+        if (targetBreathSize > 0.f)
+            m_breathSize = angle_lerp(m_breathSize, targetBreathSize, Device.fTimeDelta);
+        else
+            m_breathSize -= Device.fTimeDelta * .15f;
+    }
+    clamp(m_breathSize, 0.f, maxBreathSize);
+    ps_r2_breath_control.x = m_breathSize;
+    //Msg("yohji debug - breath size %f", m_breathSize);
 
-    bool canUpdateBreath = fsimilar(breathSize, 0.f, 0.01) || fsimilar(breathSize, 1.f, 0.01);
+    //Msg("Yohji debug - try play breath sound %f %f", Device.fTimeGlobal, m_lastBreathUpdateTime);
+
+    bool canUpdateBreath = Device.fTimeGlobal > m_lastBreathUpdateTime;
+    if (!breathingOut)
+        canUpdateBreath = canUpdateBreath && (m_breathSize < (maxBreathSize / 10.f));
 
     if (canUpdateBreath)
-        UpdateCurrentBreathSound(healthInv);
-
-    if (oscillator < 1.f)
     {
-        if (fsimilar(breathSize, -1.0f, 0.01) && (Device.fTimeGlobal > m_lastBreathUpdateTime))
+        UpdateCurrentBreathSound();
+        if (Device.dwTimeGlobal > m_lastSeedUpdateTime && fsimilar(targetBreathSize, 0.f))
         {
-            ps_r2_breath_control.w++;
+            m_lastSeedUpdateTime = Device.dwTimeGlobal + 1000;
+            ps_r2_breath_control.w++; // update breath id seed for unique breath patterns when we are absolutely sure the breath is not visible!
+            Msg("Yohji debug - update unique id %d", int(ps_r2_breath_control.w));
         }
-        return;
-    }
 
-    if (m_CurrentGasMaskBreathSound && (Device.fTimeGlobal > m_lastBreathUpdateTime) && canUpdateBreath)
-    {
-        if (!m_CurrentGasMaskBreathSound->_feedback())
+        if (m_CurrentGasMaskBreathSound)
         {
-            m_CurrentGasMaskBreathSound->play_at_pos(this, Fvector().set(0, ACTOR_HEIGHT, 0), sm_2D);
-            auto secs = m_CurrentGasMaskBreathSound->get_length_sec();
-            //Msg("Yohji debug - play breath sound %f %f %f", Device.fTimeGlobal, secs, m_lastBreathUpdateTime);
-            m_lastBreathUpdateTime = Device.fTimeGlobal + (secs * 1.25);
+            if (!m_CurrentGasMaskBreathSound->_feedback())
+            {
+                m_CurrentGasMaskBreathSound->play_at_pos(this, Fvector().set(0, ACTOR_HEIGHT, 0), sm_2D);
+                auto secs = m_CurrentGasMaskBreathSound->get_length_sec();
+                m_lastBreathUpdateTime = Device.fTimeGlobal + (secs * 1.25);
+                //Msg("Yohji debug - play breath sound %f %f %f", Device.fTimeGlobal, secs, m_lastBreathUpdateTime);
+            }
+            else
+                m_CurrentGasMaskBreathSound->set_position(Fvector().set(0, ACTOR_HEIGHT, 0));
         }
-        else
-            m_CurrentGasMaskBreathSound->set_position(Fvector().set(0, ACTOR_HEIGHT, 0));
     }
-
-    ps_r2_breath_control.x = breathSize;
 }
 
 void CActor::event_on_step(SStepInfo& stepInfo)
