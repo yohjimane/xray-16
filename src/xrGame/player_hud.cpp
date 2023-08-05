@@ -376,6 +376,7 @@ attachable_hud_item::attachable_hud_item(player_hud* parent, const shared_str& s
     : m_parent(parent), m_sect_name(sect_name)
 {
     // Visual
+    GEnv.Render->hud_loading = true;
     if (pSettings->line_exist(m_sect_name, "item_visual"))
     {
         m_monolithic = false;
