@@ -5,6 +5,7 @@
 #include "trade.h"
 #include "Weapon.h"
 #include "Grenade.h"
+#include "CustomDetector.h"
 
 #include "ui/UIInventoryUtilities.h"
 #include "ui/UIActorMenu.h"
@@ -624,6 +625,16 @@ void CInventory::Activate(u16 slot, bool bForce)
         }
         m_iNextActiveSlot = slot;
     }
+}
+
+PIItem CInventory::ActiveDetector() const
+{
+    CCustomDetector* det = smart_cast<CCustomDetector*>(ItemFromSlot(DETECTOR_SLOT));
+
+    if (det && (det->GetState() != CHudItem::eHidden))
+        return ItemFromSlot(DETECTOR_SLOT);
+
+    return NULL;
 }
 
 PIItem CInventory::ItemFromSlot(u16 slot) const

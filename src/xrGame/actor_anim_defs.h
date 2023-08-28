@@ -40,9 +40,10 @@ struct STorsoWpn
     MotionID all_attack_1;
     MotionID all_attack_2;
     void Create(IKinematicsAnimated* K, LPCSTR base0, LPCSTR base1);
+    void CreateNew(IKinematicsAnimated* K, LPCSTR base0, LPCSTR base1);
 };
 
-#define _total_anim_slots_ 13
+#define _total_anim_slots_ 14
 
 struct SActorState
 {
@@ -55,6 +56,8 @@ struct SActorState
     SAnimState m_walk;
     SAnimState m_run;
     STorsoWpn m_torso[_total_anim_slots_];
+    STorsoWpn m_torso_detector[_total_anim_slots_];
+
     MotionID m_torso_idle;
     MotionID m_head_idle;
 

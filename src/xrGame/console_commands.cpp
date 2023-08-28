@@ -85,6 +85,7 @@ extern BOOL net_sv_control_hit;
 extern int g_dwInputUpdateDelta;
 #ifdef DEBUG
 extern BOOL g_ShowAnimationInfo;
+extern BOOL g_ShowMovementInfo;
 #endif // DEBUG
 extern BOOL g_bShowHitSectors;
 // extern	BOOL	g_bDebugDumpPhysicsStep	;
@@ -2317,8 +2318,8 @@ void CCC_RegisterCommands()
 
     CMD4(CCC_Integer, "dbg_imotion_draw_skeleton", &dbg_imotion_draw_skeleton, FALSE, TRUE);
     CMD4(CCC_Float, "dbg_imotion_draw_velocity_scale", &dbg_imotion_draw_velocity_scale, 0.0001f, 100.0f);
-
     CMD4(CCC_Integer, "dbg_show_ani_info", &g_ShowAnimationInfo, 0, 1);
+    CMD4(CCC_Integer, "dbg_show_movement_info", &g_ShowAnimationInfo, 0, 1);
     CMD4(CCC_Integer, "dbg_dump_physics_step", &ph_console::g_bDebugDumpPhysicsStep, 0, 1);
     CMD1(CCC_InvUpgradesHierarchy, "inv_upgrades_hierarchy");
     CMD1(CCC_InvUpgradesCurItem, "inv_upgrades_cur_item");

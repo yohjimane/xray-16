@@ -27,6 +27,7 @@
 #include "game_cl_base_weapon_usage_statistic.h"
 #include "Grenade.h"
 #include "Torch.h"
+#include "CustomDetector.h"
 
 // breakpoints
 #include "xrEngine/xr_input.h"
@@ -1564,7 +1565,9 @@ void CActor::RenderFirstPersonBody(u32 context_id, IRenderable* root)
     m_firstPersonBody->getVisData().hom_frame = Device.dwFrame;
 
     PIItem pItem = inventory().ActiveItem();
-    bool noItemEquipped = 0 == pItem;
+    PIItem pDet = inventory().ActiveDetector();
+
+    bool noItemEquipped = pItem == nullptr && pDet == nullptr;
 
     // On death or unarmed, show arms
     if (!g_Alive() || noItemEquipped)
@@ -2122,7 +2125,12 @@ IFactoryObject* CActor::_construct()
 bool CActor::use_center_to_aim() const { return (!!(mstate_real & mcCrouch)); }
 bool CActor::can_attach(const CInventoryItem* inventory_item) const
 {
+    
     const CAttachableItem* item = smart_cast<const CAttachableItem*>(inventory_item); // XXX: CInventoryItem cannot be casted to CAttachableItem
+    const CCustomDetector* det = smart_cast<const CCustomDetector*>(inventory_item);
+    if (det)
+        return true;
+
     if (!item || /*!item->enabled() ||*/ !item->can_be_attached())
         return (false);
 

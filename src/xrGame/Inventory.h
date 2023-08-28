@@ -76,6 +76,7 @@ public:
     void InitPriorityGroupsForQSwitch();
 
     PIItem ActiveItem() const { return (m_iActiveSlot == NO_ACTIVE_SLOT) ? NULL : ItemFromSlot(m_iActiveSlot); }
+    PIItem ActiveDetector() const;
     PIItem ItemFromSlot(u16 slot) const;
 
     bool Action(u16 cmd, u32 flags);

@@ -132,6 +132,30 @@ void STorsoWpn::Create(IKinematicsAnimated* K, LPCSTR base0, LPCSTR base1)
     all_attack_1 = K->ID_Cycle_Safe(strconcat(sizeof(buf), buf, base0, "_all", base1, "_attack_1"));
     all_attack_2 = K->ID_Cycle_Safe(strconcat(sizeof(buf), buf, base0, "_all", base1, "_attack_2"));
 }
+
+void STorsoWpn::CreateNew(IKinematicsAnimated* K, LPCSTR base0, LPCSTR base1) // used for XRMPE animations
+{
+    char buf[128];
+    moving[eIdle] = K->ID_Cycle_Safe(strconcat(sizeof(buf), buf, base0, "_torso", base1, "_aim_0"));
+    moving[eWalk] = K->ID_Cycle_Safe(strconcat(sizeof(buf), buf, base0, "_torso", base1, "_walk_1"));
+    moving[eRun] = K->ID_Cycle_Safe(strconcat(sizeof(buf), buf, base0, "_torso", base1, "_run_1"));
+    moving[eSprint] = K->ID_Cycle_Safe(strconcat(sizeof(buf), buf, base0, "_torso", base1, "_escape_0"));
+    zoom = K->ID_Cycle_Safe(strconcat(sizeof(buf), buf, base0, "_torso", base1, "_aim_0"));
+    holster = K->ID_Cycle_Safe(strconcat(sizeof(buf), buf, base0, "_torso", base1, "_holster_0"));
+    draw = K->ID_Cycle_Safe(strconcat(sizeof(buf), buf, base0, "_torso", base1, "_draw_0"));
+    reload = K->ID_Cycle_Safe(strconcat(sizeof(buf), buf, base0, "_torso", base1, "_reload_0"));
+    reload_1 = K->ID_Cycle_Safe(strconcat(sizeof(buf), buf, base0, "_torso", base1, "_reload_1"));
+    reload_2 = K->ID_Cycle_Safe(strconcat(sizeof(buf), buf, base0, "_torso", base1, "_reload_2"));
+    drop = K->ID_Cycle_Safe(strconcat(sizeof(buf), buf, base0, "_torso", base1, "_drop_0"));
+    attack = K->ID_Cycle_Safe(strconcat(sizeof(buf), buf, base0, "_torso", base1, "_attack_1"));
+    attack_zoom = K->ID_Cycle_Safe(strconcat(sizeof(buf), buf, base0, "_torso", base1, "_attack_0"));
+    fire_idle = K->ID_Cycle_Safe(strconcat(sizeof(buf), buf, base0, "_torso", base1, "_attack_1"));
+    fire_end = K->ID_Cycle_Safe(strconcat(sizeof(buf), buf, base0, "_torso", base1, "_attack_2"));
+    all_attack_0 = K->ID_Cycle_Safe(strconcat(sizeof(buf), buf, base0, "_all", base1, "_attack_0"));
+    all_attack_1 = K->ID_Cycle_Safe(strconcat(sizeof(buf), buf, base0, "_all", base1, "_attack_1"));
+    all_attack_2 = K->ID_Cycle_Safe(strconcat(sizeof(buf), buf, base0, "_all", base1, "_attack_2"));
+}
+
 void SAnimState::Create(IKinematicsAnimated* K, LPCSTR base0, LPCSTR base1)
 {
     char buf[128];
@@ -204,6 +228,16 @@ void SActorState::Create(IKinematicsAnimated* K, LPCSTR base)
     m_torso[10].Create(K, base, "_11");
     m_torso[11].Create(K, base, "_12");
     m_torso[12].Create(K, base, "_13");
+    m_torso[_total_anim_slots_ - 1].CreateNew(K, base, "_0"); // unarmed
+
+    m_torso_detector[0].Create(K, base, "_1_detector"); // pistol + detector
+    m_torso_detector[4].Create(K, base, "_5_detector"); // knife + detector
+    m_torso_detector[5].Create(K, base, "_6_detector"); // bolt + detector 
+    m_torso_detector[_total_anim_slots_ - 1].CreateNew(K, base, "_0_detector"); // unarmed + detector
+
+    //strconcat(sizeof(buf), buf, base, "+detector");
+    //m_torso[13].CreateNew(K, base, "_0"); // unarmed
+
 
     m_torso_idle = K->ID_Cycle(strconcat(sizeof(buf), buf, base, "_torso_0_aim_0"));
     m_head_idle = K->ID_Cycle("head_idle_0");
@@ -319,6 +353,7 @@ CMotion* FindMotionKeys(MotionID motion_ID, IRenderVisual* V)
 
 #ifdef DEBUG
 BOOL g_ShowAnimationInfo = FALSE;
+BOOL g_ShowMovementInfo = FALSE;
 #endif // DEBUG
 constexpr pcstr mov_state[] = {
     "idle", "walk", "run", "sprint",
@@ -439,11 +474,15 @@ void CActor::g_SetAnimation(u32 mstate_rl, bool force)
         CWeapon* W = smart_cast<CWeapon*>(_i);
         CMissile* M = smart_cast<CMissile*>(_i);
         CArtefact* A = smart_cast<CArtefact*>(_i);
+        bool hasDetector = inventory().ActiveDetector() != nullptr;
 
         if (H)
         {
             VERIFY(H->animation_slot() <= _total_anim_slots_);
             STorsoWpn* TW = &ST->m_torso[H->animation_slot() - 1];
+            if (hasDetector)
+                TW = &ST->m_torso_detector[H->animation_slot() - 1];
+
             if (!b_DropActivated && !fis_zero(f_DropPower))
             {
                 M_torso = TW->drop;
@@ -517,9 +556,6 @@ void CActor::g_SetAnimation(u32 mstate_rl, bool force)
                             default: M_torso = TW->moving[moving_idx]; break;
                             }
                         }
-
-                        if (!M_torso)
-                            M_torso = ST->m_torso[4].moving[moving_idx]; //Alundaio: Fix torso animations for binoc
                     }
                     else if (M)
                     {
@@ -566,8 +602,14 @@ void CActor::g_SetAnimation(u32 mstate_rl, bool force)
                 }
             }
         }
-        else if (!m_bAnimTorsoPlayed)
-            M_torso = ST->m_torso[4].moving[moving_idx]; //Alundaio: Fix torso animations for no weapon
+        else // unarmed
+        {
+            STorsoWpn* TW = &ST->m_torso[_total_anim_slots_ - 1];
+            if (hasDetector)
+                TW = &ST->m_torso_detector[_total_anim_slots_ - 1];
+
+            M_torso = TW->moving[moving_idx];
+        }
     }
 
     // XXX: check why 'mid' was unused
@@ -639,22 +681,24 @@ void CActor::g_SetAnimation(u32 mstate_rl, bool force)
     }
 
 #ifdef DEBUG
-    if (bDebug && g_ShowAnimationInfo)
+    if (g_ShowAnimationInfo)
     {
-        UI().Font().pFontStat->OutSetI(0, 0);
-        UI().Font().pFontStat->OutNext("[%s]", mov_state[moving_idx]);
+        auto pFontStat = UI().Font().pFontStat;
+        pFontStat->SetColor(0xffffffff);
+        pFontStat->OutSetI(0, 0);
+        pFontStat->OutNext("[%s]", mov_state[moving_idx]);
         IKinematicsAnimated* KA = smart_cast<IKinematicsAnimated*>(Visual());
         if (M_torso)
-            UI().Font().pFontStat->OutNext("torso [%s]", KA->LL_MotionDefName_dbg(M_torso).first);
+            pFontStat->OutNext("torso [%s]", KA->LL_MotionDefName_dbg(M_torso).first);
         if (M_head)
-            UI().Font().pFontStat->OutNext("head [%s]", KA->LL_MotionDefName_dbg(M_head).first);
+            pFontStat->OutNext("head [%s]", KA->LL_MotionDefName_dbg(M_head).first);
         if (M_legs)
-            UI().Font().pFontStat->OutNext("legs [%s]", KA->LL_MotionDefName_dbg(M_legs).first);
+            pFontStat->OutNext("legs [%s]", KA->LL_MotionDefName_dbg(M_legs).first);
     }
 #endif
 
 #ifdef DEBUG
-    if (g_ShowAnimationInfo && Level().CurrentControlEntity() == this)
+    if (g_ShowMovementInfo && Level().CurrentControlEntity() == this)
     {
         auto movement = character_physics_support()->movement();
         auto pFontStat = UI().Font().pFontStat;

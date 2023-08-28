@@ -82,7 +82,7 @@ void CHudItem::renderable_Render(u32 context_id, IRenderable* root)
             CInventoryOwner* owner = smart_cast<CInventoryOwner*>(object().H_Parent());
             VERIFY(owner);
             CInventoryItem* self = smart_cast<CInventoryItem*>(this);
-            if (owner->attached(self))
+            if (owner->attached(self) || item().BaseSlot() == DETECTOR_SLOT)
                 on_renderable_Render(context_id, root);
         }
     }

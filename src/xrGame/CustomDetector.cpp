@@ -331,6 +331,15 @@ void CCustomDetector::TurnDetectorInternal(bool b)
     UpdateNightVisionMode(b);
 }
 
+bool CCustomDetector::can_be_attached() const
+{
+    const CActor* pA = smart_cast<const CActor*>(H_Parent());
+    if (pA)
+        return pA->inventory().InSlot(this);
+    else
+        return false;
+}
+
 #include "game_base_space.h"
 void CCustomDetector::UpdateNightVisionMode(bool b_on) {}
 bool CAfList::feel_touch_contact(IGameObject* O)
