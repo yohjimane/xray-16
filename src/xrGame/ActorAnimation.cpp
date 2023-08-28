@@ -133,12 +133,35 @@ void STorsoWpn::Create(IKinematicsAnimated* K, LPCSTR base0, LPCSTR base1)
     all_attack_2 = K->ID_Cycle_Safe(strconcat(sizeof(buf), buf, base0, "_all", base1, "_attack_2"));
 }
 
-void STorsoWpn::CreateNew(IKinematicsAnimated* K, LPCSTR base0, LPCSTR base1) // used for XRMPE animations
+void STorsoWpn::CreateNewUnarmed(IKinematicsAnimated* K, LPCSTR base0, LPCSTR base1) // used for XRMPE animations
 {
     char buf[128];
     moving[eIdle] = K->ID_Cycle_Safe(strconcat(sizeof(buf), buf, base0, "_torso", base1, "_aim_0"));
     moving[eWalk] = K->ID_Cycle_Safe(strconcat(sizeof(buf), buf, base0, "_torso", base1, "_walk_1"));
     moving[eRun] = K->ID_Cycle_Safe(strconcat(sizeof(buf), buf, base0, "_torso", base1, "_run_1"));
+    moving[eSprint] = K->ID_Cycle_Safe(strconcat(sizeof(buf), buf, base0, "_torso", base1, "_escape_0"));
+    zoom = K->ID_Cycle_Safe(strconcat(sizeof(buf), buf, base0, "_torso", base1, "_aim_0"));
+    holster = K->ID_Cycle_Safe(strconcat(sizeof(buf), buf, base0, "_torso", base1, "_holster_0"));
+    draw = K->ID_Cycle_Safe(strconcat(sizeof(buf), buf, base0, "_torso", base1, "_draw_0"));
+    reload = K->ID_Cycle_Safe(strconcat(sizeof(buf), buf, base0, "_torso", base1, "_reload_0"));
+    reload_1 = K->ID_Cycle_Safe(strconcat(sizeof(buf), buf, base0, "_torso", base1, "_reload_1"));
+    reload_2 = K->ID_Cycle_Safe(strconcat(sizeof(buf), buf, base0, "_torso", base1, "_reload_2"));
+    drop = K->ID_Cycle_Safe(strconcat(sizeof(buf), buf, base0, "_torso", base1, "_drop_0"));
+    attack = K->ID_Cycle_Safe(strconcat(sizeof(buf), buf, base0, "_torso", base1, "_attack_1"));
+    attack_zoom = K->ID_Cycle_Safe(strconcat(sizeof(buf), buf, base0, "_torso", base1, "_attack_0"));
+    fire_idle = K->ID_Cycle_Safe(strconcat(sizeof(buf), buf, base0, "_torso", base1, "_attack_1"));
+    fire_end = K->ID_Cycle_Safe(strconcat(sizeof(buf), buf, base0, "_torso", base1, "_attack_2"));
+    all_attack_0 = K->ID_Cycle_Safe(strconcat(sizeof(buf), buf, base0, "_all", base1, "_attack_0"));
+    all_attack_1 = K->ID_Cycle_Safe(strconcat(sizeof(buf), buf, base0, "_all", base1, "_attack_1"));
+    all_attack_2 = K->ID_Cycle_Safe(strconcat(sizeof(buf), buf, base0, "_all", base1, "_attack_2"));
+}
+
+void STorsoWpn::CreateNewArmed(IKinematicsAnimated* K, LPCSTR base0, LPCSTR base1) // used for XRMPE animations
+{
+    char buf[128];
+    moving[eIdle] = K->ID_Cycle_Safe(strconcat(sizeof(buf), buf, base0, "_torso", base1, "_aim_1"));
+    moving[eWalk] = K->ID_Cycle_Safe(strconcat(sizeof(buf), buf, base0, "_torso", base1, "_walk_0"));
+    moving[eRun] = K->ID_Cycle_Safe(strconcat(sizeof(buf), buf, base0, "_torso", base1, "_run_0"));
     moving[eSprint] = K->ID_Cycle_Safe(strconcat(sizeof(buf), buf, base0, "_torso", base1, "_escape_0"));
     zoom = K->ID_Cycle_Safe(strconcat(sizeof(buf), buf, base0, "_torso", base1, "_aim_0"));
     holster = K->ID_Cycle_Safe(strconcat(sizeof(buf), buf, base0, "_torso", base1, "_holster_0"));
@@ -163,6 +186,15 @@ void SAnimState::Create(IKinematicsAnimated* K, LPCSTR base0, LPCSTR base1)
     legs_back = K->ID_Cycle(strconcat(sizeof(buf), buf, base0, base1, "_back_0"));
     legs_ls = K->ID_Cycle(strconcat(sizeof(buf), buf, base0, base1, "_ls_0"));
     legs_rs = K->ID_Cycle(strconcat(sizeof(buf), buf, base0, base1, "_rs_0"));
+}
+
+void SAnimState::CreateNew(IKinematicsAnimated* K, LPCSTR base0, LPCSTR base1)
+{
+    char buf[128];
+    legs_fwd = K->ID_Cycle(strconcat(sizeof(buf), buf, base0, base1, "_fwd_1"));
+    legs_back = K->ID_Cycle(strconcat(sizeof(buf), buf, base0, base1, "_back_1"));
+    legs_ls = K->ID_Cycle(strconcat(sizeof(buf), buf, base0, base1, "_ls_1"));
+    legs_rs = K->ID_Cycle(strconcat(sizeof(buf), buf, base0, base1, "_rs_1"));
 }
 
 void SActorState::CreateClimb(IKinematicsAnimated* K)
@@ -212,28 +244,28 @@ void SActorState::Create(IKinematicsAnimated* K, LPCSTR base)
     legs_idle = K->ID_Cycle(strconcat(sizeof(buf), buf, base, "_idle_0"));
     death = K->ID_Cycle(strconcat(sizeof(buf), buf, base, "_death_0"));
 
-    m_walk.Create(K, base, "_walk");
-    m_run.Create(K, base, "_run");
+    m_walk.CreateNew(K, base, "_walk");
+    m_run.CreateNew(K, base, "_run");
 
-    m_torso[0].Create(K, base, "_1");
-    m_torso[1].Create(K, base, "_2");
-    m_torso[2].Create(K, base, "_3");
-    m_torso[3].Create(K, base, "_4");
-    m_torso[4].Create(K, base, "_5");
-    m_torso[5].Create(K, base, "_6");
-    m_torso[6].Create(K, base, "_7");
-    m_torso[7].Create(K, base, "_8");
-    m_torso[8].Create(K, base, "_9");
-    m_torso[9].Create(K, base, "_10");
-    m_torso[10].Create(K, base, "_11");
-    m_torso[11].Create(K, base, "_12");
-    m_torso[12].Create(K, base, "_13");
-    m_torso[_total_anim_slots_ - 1].CreateNew(K, base, "_0"); // unarmed
+    m_torso[0].CreateNewArmed(K, base, "_1");
+    m_torso[1].CreateNewArmed(K, base, "_2");
+    m_torso[2].CreateNewArmed(K, base, "_3");
+    m_torso[3].CreateNewArmed(K, base, "_4");
+    m_torso[4].CreateNewArmed(K, base, "_5");
+    m_torso[5].CreateNewArmed(K, base, "_6");
+    m_torso[6].CreateNewArmed(K, base, "_7");
+    m_torso[7].CreateNewArmed(K, base, "_8");
+    m_torso[8].CreateNewArmed(K, base, "_9");
+    m_torso[9].CreateNewArmed(K, base, "_10");
+    m_torso[10].CreateNewArmed(K, base, "_11");
+    m_torso[11].CreateNewArmed(K, base, "_12");
+    m_torso[12].CreateNewArmed(K, base, "_13");
+    m_torso[_total_anim_slots_ - 1].CreateNewUnarmed(K, base, "_0"); // unarmed
 
-    m_torso_detector[0].Create(K, base, "_1_detector"); // pistol + detector
-    m_torso_detector[4].Create(K, base, "_5_detector"); // knife + detector
-    m_torso_detector[5].Create(K, base, "_6_detector"); // bolt + detector 
-    m_torso_detector[_total_anim_slots_ - 1].CreateNew(K, base, "_0_detector"); // unarmed + detector
+    m_torso_detector[0].CreateNewArmed(K, base, "_1_detector"); // pistol + detector
+    m_torso_detector[4].CreateNewArmed(K, base, "_5_detector"); // knife + detector
+    m_torso_detector[5].CreateNewArmed(K, base, "_6_detector"); // bolt + detector 
+    m_torso_detector[_total_anim_slots_ - 1].CreateNewUnarmed(K, base, "_0_detector"); // unarmed + detector
 
     //strconcat(sizeof(buf), buf, base, "+detector");
     //m_torso[13].CreateNew(K, base, "_0"); // unarmed

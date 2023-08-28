@@ -9,6 +9,7 @@ struct SAnimState
     MotionID legs_ls;
     MotionID legs_rs;
     void Create(IKinematicsAnimated* K, LPCSTR base0, LPCSTR base1);
+    void CreateNew(IKinematicsAnimated* K, LPCSTR base0, LPCSTR base1);
 };
 
 struct STorsoWpn
@@ -40,7 +41,9 @@ struct STorsoWpn
     MotionID all_attack_1;
     MotionID all_attack_2;
     void Create(IKinematicsAnimated* K, LPCSTR base0, LPCSTR base1);
-    void CreateNew(IKinematicsAnimated* K, LPCSTR base0, LPCSTR base1);
+    void CreateNewUnarmed(IKinematicsAnimated* K, LPCSTR base0, LPCSTR base1);
+    void CreateNewArmed(IKinematicsAnimated* K, LPCSTR base0, LPCSTR base1);
+
 };
 
 #define _total_anim_slots_ 14
