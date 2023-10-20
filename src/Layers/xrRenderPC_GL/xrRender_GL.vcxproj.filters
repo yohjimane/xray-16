@@ -525,7 +525,7 @@
     <ClCompile Include="gl_rendertarget_phase_combine.cpp">
       <Filter>Core_Target</Filter>
     </ClCompile>
-    <ClCompile Include="..\xrRender\r__screenshot.cpp">
+    <ClCompile Include="..\xrRender\r_screenshot.cpp">
       <Filter>Core</Filter>
     </ClCompile>
     <ClCompile Include="..\xrRenderGL\Blender_Recorder_GL.cpp">
@@ -694,6 +694,9 @@
       <Filter>Interface implementations\ImGuiRender</Filter>
     </ClCompile>
     <ClCompile Include="..\xrRender_R2\render_phase_sun.cpp">
+      <Filter>Core</Filter>
+    </ClCompile>
+    <ClCompile Include="..\xrRenderGL\glr_screenshot.cpp">
       <Filter>Core</Filter>
     </ClCompile>
   </ItemGroup>
