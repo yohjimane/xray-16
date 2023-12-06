@@ -163,6 +163,10 @@ void CRender::Render()
     if (ps_r2_ls_flags.test(R2FLAG_EXP_SPLIT_SCENE))
         split_the_scene_to_minimize_wait = TRUE;
 
+    // landscape phase 
+    Target->u_setrt(dsgraph.cmd_list, Device.dwWidth, Device.dwHeight, NULL, NULL, NULL, Target->get_base_zb());
+    dsgraph.r_dsgraph_render_landscape(0, false);
+
     //******* Main render :: PART-0	-- first
 #ifdef USE_OGL
     if (psDeviceFlags.test(rsWireframe))
@@ -178,6 +182,7 @@ void CRender::Render()
         dsgraph.render_lods(true, true);
         if (Details)
             Details->Render(dsgraph.cmd_list);
+        dsgraph.r_dsgraph_render_landscape(1, true);
         Target->phase_scene_end();
     }
     else
@@ -186,6 +191,7 @@ void CRender::Render()
         // level, SPLIT
         Target->phase_scene_begin();
         dsgraph.render_graph(0);
+        dsgraph.r_dsgraph_render_landscape(1, true);
         Target->disable_aniso();
     }
 #ifdef USE_OGL

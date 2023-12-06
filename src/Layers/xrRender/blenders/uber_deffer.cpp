@@ -166,6 +166,8 @@ void uber_deffer(CBlender_Compile& C, bool hq, LPCSTR _vspec, LPCSTR _pspec, BOO
             C.r_dx11Texture("s_tdetailBumpX", texDetailBumpX);
         }
     }
+    else if (C.SH->flags.bLandscape)
+        C.r_Pass(vs, ps, FALSE, TRUE, FALSE);
     else
     {
         C.r_Pass(vs, ps, FALSE);

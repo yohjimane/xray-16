@@ -80,7 +80,15 @@ void CBlender_BmmD::Compile(CBlender_Compile& C)
     switch (C.iElement)
     {
     case SE_R2_NORMAL_HQ: // deffer
+        C.SH->flags.bLandscape = true;
+        C.r_Pass("shadow_direct_base", "shadow_direct_base", FALSE, TRUE, TRUE);
+        C.r_ColorWriteEnable(false, false, false, false);
+        C.r_End();
+
         uber_deffer(C, true, "impl", "impl", false, oT2_Name[0] ? oT2_Name : 0, true);
+
+        C.RS.SetRS(D3DRS_ZFUNC, D3DCMP_EQUAL);
+
         C.r_Sampler("s_mask", mask);
         C.r_Sampler("s_lmap", C.L_textures[1]);
 
@@ -114,7 +122,16 @@ void CBlender_BmmD::Compile(CBlender_Compile& C)
         C.r_End();
         break;
     case SE_R2_NORMAL_LQ: // deffer
+        // landscape sorting 
+        C.SH->flags.bLandscape = true;
+        C.r_Pass("shadow_direct_base", "shadow_direct_base", FALSE, TRUE, TRUE);
+        C.r_ColorWriteEnable(false, false, false, false);
+        C.r_End();
+
         uber_deffer(C, false, "base", "impl", false, oT2_Name[0] ? oT2_Name : 0, true);
+
+        C.RS.SetRS(D3DRS_ZFUNC, D3DCMP_EQUAL);
+
         C.r_Sampler("s_lmap", C.L_textures[1]);
         C.r_End();
         break;

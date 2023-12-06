@@ -406,3 +406,45 @@ void R_dsgraph_structure::render_R1_box(IRender_Sector::sector_id_t sector_id, F
         }
     }
 }
+
+template<class T>
+void __fastcall pLandscape_0(u32 context_id, const T& N)
+{
+    auto& dsgraph = RImplementation.get_context(context_id);
+    dxRender_Visual* V = N.second.pVisual;
+    VERIFY(V && V->shader._get());
+    dsgraph.cmd_list.set_Element(N.second.se, 0);
+    const float LOD = calcLOD(N.second.ssa, V->vis.sphere.R);
+#ifdef USE_DX11
+    dsgraph.cmd_list.LOD.set_LOD(LOD);
+#endif
+    V->Render(dsgraph.cmd_list, LOD, true);
+}
+
+template<class T>
+void __fastcall pLandscape_1(u32 context_id, const T& N)
+{
+    auto& dsgraph = RImplementation.get_context(context_id);
+    dxRender_Visual* V = N.second.pVisual;
+    VERIFY(V && V->shader._get());
+    dsgraph.cmd_list.set_Element(N.second.se, 1);
+    dsgraph.cmd_list.apply_lmaterial();
+    const float LOD = calcLOD(N.second.ssa, V->vis.sphere.R);
+#ifdef USE_DX11
+    dsgraph.cmd_list.LOD.set_LOD(LOD);
+#endif
+    V->Render(dsgraph.cmd_list, LOD, true);
+}
+
+void R_dsgraph_structure::r_dsgraph_render_landscape(u32 pass, bool bClear)
+{
+    RCache.set_xform_world(Fidentity);
+
+    if (pass == 0)
+        mapLandscape.traverse_left_right(context_id, pLandscape_0);
+    else
+        mapLandscape.traverse_left_right(context_id, pLandscape_1);
+
+    if (bClear)
+        mapLandscape.clear();
+}
