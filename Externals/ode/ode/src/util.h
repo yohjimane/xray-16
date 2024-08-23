@@ -24,48 +24,48 @@
 #define _ODE_UTIL_H_
 
 #include "objects.h"
-#include "float.h"
 
-#ifndef MSVC
-#include <cmath> // for fpclassify
+
+/* the efficient alignment. most platforms align data structures to some
+ * number of bytes, but this is not always the most efficient alignment.
+ * for example, many x86 compilers align to 4 bytes, but on a pentium it
+ * is important to align doubles to 8 byte boundaries (for speed), and
+ * the 4 floats in a SIMD register to 16 byte boundaries. many other
+ * platforms have similar behavior. setting a larger alignment can waste
+ * a (very) small amount of memory. NOTE: this number must be a power of
+ * two. this is set to 16 by default.
+ */
+#ifndef EFFICIENT_ALIGNMENT
+#define EFFICIENT_ALIGNMENT 16
 #endif
 
-void dInternalHandleAutoDisabling (dxWorld *world, dReal stepsize);
-extern "C"
-{
-	ODE_API void dxStepBody (dxBody *b, dReal h);
-}
-typedef void (*dstepper_fn_t) (dxWorld *world, dxBody * const *body, int nb,
-        dxJoint **joint, int nj, dReal stepsize);
 
+/* utility */
+
+
+/* round something up to be a multiple of the EFFICIENT_ALIGNMENT */
+
+#define dEFFICIENT_SIZE(x) ((((x)-1)|(EFFICIENT_ALIGNMENT-1))+1)
+
+
+/* alloca aligned to the EFFICIENT_ALIGNMENT. note that this can waste
+ * up to 15 bytes per allocation, depending on what alloca() returns.
+ */
+
+#define dALLOCA16(n) \
+  ((char*)dEFFICIENT_SIZE(((size_t)(alloca((n)+(EFFICIENT_ALIGNMENT-1))))))
+
+
+
+
+void dInternalHandleAutoDisabling (dxWorld *world, dReal stepsize);
+void dxStepBody (dxBody *b, dReal h);
+
+typedef void (*dstepper_fn_t) (dxWorld *world, dxBody * const *body, int nb,
+        dxJoint * const *_joint, int nj, dReal stepsize);
 
 void dxProcessIslands (dxWorld *world, dReal stepsize, dstepper_fn_t stepper);
 
-inline bool dValid(const float x)
-{
-#ifdef MSVC
-    // check for: Signaling NaN, Quiet NaN, Negative infinity (-INF), Positive infinity (+INF), Negative denormalized, Positive denormalized
-    int cls = _fpclass(double(x));
-    if (cls&(_FPCLASS_SNAN+_FPCLASS_QNAN+_FPCLASS_NINF+_FPCLASS_PINF+_FPCLASS_ND+_FPCLASS_PD))
-       return false;
-#else
-	int cls = std::fpclassify((double)x);
-    switch (cls)
-    {
-    case FP_NAN:
-    case FP_INFINITE:
-    case FP_SUBNORMAL:
-        return false;
-    default:
-        break;
-    }
-#endif
-    /*	*****other cases are*****
-     _FPCLASS_NN Negative normalized non-zero
-     _FPCLASS_NZ Negative zero (-0)
-     _FPCLASS_PZ Positive 0 (+0)
-     _FPCLASS_PN Positive normalized non-zero
-     */
-    return true;
-}
+
+
 #endif

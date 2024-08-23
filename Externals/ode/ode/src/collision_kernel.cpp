@@ -31,11 +31,15 @@ for geometry objects
 #include <ode/matrix.h>
 #include <ode/rotation.h>
 #include <ode/objects.h>
+#include <ode/odemath.h>
+#include "config.h"
 #include "collision_kernel.h"
 #include "collision_util.h"
 #include "collision_std.h"
 #include "collision_transform.h"
 #include "collision_trimesh_internal.h"
+#include "odeou.h"
+
 
 #ifdef _MSC_VER
 #pragma warning(disable:4291)  // for VC++, no complaints about "no matching operator delete found"
@@ -45,6 +49,52 @@ for geometry objects
 // helper functions for dCollide()ing a space with another geom
 
 // this struct records the parameters passed to dCollideSpaceGeom()
+
+#if dATOMICS_ENABLED 
+static volatile atomicptr s_cachedPosR = 0; // dxPosR *
+#endif // dATOMICS_ENABLED
+
+static inline dxPosR* dAllocPosr()
+{
+	dxPosR *retPosR;
+
+#if dATOMICS_ENABLED
+	retPosR = (dxPosR *)AtomicExchangePointer(&s_cachedPosR, NULL);
+
+	if (!retPosR)
+#endif
+	{
+		retPosR = (dxPosR*) dAlloc (sizeof(dxPosR));
+	}
+
+	return retPosR;
+}
+
+static inline void dFreePosr(dxPosR *oldPosR)
+{
+#if dATOMICS_ENABLED
+	if (!AtomicCompareExchangePointer(&s_cachedPosR, NULL, (atomicptr)oldPosR))
+#endif
+	{
+		dFree(oldPosR, sizeof(dxPosR));
+	}
+}
+
+/*extern */void dClearPosrCache(void)
+{
+#if dATOMICS_ENABLED
+	// No threads should be accessing ODE at this time already,
+	// hence variable may be read directly.
+	dxPosR *existingPosR = (dxPosR *)s_cachedPosR;
+
+	if (existingPosR)
+	{
+		dFree(existingPosR, sizeof(dxPosR));
+
+		s_cachedPosR = 0;
+	}
+#endif
+}
 
 struct SpaceGeomColliderData {
   int flags;			// space left in contacts array
@@ -60,17 +110,6 @@ static void space_geom_collider (void *data, dxGeom *o1, dxGeom *o2)
     int n = dCollide (o1,o2,d->flags,d->contact,d->skip);
     d->contact = CONTACT (d->contact,d->skip*n);
     d->flags -= n;
-#ifndef dNODEBUG
-	if(d->flags<=0)
-	{
-		//char s[64];
-		//_snprintf (s,sizeof(s),"tmp %f,%f,%f \n avel %f,%f,%f",tmp[0],tmp[1],tmp[2],b->avel[0],b->avel[1],b->avel[2]);
-		//dUASSERT(0,"tmp %f,%f,%f \n avel %f,%f,%f",tmp[0],tmp[1],tmp[2],b->avel[0],b->avel[1],b->avel[2]);
-
-		dMessage(0, "Collider exceed contact buffer");
-	}
-
-#endif
   }
 }
 
@@ -120,15 +159,14 @@ static void setAllColliders (int i, dColliderFn *fn)
   for (int j=0; j<dGeomNumClasses; j++) setCollider (i,j,fn);
 }
 
-
-static void initColliders()
+/*extern */void dInitColliders()
 {
-  int i,j;
-
-  if (colliders_initialized) return;
+  dIASSERT(!colliders_initialized);
   colliders_initialized = 1;
 
   memset (colliders,0,sizeof(colliders));
+
+  int i,j;
 
   // setup space colliders
   for (i=dFirstSpaceClass; i <= dLastSpaceClass; i++) {
@@ -150,30 +188,90 @@ static void initColliders()
   setCollider (dRayClass,dBoxClass,&dCollideRayBox);
   setCollider (dRayClass,dCapsuleClass,&dCollideRayCapsule);
   setCollider (dRayClass,dPlaneClass,&dCollideRayPlane);
-#ifdef dTRIMESH_ENABLED
+  setCollider (dRayClass,dCylinderClass,&dCollideRayCylinder);
+#if dTRIMESH_ENABLED
   setCollider (dTriMeshClass,dSphereClass,&dCollideSTL);
   setCollider (dTriMeshClass,dBoxClass,&dCollideBTL);
   setCollider (dTriMeshClass,dRayClass,&dCollideRTL);
   setCollider (dTriMeshClass,dTriMeshClass,&dCollideTTL);
   setCollider (dTriMeshClass,dCapsuleClass,&dCollideCCTL);
+  setCollider (dTriMeshClass,dPlaneClass,&dCollideTrimeshPlane);
+  setCollider (dCylinderClass,dTriMeshClass,&dCollideCylinderTrimesh);
 #endif
+  setCollider (dCylinderClass,dBoxClass,&dCollideCylinderBox);
+  setCollider (dCylinderClass,dSphereClass,&dCollideCylinderSphere);
+  setCollider (dCylinderClass,dPlaneClass,&dCollideCylinderPlane);
+  //setCollider (dCylinderClass,dCylinderClass,&dCollideCylinderCylinder);
+
+//--> Convex Collision
+  setCollider (dConvexClass,dPlaneClass,&dCollideConvexPlane);
+  setCollider (dSphereClass,dConvexClass,&dCollideSphereConvex);
+  setCollider (dConvexClass,dBoxClass,&dCollideConvexBox);
+  setCollider (dConvexClass,dCapsuleClass,&dCollideConvexCapsule);
+  setCollider (dConvexClass,dConvexClass,&dCollideConvexConvex);
+  setCollider (dRayClass,dConvexClass,&dCollideRayConvex);
+//<-- Convex Collision
+
+//--> dHeightfield Collision
+  setCollider (dHeightfieldClass,dRayClass,&dCollideHeightfield);
+  setCollider (dHeightfieldClass,dSphereClass,&dCollideHeightfield);
+  setCollider (dHeightfieldClass,dBoxClass,&dCollideHeightfield);
+  setCollider (dHeightfieldClass,dCapsuleClass,&dCollideHeightfield);
+  setCollider (dHeightfieldClass,dCylinderClass,&dCollideHeightfield);
+  setCollider (dHeightfieldClass,dConvexClass,&dCollideHeightfield);
+#if dTRIMESH_ENABLED
+  setCollider (dHeightfieldClass,dTriMeshClass,&dCollideHeightfield);
+#endif
+//<-- dHeightfield Collision
+
   setAllColliders (dGeomTransformClass,&dCollideTransform);
 }
 
+/*extern */void dFinitColliders()
+{
+	colliders_initialized = 0;
+}
 
+void dSetColliderOverride (int i, int j, dColliderFn *fn)
+{
+	dIASSERT( colliders_initialized );
+	dAASSERT( i < dGeomNumClasses );
+	dAASSERT( j < dGeomNumClasses );
+
+	colliders[i][j].fn = fn;
+	colliders[i][j].reverse = 0;
+	colliders[j][i].fn = fn;
+	colliders[j][i].reverse = 1;
+}
+
+/*
+ *	NOTE!
+ *	If it is necessary to add special processing mode without contact generation
+ *	use NULL contact parameter value as indicator, not zero in flags.
+ */
 int dCollide (dxGeom *o1, dxGeom *o2, int flags, dContactGeom *contact,
 	      int skip)
 {
   dAASSERT(o1 && o2 && contact);
-  dUASSERT(colliders_initialized,"colliders array not initialized");
+  dUASSERT(colliders_initialized,"Please call ODE initialization (dInitODE() or similar) before using the library");
   dUASSERT(o1->type >= 0 && o1->type < dGeomNumClasses,"bad o1 class number");
   dUASSERT(o2->type >= 0 && o2->type < dGeomNumClasses,"bad o2 class number");
+  // Even though comparison for greater or equal to one is used in all the 
+  // other places, here it is more logical to check for greater than zero
+  // because function does not require any specific number of contact slots - 
+  // it must be just a positive.
+  dUASSERT((flags & NUMC_MASK) > 0, "no contacts requested"); 
 
+  // Extra precaution for zero contact count in parameters
+  if ((flags & NUMC_MASK) == 0) return 0;
   // no contacts if both geoms are the same
   if (o1 == o2) return 0;
 
   // no contacts if both geoms on the same body, and the body is not 0
   if (o1->body == o2->body && o1->body) return 0;
+
+  o1->recomputePosr();
+  o2->recomputePosr();
 
   dColliderEntry *ce = &colliders[o1->type][o2->type];
   int count = 0;
@@ -188,6 +286,9 @@ int dCollide (dxGeom *o1, dxGeom *o2, int flags, dContactGeom *contact,
 	dxGeom *tmp = c->g1;
 	c->g1 = c->g2;
 	c->g2 = tmp;
+	int tmpint = c->side1;
+	c->side1 = c->side2;
+	c->side2 = tmpint;
       }
     }
     else {
@@ -202,8 +303,6 @@ int dCollide (dxGeom *o1, dxGeom *o2, int flags, dContactGeom *contact,
 
 dxGeom::dxGeom (dSpaceID _space, int is_placeable)
 {
-  initColliders();
-
   // setup body vars. invalid type of -1 must be changed by the constructor.
   type = -1;
   gflags = GEOM_DIRTY | GEOM_AABB_BAD | GEOM_ENABLED;
@@ -212,16 +311,14 @@ dxGeom::dxGeom (dSpaceID _space, int is_placeable)
   body = 0;
   body_next = 0;
   if (is_placeable) {
-    dxPosR *pr = (dxPosR*) dAlloc (sizeof(dxPosR));
-    pos = pr->pos;
-    R = pr->R;
-    dSetZero (pos,4);
-    dRSetIdentity (R);
+	final_posr = dAllocPosr();
+    dSetZero (final_posr->pos,4);
+    dRSetIdentity (final_posr->R);
   }
   else {
-    pos = 0;
-    R = 0;
+    final_posr = 0;
   }
+  offset_posr = 0;
 
   // setup space vars
   next = 0;
@@ -238,11 +335,17 @@ dxGeom::dxGeom (dSpaceID _space, int is_placeable)
 
 dxGeom::~dxGeom()
 {
-  if (parent_space) dSpaceRemove (parent_space,this);
-  if ((gflags & GEOM_PLACEABLE) && !body) dFree (pos,sizeof(dxPosR));
-  bodyRemove();
+   if (parent_space) dSpaceRemove (parent_space,this);
+   if ((gflags & GEOM_PLACEABLE) && (!body || (body && offset_posr)))
+     dFreePosr(final_posr);
+   if (offset_posr) dFreePosr(offset_posr);
+   bodyRemove();
 }
 
+unsigned dxGeom::getParentSpaceTLSKind() const
+{
+  return parent_space ? parent_space->tls_kind : dSPACE_TLS_KIND_INIT_VALUE;
+}
 
 int dxGeom::AABBTest (dxGeom *o, dReal aabb[6])
 {
@@ -266,6 +369,59 @@ void dxGeom::bodyRemove()
     body = 0;
     body_next = 0;
   }
+}
+
+inline void myswap(dReal& a, dReal& b) { dReal t=b; b=a; a=t; }
+
+
+inline void matrixInvert(const dMatrix3& inMat, dMatrix3& outMat)
+{
+	memcpy(outMat, inMat, sizeof(dMatrix3));
+	// swap _12 and _21
+	myswap(outMat[0 + 4*1], outMat[1 + 4*0]);
+	// swap _31 and _13
+	myswap(outMat[2 + 4*0], outMat[0 + 4*2]);
+	// swap _23 and _32
+	myswap(outMat[1 + 4*2], outMat[2 + 4*1]);
+}
+
+void getBodyPosr(const dxPosR& offset_posr, const dxPosR& final_posr, dxPosR& body_posr)
+{
+	dMatrix3 inv_offset;
+	matrixInvert(offset_posr.R, inv_offset);
+
+	dMULTIPLY0_333(body_posr.R, final_posr.R, inv_offset);
+	dVector3 world_offset;
+	dMULTIPLY0_331(world_offset, body_posr.R, offset_posr.pos);
+	body_posr.pos[0] = final_posr.pos[0] - world_offset[0];
+	body_posr.pos[1] = final_posr.pos[1] - world_offset[1];
+	body_posr.pos[2] = final_posr.pos[2] - world_offset[2];
+}
+
+void getWorldOffsetPosr(const dxPosR& body_posr, const dxPosR& world_posr, dxPosR& offset_posr)
+{
+	dMatrix3 inv_body;
+	matrixInvert(body_posr.R, inv_body);
+
+	dMULTIPLY0_333(offset_posr.R, inv_body, world_posr.R);
+	dVector3 world_offset;
+	world_offset[0] = world_posr.pos[0] - body_posr.pos[0];
+	world_offset[1] = world_posr.pos[1] - body_posr.pos[1];
+	world_offset[2] = world_posr.pos[2] - body_posr.pos[2];
+	dMULTIPLY0_331(offset_posr.pos, inv_body, world_offset);
+}
+
+void dxGeom::computePosr()
+{
+  // should only be recalced if we need to - ie offset from a body
+  dIASSERT(offset_posr);  
+  dIASSERT(body);
+  
+  dMULTIPLY0_331 (final_posr->pos,body->posr.R,offset_posr->pos);
+  final_posr->pos[0] += body->posr.pos[0];
+  final_posr->pos[1] += body->posr.pos[1];
+  final_posr->pos[2] += body->posr.pos[2];
+  dMULTIPLY0_333 (final_posr->R,body->posr.R,offset_posr->R);
 }
 
 //****************************************************************************
@@ -308,26 +464,37 @@ void *dGeomGetData (dxGeom *g)
 void dGeomSetBody (dxGeom *g, dxBody *b)
 {
   dAASSERT (g);
-  dUASSERT (g->gflags & GEOM_PLACEABLE,"geom must be placeable");
+  dUASSERT (b == NULL || (g->gflags & GEOM_PLACEABLE),"geom must be placeable");
   CHECK_NOT_LOCKED (g->parent_space);
 
   if (b) {
-    if (!g->body) dFree (g->pos,sizeof(dxPosR));
-    g->pos = b->posr.pos;
-    g->R = b->posr.R;
-    dGeomMoved (g);
+    if (!g->body) dFreePosr(g->final_posr);
     if (g->body != b) {
+      if (g->offset_posr) {
+        dFreePosr(g->offset_posr);
+        g->offset_posr = 0;
+      }
+      g->final_posr = &b->posr;
       g->bodyRemove();
       g->bodyAdd (b);
     }
+    dGeomMoved (g);
   }
   else {
     if (g->body) {
-      dxPosR *pr = (dxPosR*) dAlloc (sizeof(dxPosR));
-      g->pos = pr->pos;
-      g->R = pr->R;
-      memcpy (g->pos,g->body->posr.pos,sizeof(dVector3));
-      memcpy (g->R,g->body->posr.R,sizeof(dMatrix3));
+      if (g->offset_posr)
+      {
+        // if we're offset, we already have our own final position, make sure its updated
+        g->recomputePosr();
+        dFreePosr(g->offset_posr);
+        g->offset_posr = 0;
+      }
+      else
+      {
+        g->final_posr = dAllocPosr();
+        memcpy (g->final_posr->pos,g->body->posr.pos,sizeof(dVector3));
+        memcpy (g->final_posr->R,g->body->posr.R,sizeof(dMatrix3));
+      }
       g->bodyRemove();
     }
     // dGeomMoved() should not be called if the body is being set to 0, as the
@@ -349,14 +516,23 @@ void dGeomSetPosition (dxGeom *g, dReal x, dReal y, dReal z)
   dAASSERT (g);
   dUASSERT (g->gflags & GEOM_PLACEABLE,"geom must be placeable");
   CHECK_NOT_LOCKED (g->parent_space);
-  if (g->body) {
+  if (g->offset_posr) {
+    // move body such that body+offset = position
+	dVector3 world_offset;
+	dMULTIPLY0_331(world_offset, g->body->posr.R, g->offset_posr->pos);
+	dBodySetPosition(g->body,
+	    x - world_offset[0],
+	    y - world_offset[1],
+	    z - world_offset[2]);
+  }
+  else if (g->body) {
     // this will call dGeomMoved (g), so we don't have to
     dBodySetPosition (g->body,x,y,z);
   }
   else {
-    g->pos[0] = x;
-    g->pos[1] = y;
-    g->pos[2] = z;
+    g->final_posr->pos[0] = x;
+    g->final_posr->pos[1] = y;
+    g->final_posr->pos[2] = z;
     dGeomMoved (g);
   }
 }
@@ -367,12 +543,23 @@ void dGeomSetRotation (dxGeom *g, const dMatrix3 R)
   dAASSERT (g && R);
   dUASSERT (g->gflags & GEOM_PLACEABLE,"geom must be placeable");
   CHECK_NOT_LOCKED (g->parent_space);
-  if (g->body) {
+  if (g->offset_posr) {
+    g->recomputePosr();
+    // move body such that body+offset = rotation
+    dxPosR new_final_posr;
+    dxPosR new_body_posr;
+    memcpy(new_final_posr.pos, g->final_posr->pos, sizeof(dVector3));
+    memcpy(new_final_posr.R, R, sizeof(dMatrix3));
+    getBodyPosr(*g->offset_posr, new_final_posr, new_body_posr);
+    dBodySetRotation(g->body, new_body_posr.R);
+    dBodySetPosition(g->body, new_body_posr.pos[0], new_body_posr.pos[1], new_body_posr.pos[2]);
+  }
+  else if (g->body) {
     // this will call dGeomMoved (g), so we don't have to
     dBodySetRotation (g->body,R);
   }
   else {
-    memcpy (g->R,R,sizeof(dMatrix3));
+    memcpy (g->final_posr->R,R,sizeof(dMatrix3));
     dGeomMoved (g);
   }
 }
@@ -383,12 +570,24 @@ void dGeomSetQuaternion (dxGeom *g, const dQuaternion quat)
   dAASSERT (g && quat);
   dUASSERT (g->gflags & GEOM_PLACEABLE,"geom must be placeable");
   CHECK_NOT_LOCKED (g->parent_space);
+  if (g->offset_posr) {
+    g->recomputePosr();
+    // move body such that body+offset = rotation
+    dxPosR new_final_posr;
+    dxPosR new_body_posr;
+    dQtoR (quat, new_final_posr.R);
+    memcpy(new_final_posr.pos, g->final_posr->pos, sizeof(dVector3));
+    
+    getBodyPosr(*g->offset_posr, new_final_posr, new_body_posr);
+    dBodySetRotation(g->body, new_body_posr.R);
+    dBodySetPosition(g->body, new_body_posr.pos[0], new_body_posr.pos[1], new_body_posr.pos[2]);
+  }
   if (g->body) {
     // this will call dGeomMoved (g), so we don't have to
     dBodySetQuaternion (g->body,quat);
   }
   else {
-    dQtoR (quat, g->R);
+    dQtoR (quat, g->final_posr->R);
     dGeomMoved (g);
   }
 }
@@ -398,7 +597,20 @@ const dReal * dGeomGetPosition (dxGeom *g)
 {
   dAASSERT (g);
   dUASSERT (g->gflags & GEOM_PLACEABLE,"geom must be placeable");
-  return g->pos;
+  g->recomputePosr();
+  return g->final_posr->pos;
+}
+
+
+void dGeomCopyPosition(dxGeom *g, dVector3 pos)
+{
+  dAASSERT (g);
+  dUASSERT (g->gflags & GEOM_PLACEABLE,"geom must be placeable");
+  g->recomputePosr();
+  const dReal* src = g->final_posr->pos;
+  pos[0] = src[0];
+  pos[1] = src[1];
+  pos[2] = src[2];
 }
 
 
@@ -406,7 +618,26 @@ const dReal * dGeomGetRotation (dxGeom *g)
 {
   dAASSERT (g);
   dUASSERT (g->gflags & GEOM_PLACEABLE,"geom must be placeable");
-  return g->R;
+  g->recomputePosr();
+  return g->final_posr->R;
+}
+
+
+void dGeomCopyRotation(dxGeom *g, dMatrix3 R)
+{
+  dAASSERT (g);
+  dUASSERT (g->gflags & GEOM_PLACEABLE,"geom must be placeable");
+  g->recomputePosr();
+  const dReal* src = g->final_posr->R;
+  R[0]  = src[0];
+  R[1]  = src[1];
+  R[2]  = src[2];
+  R[4]  = src[4];
+  R[5]  = src[5];
+  R[6]  = src[6];
+  R[8]  = src[8];
+  R[9]  = src[9];
+  R[10] = src[10];
 }
 
 
@@ -414,7 +645,7 @@ void dGeomGetQuaternion (dxGeom *g, dQuaternion quat)
 {
   dAASSERT (g);
   dUASSERT (g->gflags & GEOM_PLACEABLE,"geom must be placeable");
-  if (g->body) {
+  if (g->body && !g->offset_posr) {
     const dReal * body_quat = dBodyGetQuaternion (g->body);
     quat[0] = body_quat[0];
     quat[1] = body_quat[1];
@@ -422,7 +653,8 @@ void dGeomGetQuaternion (dxGeom *g, dQuaternion quat)
     quat[3] = body_quat[3];
   }
   else {
-    dRtoQ (g->R, quat);
+    g->recomputePosr();
+    dRtoQ (g->final_posr->R, quat);
   }
 }
 
@@ -601,13 +833,16 @@ int dCreateGeomClass (const dGeomClass *c)
   }
   user_classes[num_user_classes] = *c;
   int class_number = num_user_classes + dFirstUserClass;
-  initColliders();
   setAllColliders (class_number,&dCollideUserGeomWithGeom);
 
   num_user_classes++;
   return class_number;
 }
 
+/*extern */void dFinitUserClasses()
+{
+  num_user_classes = 0;
+}
 
 void * dGeomGetClassData (dxGeom *g)
 {
@@ -625,12 +860,243 @@ dGeomID dCreateGeom (int classnum)
   return new dxUserGeom (classnum);
 }
 
-//****************************************************************************
-// here is where we deallocate any memory that has been globally
-// allocated, or free other global resources.
 
-void dCloseODE()
+
+/* ************************************************************************ */
+/* geom offset from body */
+
+void dGeomCreateOffset (dxGeom *g)
 {
-  colliders_initialized = 0;
-  num_user_classes = 0;
+  dAASSERT (g);
+  dUASSERT (g->gflags & GEOM_PLACEABLE,"geom must be placeable");
+  dUASSERT (g->body, "geom must be on a body");  
+  if (g->offset_posr)
+  {
+	return; // already created
+  }
+  dIASSERT (g->final_posr == &g->body->posr);
+  
+  g->final_posr = dAllocPosr();
+  g->offset_posr = dAllocPosr();
+  dSetZero (g->offset_posr->pos,4);
+  dRSetIdentity (g->offset_posr->R);
+  
+  g->gflags |= GEOM_POSR_BAD;
 }
+
+void dGeomSetOffsetPosition (dxGeom *g, dReal x, dReal y, dReal z)
+{
+  dAASSERT (g);
+  dUASSERT (g->gflags & GEOM_PLACEABLE,"geom must be placeable");
+  dUASSERT (g->body, "geom must be on a body");  
+  CHECK_NOT_LOCKED (g->parent_space);
+  if (!g->offset_posr) 
+  {
+	dGeomCreateOffset(g);
+  }
+  g->offset_posr->pos[0] = x;
+  g->offset_posr->pos[1] = y;
+  g->offset_posr->pos[2] = z;
+  dGeomMoved (g);
+}
+
+void dGeomSetOffsetRotation (dxGeom *g, const dMatrix3 R)
+{
+  dAASSERT (g && R);
+  dUASSERT (g->gflags & GEOM_PLACEABLE,"geom must be placeable");
+  dUASSERT (g->body, "geom must be on a body");  
+  CHECK_NOT_LOCKED (g->parent_space);
+  if (!g->offset_posr) 
+  {
+	dGeomCreateOffset (g);
+  }
+  memcpy (g->offset_posr->R,R,sizeof(dMatrix3));
+  dGeomMoved (g);
+}
+
+void dGeomSetOffsetQuaternion (dxGeom *g, const dQuaternion quat)
+{
+  dAASSERT (g && quat);
+  dUASSERT (g->gflags & GEOM_PLACEABLE,"geom must be placeable");
+  dUASSERT (g->body, "geom must be on a body");  
+  CHECK_NOT_LOCKED (g->parent_space);
+  if (!g->offset_posr) 
+  {
+	dGeomCreateOffset (g);
+  }
+  dQtoR (quat, g->offset_posr->R);
+  dGeomMoved (g);
+}
+
+void dGeomSetOffsetWorldPosition (dxGeom *g, dReal x, dReal y, dReal z)
+{
+  dAASSERT (g);
+  dUASSERT (g->gflags & GEOM_PLACEABLE,"geom must be placeable");
+  dUASSERT (g->body, "geom must be on a body");  
+  CHECK_NOT_LOCKED (g->parent_space);
+  if (!g->offset_posr) 
+  {
+	dGeomCreateOffset(g);
+  }
+  dBodyGetPosRelPoint(g->body, x, y, z, g->offset_posr->pos);
+  dGeomMoved (g);
+}
+
+void dGeomSetOffsetWorldRotation (dxGeom *g, const dMatrix3 R)
+{
+  dAASSERT (g && R);
+  dUASSERT (g->gflags & GEOM_PLACEABLE,"geom must be placeable");
+  dUASSERT (g->body, "geom must be on a body");  
+  CHECK_NOT_LOCKED (g->parent_space);
+  if (!g->offset_posr) 
+  {
+	dGeomCreateOffset (g);
+  }
+  g->recomputePosr();
+  
+  dxPosR new_final_posr;
+  memcpy(new_final_posr.pos, g->final_posr->pos, sizeof(dVector3));
+  memcpy(new_final_posr.R, R, sizeof(dMatrix3));
+  
+  getWorldOffsetPosr(g->body->posr, new_final_posr, *g->offset_posr);
+  dGeomMoved (g);
+}
+
+void dGeomSetOffsetWorldQuaternion (dxGeom *g, const dQuaternion quat)
+{
+  dAASSERT (g && quat);
+  dUASSERT (g->gflags & GEOM_PLACEABLE,"geom must be placeable");
+  dUASSERT (g->body, "geom must be on a body");  
+  CHECK_NOT_LOCKED (g->parent_space);
+  if (!g->offset_posr) 
+  {
+	dGeomCreateOffset (g);
+  }
+
+  g->recomputePosr();
+  
+  dxPosR new_final_posr;
+  memcpy(new_final_posr.pos, g->final_posr->pos, sizeof(dVector3));
+  dQtoR (quat, new_final_posr.R);
+  
+  getWorldOffsetPosr(g->body->posr, new_final_posr, *g->offset_posr);
+  dGeomMoved (g);
+}
+
+void dGeomClearOffset(dxGeom *g)
+{
+  dAASSERT (g);
+  dUASSERT (g->gflags & GEOM_PLACEABLE,"geom must be placeable");
+  if (g->offset_posr)
+  {
+    dIASSERT(g->body);
+    // no longer need an offset posr
+	dFreePosr(g->offset_posr);
+	g->offset_posr = 0;
+    // the geom will now share the position of the body
+    dFreePosr(g->final_posr);
+    g->final_posr = &g->body->posr;
+    // geom has moved
+    g->gflags &= ~GEOM_POSR_BAD;
+    dGeomMoved (g);
+  }
+}
+
+int dGeomIsOffset(dxGeom *g)
+{
+  dAASSERT (g);
+  return ((0 != g->offset_posr) ? 1 : 0);
+}
+
+static const dVector3 OFFSET_POSITION_ZERO = { 0.0f, 0.0f, 0.0f, 0.0f };
+
+const dReal * dGeomGetOffsetPosition (dxGeom *g)
+{
+  dAASSERT (g);
+  if (g->offset_posr)
+  {
+    return g->offset_posr->pos;
+  }
+  return OFFSET_POSITION_ZERO;
+}
+
+void dGeomCopyOffsetPosition (dxGeom *g, dVector3 pos)
+{
+  dAASSERT (g);
+  if (g->offset_posr)
+  {
+    const dReal* src = g->offset_posr->pos;
+    pos[0] = src[0];
+	 pos[1] = src[1];
+	 pos[2] = src[2];
+  }
+  else
+  {
+    pos[0] = 0;
+	 pos[1] = 0;
+	 pos[2] = 0;
+  }
+}
+
+static const dMatrix3 OFFSET_ROTATION_ZERO = 
+{ 
+	1.0f, 0.0f, 0.0f, 0.0f, 
+	0.0f, 1.0f, 0.0f, 0.0f, 
+	0.0f, 0.0f, 1.0f, 0.0f, 
+};
+
+const dReal * dGeomGetOffsetRotation (dxGeom *g)
+{
+  dAASSERT (g);
+  if (g->offset_posr)
+  {
+    return g->offset_posr->R;
+  }
+  return OFFSET_ROTATION_ZERO;
+}
+
+void dGeomCopyOffsetRotation (dxGeom *g, dMatrix3 R)
+{
+	dAASSERT (g);
+	if (g->offset_posr)
+	{
+		const dReal* src = g->final_posr->R;
+		R[0]  = src[0];
+		R[1]  = src[1];
+		R[2]  = src[2];
+		R[4]  = src[4];
+		R[5]  = src[5];
+		R[6]  = src[6];
+		R[8]  = src[8];
+		R[9]  = src[9];
+		R[10] = src[10];
+	}
+	else
+	{
+		R[0]  = OFFSET_ROTATION_ZERO[0];
+		R[1]  = OFFSET_ROTATION_ZERO[1];
+		R[2]  = OFFSET_ROTATION_ZERO[2];
+		R[4]  = OFFSET_ROTATION_ZERO[4];
+		R[5]  = OFFSET_ROTATION_ZERO[5];
+		R[6]  = OFFSET_ROTATION_ZERO[6];
+		R[8]  = OFFSET_ROTATION_ZERO[8];
+		R[9]  = OFFSET_ROTATION_ZERO[9];
+		R[10] = OFFSET_ROTATION_ZERO[10];
+	}
+}
+
+void dGeomGetOffsetQuaternion (dxGeom *g, dQuaternion result)
+{
+  dAASSERT (g);
+  if (g->offset_posr)
+  {
+    dRtoQ (g->offset_posr->R, result);
+  }
+  else
+  {
+    dSetZero (result,4);
+    result[0] = 1;
+  }
+}
+
+

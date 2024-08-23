@@ -21,29 +21,161 @@
  *************************************************************************/
 
 // TriMesh code by Erwin de Vries.
+// Modified for FreeSOLID Compatibility by Rodrigo Hernandez
+// Trimesh caches separation by Oleh Derevenko
+
 
 #ifndef _ODE_COLLISION_TRIMESH_INTERNAL_H_
 #define _ODE_COLLISION_TRIMESH_INTERNAL_H_
 
-int dCollideSTL(dxGeom *o1, dxGeom *o2, int flags, dContactGeom *contact, int skip);
-int dCollideBTL(dxGeom *o1, dxGeom *o2, int flags, dContactGeom *contact, int skip);
-int dCollideRTL(dxGeom *o1, dxGeom *o2, int flags, dContactGeom *contact, int skip);
-int dCollideTTL(dxGeom *o1, dxGeom *o2, int flags, dContactGeom *contact, int skip);
-int dCollideCCTL(dxGeom *o1, dxGeom *o2, int flags, dContactGeom *contact, int skip);
-
 //****************************************************************************
 // dxTriMesh class
 
-#ifdef TRIMESH_INTERNAL
 
 #include "collision_kernel.h"
+#include "collision_trimesh_colliders.h"
 #include <ode/collision_trimesh.h>
 
+#if dTRIMESH_OPCODE
 #define BAN_OPCODE_AUTOLINK
 #include "Opcode.h"
 using namespace Opcode;
+#endif // dTRIMESH_OPCODE
 
-struct dxTriMeshData{
+#if dTRIMESH_GIMPACT
+#include <GIMPACT/gimpact.h>
+#endif
+
+#if dTLS_ENABLED
+#include "odetls.h"
+#endif
+
+
+
+
+#if dTRIMESH_OPCODE
+#if !dTRIMESH_OPCODE_USE_OLD_TRIMESH_TRIMESH_COLLIDER
+
+// New trimesh collider hash table types
+enum
+{
+	MAXCONTACT_X_NODE = 4,
+	CONTACTS_HASHSIZE = 256,
+};
+
+struct CONTACT_KEY
+{
+	dContactGeom * m_contact;
+	unsigned int m_key;
+};
+
+struct CONTACT_KEY_HASH_NODE
+{
+	CONTACT_KEY m_keyarray[MAXCONTACT_X_NODE];
+	int m_keycount;
+};
+
+struct CONTACT_KEY_HASH_TABLE
+{
+public:
+	CONTACT_KEY_HASH_NODE &operator[](unsigned int index) { return m_storage[index]; }
+
+private:
+	CONTACT_KEY_HASH_NODE m_storage[CONTACTS_HASHSIZE];
+};
+
+#endif // !dTRIMESH_OPCODE_USE_OLD_TRIMESH_TRIMESH_COLLIDER
+#endif // dTRIMESH_OPCODE
+
+
+
+struct TrimeshCollidersCache
+{
+	TrimeshCollidersCache()
+	{
+#if dTRIMESH_OPCODE
+		InitOPCODECaches();
+#endif // dTRIMESH_OPCODE
+	}
+
+#if dTRIMESH_OPCODE
+
+	void InitOPCODECaches();
+
+
+	// Collider caches
+	BVTCache ColCache;
+
+#if !dTRIMESH_OPCODE_USE_OLD_TRIMESH_TRIMESH_COLLIDER
+	CONTACT_KEY_HASH_TABLE _hashcontactset;
+#endif
+
+	// Colliders
+/* -- not used -- also uncomment in InitOPCODECaches()
+	PlanesCollider _PlanesCollider; -- not used 
+*/
+	SphereCollider _SphereCollider;
+	OBBCollider _OBBCollider;
+	RayCollider _RayCollider;
+	AABBTreeCollider _AABBTreeCollider;
+/* -- not used -- also uncomment in InitOPCODECaches()
+	LSSCollider _LSSCollider;
+*/
+	// Trimesh caches
+	CollisionFaces Faces;
+	SphereCache defaultSphereCache;
+	OBBCache defaultBoxCache;
+	LSSCache defaultCapsuleCache;
+
+#endif // dTRIMESH_OPCODE
+};
+
+#if dTLS_ENABLED
+
+inline TrimeshCollidersCache *GetTrimeshCollidersCache(unsigned uiTLSKind)
+{
+	EODETLSKIND tkTLSKind = (EODETLSKIND)uiTLSKind;
+	return COdeTls::GetTrimeshCollidersCache(tkTLSKind);
+}
+
+
+#else // dTLS_ENABLED
+
+inline TrimeshCollidersCache *GetTrimeshCollidersCache(unsigned uiTLSKind)
+{
+	extern TrimeshCollidersCache g_ccTrimeshCollidersCache;
+
+	return &g_ccTrimeshCollidersCache;
+}
+
+
+#endif // dTLS_ENABLED
+
+
+
+
+
+struct dxTriMeshData  : public dBase 
+{
+    /* Array of flags for which edges and verts should be used on each triangle */
+    enum UseFlags
+    {
+        kEdge0 = 0x1,
+        kEdge1 = 0x2,
+        kEdge2 = 0x4,
+        kVert0 = 0x8,
+        kVert1 = 0x10,
+        kVert2 = 0x20,
+
+        kUseAll = 0xFF,
+    };
+
+    /* Setup the UseFlags array */
+    void Preprocess();
+    /* For when app changes the vertices */
+    void UpdateData();
+
+#if dTRIMESH_OPCODE
 	Model BVTree;
 	MeshInterface Mesh;
 
@@ -59,9 +191,79 @@ struct dxTriMeshData{
         dVector3 AABBCenter;
         dVector3 AABBExtents;
 
-    /* data for use in collison resolution */
+    // data for use in collision resolution
     const void* Normals;
-    Matrix4x4   last_trans;
+    uint8* UseFlags;
+#endif  // dTRIMESH_OPCODE
+
+#if dTRIMESH_GIMPACT
+	const char* m_Vertices;
+	int m_VertexStride;
+	int m_VertexCount;
+	const char* m_Indices;
+	int m_TriangleCount;
+	int m_TriStride;
+	bool m_single;
+
+   dxTriMeshData()
+	{
+		m_Vertices=NULL;
+		m_VertexStride = 12;
+		m_VertexCount = 0;
+		m_Indices = 0;
+		m_TriangleCount = 0;
+		m_TriStride = 12;
+		m_single = true;
+	}
+
+    void Build(const void* Vertices, int VertexStride, int VertexCount,
+	       const void* Indices, int IndexCount, int TriStride,
+	       const void* Normals,
+	      bool Single)
+	{
+		dIASSERT(Vertices);
+		dIASSERT(Indices);
+ 		dIASSERT(VertexStride);
+ 		dIASSERT(TriStride);
+ 		dIASSERT(IndexCount);
+		m_Vertices=(const char *)Vertices;
+		m_VertexStride = VertexStride;
+		m_VertexCount = VertexCount;
+		m_Indices = (const char *)Indices;
+		m_TriangleCount = IndexCount/3;
+		m_TriStride = TriStride;
+		m_single = Single;
+	}
+
+	inline void GetVertex(unsigned int i, dVector3 Out)
+	{
+		if(m_single)
+		{
+			const float * fverts = (const float * )(m_Vertices + m_VertexStride*i);
+			Out[0] = fverts[0];
+			Out[1] = fverts[1];
+			Out[2] = fverts[2];
+			Out[3] = 1.0f;
+		}
+		else
+		{
+			const double * dverts = (const double * )(m_Vertices + m_VertexStride*i);
+			Out[0] = (float)dverts[0];
+			Out[1] = (float)dverts[1];
+			Out[2] = (float)dverts[2];
+			Out[3] = 1.0f;
+
+		}
+	}
+
+	inline void GetTriIndices(unsigned int itriangle, unsigned int triindices[3])
+	{
+		const unsigned int * ind = (const unsigned int * )(m_Indices + m_TriStride*itriangle);
+		triindices[0] = ind[0];
+		triindices[1] = ind[1];
+		triindices[2] = ind[2];
+	}
+#endif  // dTRIMESH_GIMPACT
 };
 
 
@@ -70,40 +272,10 @@ struct dxTriMesh : public dxGeom{
 	dTriCallback* Callback;
 	dTriArrayCallback* ArrayCallback;
 	dTriRayCallback* RayCallback;
+    dTriTriMergeCallback* TriMergeCallback;
 
 	// Data types
 	dxTriMeshData* Data;
-
-
-	// Colliders
-	static PlanesCollider _PlanesCollider;
-	static SphereCollider _SphereCollider;
-	static OBBCollider _OBBCollider;
-	static RayCollider _RayCollider;
-	static AABBTreeCollider _AABBTreeCollider;
-	static LSSCollider _LSSCollider;
-
-	// Some constants
-	static CollisionFaces Faces;
-
-	// Temporal coherence
-	struct SphereTC : public SphereCache{
-		dxGeom* Geom;
-	};
-	dArray<SphereTC> SphereTCCache;
-	static SphereCache defaultSphereCache;
-
-	struct BoxTC : public OBBCache{
-		dxGeom* Geom;
-	};
-	dArray<BoxTC> BoxTCCache;
-	static OBBCache defaultBoxCache;
-	
-	struct CapsuleTC : public LSSCache{
-		dxGeom* Geom;
-	};
-	dArray<CapsuleTC> CapsuleTCCache;
-	static LSSCache defaultCapsuleCache;
 
 	bool doSphereTC;
 	bool doBoxTC;
@@ -117,30 +289,55 @@ struct dxTriMesh : public dxGeom{
 
 	int AABBTest(dxGeom* g, dReal aabb[6]);
 	void computeAABB();
+
+#if dTRIMESH_OPCODE
+	// Instance data for last transform.
+    dMatrix4 last_trans;
+
+	// Some constants
+	// Temporal coherence
+	struct SphereTC : public SphereCache{
+		dxGeom* Geom;
+	};
+	dArray<SphereTC> SphereTCCache;
+
+	struct BoxTC : public OBBCache{
+		dxGeom* Geom;
+	};
+	dArray<BoxTC> BoxTCCache;
+	
+	struct CapsuleTC : public LSSCache{
+		dxGeom* Geom;
+	};
+	dArray<CapsuleTC> CapsuleTCCache;
+#endif // dTRIMESH_OPCODE
+
+#if dTRIMESH_GIMPACT
+    GIM_TRIMESH  m_collision_trimesh;
+	GBUFFER_MANAGER_DATA m_buffer_managers[G_BUFFER_MANAGER__MAX];
+#endif  // dTRIMESH_GIMPACT
 };
 
+#if 0
+#include "collision_kernel.h"
 // Fetches a contact
 inline dContactGeom* SAFECONTACT(int Flags, dContactGeom* Contacts, int Index, int Stride){
-	dIASSERT(Index >= 0 && Index < (Flags & 0x0ffff));
+	dIASSERT(Index >= 0 && Index < (Flags & NUMC_MASK));
 	return ((dContactGeom*)(((char*)Contacts) + (Index * Stride)));
 }
+#endif
 
-// Fetches a triangle
-inline void FetchTriangle(dxTriMesh* TriMesh, int Index, dVector3 Out[3]){
-	VertexPointers VP;
-	TriMesh->Data->Mesh.GetTriangle(VP, Index);
-	for (int i = 0; i < 3; i++){
-		Out[i][0] = VP.Vertex[i]->x;
-		Out[i][1] = VP.Vertex[i]->y;
-		Out[i][2] = VP.Vertex[i]->z;
-		Out[i][3] = 0;
-	}
+#if dTRIMESH_OPCODE
+
+inline unsigned FetchTriangleCount(dxTriMesh* TriMesh)
+{
+	return TriMesh->Data->Mesh.GetNbTriangles();
 }
 
-// Fetches a triangle
 inline void FetchTriangle(dxTriMesh* TriMesh, int Index, const dVector3 Position, const dMatrix3 Rotation, dVector3 Out[3]){
 	VertexPointers VP;
-	TriMesh->Data->Mesh.GetTriangle(VP, Index);
+	ConversionArea VC;
+	TriMesh->Data->Mesh.GetTriangle(VP, Index, VC);
 	for (int i = 0; i < 3; i++){
 		dVector3 v;
 		v[0] = VP.Vertex[i]->x;
@@ -156,23 +353,28 @@ inline void FetchTriangle(dxTriMesh* TriMesh, int Index, const dVector3 Position
 	}
 }
 
-// Creates an OPCODE matrix from an ODE matrix
+inline void FetchTransformedTriangle(dxTriMesh* TriMesh, int Index, dVector3 Out[3]){
+	const dVector3& Position = *(const dVector3*)dGeomGetPosition(TriMesh);
+	const dMatrix3& Rotation = *(const dMatrix3*)dGeomGetRotation(TriMesh);
+	FetchTriangle(TriMesh, Index, Position, Rotation, Out);
+}
+
 inline Matrix4x4& MakeMatrix(const dVector3 Position, const dMatrix3 Rotation, Matrix4x4& Out){
-	Out.m[0][0] = Rotation[0];
-	Out.m[1][0] = Rotation[1];
-	Out.m[2][0] = Rotation[2];
+	Out.m[0][0] = (float) Rotation[0];
+	Out.m[1][0] = (float) Rotation[1];
+	Out.m[2][0] = (float) Rotation[2];
 
-	Out.m[0][1] = Rotation[4];
-	Out.m[1][1] = Rotation[5];
-	Out.m[2][1] = Rotation[6];
+	Out.m[0][1] = (float) Rotation[4];
+	Out.m[1][1] = (float) Rotation[5];
+	Out.m[2][1] = (float) Rotation[6];
 
-	Out.m[0][2] = Rotation[8];
-	Out.m[1][2] = Rotation[9];
-	Out.m[2][2] = Rotation[10];
+	Out.m[0][2] = (float) Rotation[8];
+	Out.m[1][2] = (float) Rotation[9];
+	Out.m[2][2] = (float) Rotation[10];
 
-	Out.m[3][0] = Position[0];
-	Out.m[3][1] = Position[1];
-	Out.m[3][2] = Position[2];
+	Out.m[3][0] = (float) Position[0];
+	Out.m[3][1] = (float) Position[1];
+	Out.m[3][2] = (float) Position[2];
 
 	Out.m[0][3] = 0.0f;
 	Out.m[1][3] = 0.0f;
@@ -181,6 +383,125 @@ inline Matrix4x4& MakeMatrix(const dVector3 Position, const dMatrix3 Rotation, M
 
 	return Out;
 }
+
+inline Matrix4x4& MakeMatrix(dxGeom* g, Matrix4x4& Out){
+	const dVector3& Position = *(const dVector3*)dGeomGetPosition(g);
+	const dMatrix3& Rotation = *(const dMatrix3*)dGeomGetRotation(g);
+	return MakeMatrix(Position, Rotation, Out);
+}
+#endif // dTRIMESH_OPCODE
+
+#if dTRIMESH_GIMPACT
+
+	#ifdef dDOUBLE
+		// To use GIMPACT with doubles, we need to patch a couple of the GIMPACT functions to 
+		// convert arguments to floats before sending them in
+
+
+		/// Convert an gimpact vec3f to a ODE dVector3d:   dVector3[i] = vec3f[i]
+		#define dVECTOR3_VEC3F_COPY(b,a) { 			\
+			(b)[0] = (a)[0];              \
+			(b)[1] = (a)[1];              \
+			(b)[2] = (a)[2];              \
+			(b)[3] = 0;                   \
+		}
+
+		inline void gim_trimesh_get_triangle_verticesODE(GIM_TRIMESH * trimesh, GUINT32 triangle_index, dVector3 v1, dVector3 v2, dVector3 v3) {   
+			vec3f src1, src2, src3;
+			gim_trimesh_get_triangle_vertices(trimesh, triangle_index, src1, src2, src3);
+
+			dVECTOR3_VEC3F_COPY(v1, src1);
+			dVECTOR3_VEC3F_COPY(v2, src2);
+			dVECTOR3_VEC3F_COPY(v3, src3);
+		}
+
+		// Anything calling gim_trimesh_get_triangle_vertices from within ODE 
+		// should be patched through to the dDOUBLE version above
+
+		#define gim_trimesh_get_triangle_vertices gim_trimesh_get_triangle_verticesODE
+
+		inline int gim_trimesh_ray_closest_collisionODE( GIM_TRIMESH *mesh, dVector3 origin, dVector3 dir, GREAL tmax, GIM_TRIANGLE_RAY_CONTACT_DATA *contact ) {
+			vec3f dir_vec3f    = { dir[ 0 ],       dir[ 1 ],    dir[ 2 ] };
+			vec3f origin_vec3f = { origin[ 0 ], origin[ 1 ], origin[ 2 ] };
+
+			return gim_trimesh_ray_closest_collision( mesh, origin_vec3f, dir_vec3f, tmax, contact );
+		}
+
+		inline int gim_trimesh_ray_collisionODE( GIM_TRIMESH *mesh, dVector3 origin, dVector3 dir, GREAL tmax, GIM_TRIANGLE_RAY_CONTACT_DATA *contact ) {
+			vec3f dir_vec3f    = { dir[ 0 ],       dir[ 1 ],    dir[ 2 ] };
+			vec3f origin_vec3f = { origin[ 0 ], origin[ 1 ], origin[ 2 ] };
+
+			return gim_trimesh_ray_collision( mesh, origin_vec3f, dir_vec3f, tmax, contact );
+		}
+
+		#define gim_trimesh_sphere_collisionODE( mesh, Position, Radius, contact ) {	\
+			vec3f pos_vec3f = { Position[ 0 ], Position[ 1 ], Position[ 2 ] };			\
+			gim_trimesh_sphere_collision( mesh, pos_vec3f, Radius, contact );			\
+		}
+
+		#define gim_trimesh_plane_collisionODE( mesh, plane, contact ) { 			\
+			vec4f plane_vec4f = { plane[ 0 ], plane[ 1 ], plane[ 2 ], plane[ 3 ] }; \
+			gim_trimesh_plane_collision( mesh, plane_vec4f, contact );				\
+		}
+
+		#define GIM_AABB_COPY( src, dst ) {		\
+			dst[ 0 ]= (src) -> minX;			\
+			dst[ 1 ]= (src) -> maxX;			\
+			dst[ 2 ]= (src) -> minY;			\
+			dst[ 3 ]= (src) -> maxY;			\
+			dst[ 4 ]= (src) -> minZ;			\
+			dst[ 5 ]= (src) -> maxZ;			\
+		}
+
+	#else 
+		// With single precision, we can pass native ODE vectors directly to GIMPACT
+
+		#define gim_trimesh_ray_closest_collisionODE 	gim_trimesh_ray_closest_collision
+		#define gim_trimesh_ray_collisionODE 			gim_trimesh_ray_collision
+		#define gim_trimesh_sphere_collisionODE 		gim_trimesh_sphere_collision
+		#define gim_trimesh_plane_collisionODE 			gim_trimesh_plane_collision
+
+		#define GIM_AABB_COPY( src, dst ) 	memcpy( dst, src, 6 * sizeof( GREAL ) )
+
+	#endif // dDouble
+
+inline unsigned FetchTriangleCount(dxTriMesh* TriMesh)
+{
+	return gim_trimesh_get_triangle_count(&TriMesh->m_collision_trimesh);
+}
+
+inline void FetchTransformedTriangle(dxTriMesh* TriMesh, int Index, dVector3 Out[3]){
+	gim_trimesh_locks_work_data(&TriMesh->m_collision_trimesh);	
+	gim_trimesh_get_triangle_vertices(&TriMesh->m_collision_trimesh, (GUINT32)Index, Out[0], Out[1], Out[2]);
+	gim_trimesh_unlocks_work_data(&TriMesh->m_collision_trimesh);
+}
+
+inline void MakeMatrix(const dVector3 Position, const dMatrix3 Rotation, mat4f m)
+{
+	m[0][0] = (float) Rotation[0];
+	m[0][1] = (float) Rotation[1];
+	m[0][2] = (float) Rotation[2];
+
+	m[1][0] = (float) Rotation[4];
+	m[1][1] = (float) Rotation[5];
+	m[1][2] = (float) Rotation[6];
+
+	m[2][0] = (float) Rotation[8];
+	m[2][1] = (float) Rotation[9];
+	m[2][2] = (float) Rotation[10];
+
+	m[0][3] = (float) Position[0];
+	m[1][3] = (float) Position[1];
+	m[2][3] = (float) Position[2];
+
+}
+
+inline void MakeMatrix(dxGeom* g, mat4f Out){
+	const dVector3& Position = *(const dVector3*)dGeomGetPosition(g);
+	const dMatrix3& Rotation = *(const dMatrix3*)dGeomGetRotation(g);
+	MakeMatrix(Position, Rotation, Out);
+}
+#endif // dTRIMESH_GIMPACT
 
 // Outputs a matrix to 3 vectors
 inline void Decompose(const dMatrix3 Matrix, dVector3 Right, dVector3 Up, dVector3 Direction){
@@ -203,13 +524,6 @@ inline void Decompose(const dMatrix3 Matrix, dVector3 Vectors[3]){
 	Decompose(Matrix, Vectors[0], Vectors[1], Vectors[2]);
 }
 
-// Creates an OPCODE matrix from an ODE matrix
-inline Matrix4x4& MakeMatrix(dxGeom* g, Matrix4x4& Out){
-	const dVector3& Position = *(const dVector3*)dGeomGetPosition(g);
-	const dMatrix3& Rotation = *(const dMatrix3*)dGeomGetRotation(g);
-	return MakeMatrix(Position, Rotation, Out);
-}
-
 // Finds barycentric
 inline void GetPointFromBarycentric(const dVector3 dv[3], dReal u, dReal v, dVector3 Out){
 	dReal w = REAL(1.0) - u - v;
@@ -222,8 +536,8 @@ inline void GetPointFromBarycentric(const dVector3 dv[3], dReal u, dReal v, dVec
 
 // Performs a callback
 inline bool Callback(dxTriMesh* TriMesh, dxGeom* Object, int TriIndex){
-	if (TriMesh->Callback != null){
-		return (TriMesh->Callback(TriMesh, Object, TriIndex) != 0);
+	if (TriMesh->Callback != NULL){
+		return (TriMesh->Callback(TriMesh, Object, TriIndex)!=0);
 	}
 	else return true;
 }
@@ -340,6 +654,5 @@ bool IntersectCapsuleTri( const dVector3 segOrigin, const dVector3 segEnd,
     return ( sqrDist <= (radius * radius) );
 }
 
-#endif	//TRIMESH_INTERNAL
 
 #endif	//_ODE_COLLISION_TRIMESH_INTERNAL_H_

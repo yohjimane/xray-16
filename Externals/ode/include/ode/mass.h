@@ -32,6 +32,15 @@ extern "C" {
 struct dMass;
 typedef struct dMass dMass;
 
+/**
+ * Check if a mass structure has valid value.
+ * The function check if the mass and innertia matrix are positive definits
+ *
+ * @param m A mass structure to check
+ *
+ * @return 1 if both codition are met
+ */
+ODE_API int dMassCheck(const dMass *m);
 
 ODE_API void dMassSetZero (dMass *);
 
@@ -58,6 +67,10 @@ ODE_API void dMassSetBox (dMass *, dReal density,
 ODE_API void dMassSetBoxTotal (dMass *, dReal total_mass,
 		       dReal lx, dReal ly, dReal lz);
 
+ODE_API void dMassSetTrimesh (dMass *, dReal density, dGeomID g);
+
+ODE_API void dMassSetTrimeshTotal (dMass *m, dReal total_mass, dGeomID g);
+
 ODE_API void dMassAdjust (dMass *, dReal newmass);
 
 ODE_API void dMassTranslate (dMass *, dReal x, dReal y, dReal z);
@@ -66,14 +79,15 @@ ODE_API void dMassRotate (dMass *, const dMatrix3 R);
 
 ODE_API void dMassAdd (dMass *a, const dMass *b);
 
+
 // Backwards compatible API
-#define dMassSetCappedCylinder dMassSetCapsule
-#define dMassSetCappedCylinderTotal dMassSetCapsuleTotal
+ODE_API ODE_API_DEPRECATED void dMassSetCappedCylinder(dMass *a, dReal b, int c, dReal d, dReal e);
+ODE_API ODE_API_DEPRECATED void dMassSetCappedCylinderTotal(dMass *a, dReal b, int c, dReal d, dReal e);
 
 
 struct dMass {
   dReal mass;
-  dVector4 c;
+  dVector3 c;
   dMatrix3 I;
 
 #ifdef __cplusplus
@@ -85,14 +99,32 @@ struct dMass {
 		      dReal I11, dReal I22, dReal I33,
 		      dReal I12, dReal I13, dReal I23)
     { dMassSetParameters (this,themass,cgx,cgy,cgz,I11,I22,I33,I12,I13,I23); }
+
   void setSphere (dReal density, dReal radius)
     { dMassSetSphere (this,density,radius); }
-  void setCapsule (dReal density, int direction, dReal a, dReal b)
-    { dMassSetCappedCylinder (this,density,direction,a,b); }
-  void setCappedCylinder (dReal density, int direction, dReal a, dReal b)
-    { setCapsule(density, direction, a, b); }
+  void setSphereTotal (dReal total, dReal radius)
+    { dMassSetSphereTotal (this,total,radius); }
+
+  void setCapsule (dReal density, int direction, dReal radius, dReal length)
+    { dMassSetCapsule (this,density,direction,radius,length); }
+  void setCapsuleTotal (dReal total, int direction, dReal radius, dReal length)
+    { dMassSetCapsule (this,total,direction,radius,length); }
+
+  void setCylinder(dReal density, int direction, dReal radius, dReal length)
+    { dMassSetCylinder (this,density,direction,radius,length); }
+  void setCylinderTotal(dReal total, int direction, dReal radius, dReal length)
+    { dMassSetCylinderTotal (this,total,direction,radius,length); }
+
   void setBox (dReal density, dReal lx, dReal ly, dReal lz)
     { dMassSetBox (this,density,lx,ly,lz); }
+  void setBoxTotal (dReal total, dReal lx, dReal ly, dReal lz)
+    { dMassSetBoxTotal (this,total,lx,ly,lz); }
+
+  void setTrimesh(dReal density, dGeomID g)
+    { dMassSetTrimesh (this, density, g); }
+  void setTrimeshTotal(dReal total, dGeomID g)
+    { dMassSetTrimeshTotal (this, total, g); }
+
   void adjust (dReal newmass)
     { dMassAdjust (this,newmass); }
   void translate (dReal x, dReal y, dReal z)

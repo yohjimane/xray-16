@@ -30,6 +30,7 @@ spaces
 #include <ode/matrix.h>
 #include <ode/collision_space.h>
 #include <ode/collision.h>
+#include "util.h"
 #include "collision_kernel.h"
 
 #include "collision_space_internal.h"
@@ -46,6 +47,11 @@ spaces
 void dGeomMoved (dxGeom *geom)
 {
   dAASSERT (geom);
+  
+  // if geom is offset, mark it as needing a calculate
+  if (geom->offset_posr) {
+    geom->gflags |= GEOM_POSR_BAD;
+  }
   
   // from the bottom of the space heirarchy up, process all clean geoms
   // turning them into dirty geoms.
@@ -68,7 +74,7 @@ void dGeomMoved (dxGeom *geom)
   }
 }
 
-#define GEOM_ENABLED(g) ((g)->gflags & GEOM_ENABLED)
+#define GEOM_ENABLED(g) (((g)->gflags & GEOM_ENABLE_TEST_MASK) == GEOM_ENABLE_TEST_VALUE)
 
 //****************************************************************************
 // dxSpace
@@ -78,6 +84,8 @@ dxSpace::dxSpace (dSpaceID _space) : dxGeom (_space,0)
   count = 0;
   first = 0;
   cleanup = 1;
+  sublevel = 0;
+  tls_kind = dSPACE_TLS_KIND_INIT_VALUE;
   current_index = 0;
   current_geom = 0;
   lock_count = 0;
@@ -126,31 +134,6 @@ void dxSpace::computeAABB()
   else {
     dSetZero (aabb,6);
   }
-}
-
-
-void dxSpace::setCleanup (int mode)
-{
-  cleanup = (mode != 0);
-}
-
-
-int dxSpace::getCleanup()
-{
-  return cleanup;
-}
-
-
-int dxSpace::query (dxGeom *geom)
-{
-  dAASSERT (geom);
-  return (geom->parent_space == this);
-}
-
-
-int dxSpace::getNumGeoms()
-{
-  return count;
 }
 
 
@@ -313,7 +296,7 @@ void dxSimpleSpace::collide2 (void *data, dxGeom *geom,
 
 // prime[i] is the largest prime smaller than 2^i
 #define NUM_PRIMES 31
-static long int prime[NUM_PRIMES] = {1L,2L,3L,7L,13L,31L,61L,127L,251L,509L,
+static const long int prime[NUM_PRIMES] = {1L,2L,3L,7L,13L,31L,61L,127L,251L,509L,
   1021L,2039L,4093L,8191L,16381L,32749L,65521L,131071L,262139L,
   524287L,1048573L,2097143L,4194301L,8388593L,16777213L,33554393L,
   67108859L,134217689L,268435399L,536870909L,1073741789L};
@@ -493,7 +476,7 @@ void dxHashSpace::collide (void *data, dNearCallback *callback)
   // have been intersection-tested against each other yet. this array can
   // grow large with high n, but oh well...
   int tested_rowsize = (n+7) >> 3;	// number of bytes needed for n bits
-  unsigned char *tested = (unsigned char *) alloca (n * tested_rowsize);
+  unsigned char *tested = (unsigned char *) ALLOCA (n * tested_rowsize);
   memset (tested,0,n * tested_rowsize);
 
   // create a hash table to store all AABBs. each AABB may take up to 8 cells.
@@ -520,7 +503,7 @@ void dxHashSpace::collide (void *data, dNearCallback *callback)
 	  // get the hash index
 	  unsigned long hi = getVirtualAddress (aabb->level,xi,yi,zi) % sz;
 	  // add a new node to the hash table
-	  Node *node = (Node*) alloca (sizeof (Node));
+	  Node *node = (Node*) ALLOCA (sizeof (Node));
 	  node->x = xi;
 	  node->y = yi;
 	  node->z = zi;
@@ -614,7 +597,7 @@ void dxHashSpace::collide2 (void *data, dxGeom *geom,
   
   // intersect bounding boxes
   for (dxGeom *g=first; g; g=g->next) {
-    collideAABBs (g,geom,data,callback);
+    if (GEOM_ENABLED(g)) collideAABBs (g,geom,data,callback);
   }
   
   lock_count--;
@@ -678,6 +661,35 @@ int dSpaceGetCleanup (dxSpace *space)
 }
 
 
+void dSpaceSetSublevel (dSpaceID space, int sublevel)
+{
+  dAASSERT (space);
+  dUASSERT (dGeomIsSpace(space),"argument not a space");
+  space->setSublevel (sublevel);
+}
+
+
+int dSpaceGetSublevel (dSpaceID space)
+{
+  dAASSERT (space);
+  dUASSERT (dGeomIsSpace(space),"argument not a space");
+  return space->getSublevel();
+}
+
+void dSpaceSetManualCleanup (dSpaceID space, int mode)
+{
+	dAASSERT (space);
+	dUASSERT (dGeomIsSpace(space),"argument not a space");
+	space->setManulCleanup(mode);
+}
+
+int dSpaceGetManualCleanup (dSpaceID space)
+{
+	dAASSERT (space);
+	dUASSERT (dGeomIsSpace(space),"argument not a space");
+	return space->getManualCleanup();
+}
+
 void dSpaceAdd (dxSpace *space, dxGeom *g)
 {
   dAASSERT (space);
@@ -725,6 +737,13 @@ dGeomID dSpaceGetGeom (dxSpace *space, int i)
   return space->getGeom (i);
 }
 
+int dSpaceGetClass (dxSpace *space)
+{
+  dAASSERT (space);
+  dUASSERT (dGeomIsSpace(space),"argument not a space");
+  return space->type;
+}
+
 
 void dSpaceCollide (dxSpace *space, void *data, dNearCallback *callback)
 {
@@ -734,52 +753,81 @@ void dSpaceCollide (dxSpace *space, void *data, dNearCallback *callback)
 }
 
 
-void dSpaceCollide2 (dxGeom *g1, dxGeom *g2, void *data,
-		     dNearCallback *callback)
+struct DataCallback {
+        void *data;
+        dNearCallback *callback;
+};
+// Invokes the callback with arguments swapped
+static void swap_callback(void *data, dxGeom *g1, dxGeom *g2)
 {
-  dAASSERT (g1 && g2 && callback);
-  dxSpace *s1,*s2;
+        DataCallback *dc = (DataCallback*)data;
+        dc->callback(dc->data, g2, g1);
+}
 
-  // see if either geom is a space
-  if (IS_SPACE(g1)) s1 = (dxSpace*) g1; else s1 = 0;
-  if (IS_SPACE(g2)) s2 = (dxSpace*) g2; else s2 = 0;
 
-  // handle the four space/geom cases
-  if (s1) {
-    if (s2) {
-      // g1 and g2 are spaces.
-      if (s1==s2) {
-	// collide a space with itself --> interior collision
-	s1->collide (data,callback);
-      }
-      else {
-	// iterate through the space that has the fewest geoms, calling
-	// collide2 in the other space for each one.
-	if (s1->count < s2->count) {
-	  for (dxGeom *g = s1->first; g; g=g->next) {
-	    s2->collide2 (data,g,callback);
-	  }
+void dSpaceCollide2 (dxGeom *g1, dxGeom *g2, void *data,
+					 dNearCallback *callback)
+{
+	dAASSERT (g1 && g2 && callback);
+	dxSpace *s1,*s2;
+
+	// see if either geom is a space
+	if (IS_SPACE(g1)) s1 = (dxSpace*) g1; else s1 = 0;
+	if (IS_SPACE(g2)) s2 = (dxSpace*) g2; else s2 = 0;
+
+	if (s1 && s2) {
+		int l1 = s1->getSublevel();
+		int l2 = s2->getSublevel();
+		if (l1 != l2) {
+			if (l1 > l2) {
+				s2 = 0;
+			} else {
+				s1 = 0;
+			}
+		}
+	}
+
+	// handle the four space/geom cases
+	if (s1) {
+		if (s2) {
+			// g1 and g2 are spaces.
+			if (s1==s2) {
+				// collide a space with itself --> interior collision
+				s1->collide (data,callback);
+			}
+			else {
+				// iterate through the space that has the fewest geoms, calling
+				// collide2 in the other space for each one.
+				if (s1->count < s2->count) {
+					DataCallback dc = {data, callback};
+					for (dxGeom *g = s1->first; g; g=g->next) {
+						s2->collide2 (&dc,g,swap_callback);
+					}
+				}
+				else {
+					for (dxGeom *g = s2->first; g; g=g->next) {
+						s1->collide2 (data,g,callback);
+					}
+				}
+			}
+		}
+		else {
+			// g1 is a space, g2 is a geom
+			s1->collide2 (data,g2,callback);
+		}
 	}
 	else {
-	  for (dxGeom *g = s2->first; g; g=g->next) {
-	    s1->collide2 (data,g,callback);
-	  }
+		if (s2) {
+			// g1 is a geom, g2 is a space
+			DataCallback dc = {data, callback};
+			s2->collide2 (&dc,g1,swap_callback);
+		}
+		else {
+			// g1 and g2 are geoms
+			// make sure they have valid AABBs
+			g1->recomputeAABB();
+			g2->recomputeAABB();
+			collideAABBs(g1,g2, data, callback);
+		}
 	}
-      }
-    }
-    else {
-      // g1 is a space, g2 is a geom
-      s1->collide2 (data,g2,callback);
-    }
-  }
-  else {
-    if (s2) {
-      // g1 is a geom, g2 is a space
-      s2->collide2 (data,g1,callback);
-    }
-    else {
-      // g1 and g2 are geoms, call the callback directly
-      callback (data,g1,g2);
-    }
-  }
 }

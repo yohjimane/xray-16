@@ -51,12 +51,24 @@ typedef struct dxTriMeshData* dTriMeshDataID;
 ODE_API dTriMeshDataID dGeomTriMeshDataCreate(void);
 ODE_API void dGeomTriMeshDataDestroy(dTriMeshDataID g);
 
-enum { TRIMESH_FACE_NORMALS, TRIMESH_LAST_TRANSFORMATION };
-ODE_API void dGeomTriMeshDataSet(dTriMeshDataID g, int data_id, void* in_data);
 
+
+enum { TRIMESH_FACE_NORMALS };
+ODE_API void dGeomTriMeshDataSet(dTriMeshDataID g, int data_id, void* in_data);
+ODE_API void* dGeomTriMeshDataGet(dTriMeshDataID g, int data_id);
+
+
+
+/**
+ * We need to set the last transform after each time step for 
+ * accurate collision response. These functions get and set that transform.
+ * It is stored per geom instance, rather than per dTriMeshDataID.
+ */
+ODE_API void dGeomTriMeshSetLastTransform( dGeomID g, dMatrix4 last_trans );
+ODE_API dReal* dGeomTriMeshGetLastTransform( dGeomID g );
 
 /*
- * Build TriMesh data with single pricision used in vertex data .
+ * Build a TriMesh data object with single precision vertex data.
  */
 ODE_API void dGeomTriMeshDataBuildSingle(dTriMeshDataID g,
                                  const void* Vertices, int VertexStride, int VertexCount, 
@@ -67,7 +79,7 @@ ODE_API void dGeomTriMeshDataBuildSingle1(dTriMeshDataID g,
                                   const void* Indices, int IndexCount, int TriStride,
                                   const void* Normals);
 /*
-* Build TriMesh data with double pricision used in vertex data .
+* Build a TriMesh data object with double precision vertex data.
 */
 ODE_API void dGeomTriMeshDataBuildDouble(dTriMeshDataID g, 
                                  const void* Vertices,  int VertexStride, int VertexCount, 
@@ -83,12 +95,20 @@ ODE_API void dGeomTriMeshDataBuildDouble1(dTriMeshDataID g,
  */
 ODE_API void dGeomTriMeshDataBuildSimple(dTriMeshDataID g,
                                  const dReal* Vertices, int VertexCount,
-                                 const int* Indices, int IndexCount);
+                                 const dTriIndex* Indices, int IndexCount);
 /* same again with a normals array (used as trimesh-trimesh optimization) */
 ODE_API void dGeomTriMeshDataBuildSimple1(dTriMeshDataID g,
                                   const dReal* Vertices, int VertexCount,
-                                  const int* Indices, int IndexCount,
+                                  const dTriIndex* Indices, int IndexCount,
                                   const int* Normals);
+
+/* Preprocess the trimesh data to remove mark unnecessary edges and vertices */
+ODE_API void dGeomTriMeshDataPreprocess(dTriMeshDataID g);
+/* Get and set the internal preprocessed trimesh data buffer, for loading and saving */
+ODE_API void dGeomTriMeshDataGetBuffer(dTriMeshDataID g, unsigned char** buf, int* bufLen);
+ODE_API void dGeomTriMeshDataSetBuffer(dTriMeshDataID g, unsigned char* buf);
+
+
 /*
  * Per triangle callback. Allows the user to say if he wants a collision with
  * a particular triangle.
@@ -116,12 +136,25 @@ ODE_API void dGeomTriMeshSetRayCallback(dGeomID g, dTriRayCallback* Callback);
 ODE_API dTriRayCallback* dGeomTriMeshGetRayCallback(dGeomID g);
 
 /*
+ * Triangle merging callback.
+ * Allows the user to generate a fake triangle index for a new contact generated
+ * from merging of two other contacts. That index could later be used by the 
+ * user to determine attributes of original triangles used as sources for a 
+ * merged contact.
+ */
+typedef int dTriTriMergeCallback(dGeomID TriMesh, int FirstTriangleIndex, int SecondTriangleIndex);
+ODE_API void dGeomTriMeshSetTriMergeCallback(dGeomID g, dTriTriMergeCallback* Callback);
+ODE_API dTriTriMergeCallback* dGeomTriMeshGetTriMergeCallback(dGeomID g);
+
+/*
  * Trimesh class
  * Construction. Callbacks are optional.
  */
 ODE_API dGeomID dCreateTriMesh(dSpaceID space, dTriMeshDataID Data, dTriCallback* Callback, dTriArrayCallback* ArrayCallback, dTriRayCallback* RayCallback);
 
 ODE_API void dGeomTriMeshSetData(dGeomID g, dTriMeshDataID Data);
+ODE_API dTriMeshDataID dGeomTriMeshGetData(dGeomID g);
+
 
 // enable/disable/check temporal coherence
 ODE_API void dGeomTriMeshEnableTC(dGeomID g, int geomClass, int enable);
@@ -171,7 +204,9 @@ int TriStride = sizeof(StridedTri);
 */
 
 
+ODE_API int dGeomTriMeshGetTriangleCount (dGeomID g);
 
+ODE_API void dGeomTriMeshDataUpdate(dTriMeshDataID g);
 
 #ifdef __cplusplus
 }

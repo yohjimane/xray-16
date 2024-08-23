@@ -32,6 +32,8 @@ TODO
 
 #include <ode/common.h>
 #include <ode/timer.h>
+#include "config.h"
+#include "util.h"
 
 // misc defines
 #define ALLOCA dALLOCA16
@@ -189,8 +191,8 @@ static inline void getClockCount (unsigned long cc[2])
 
 #else // macintosh
 
-#include <MacTypes.h>
-#include <Timer.h>
+#include <CoreServices/CoreServices.h>
+#include <ode/Timer.h>
 
 static inline void getClockCount (unsigned long cc[2])
 {
@@ -308,7 +310,7 @@ static void initSlots()
 void dTimerStart (const char *description)
 {
   initSlots();
-  event[0].description = description;
+  event[0].description = const_cast<char*> (description);
   num = 1;
   serialize();
   getClockCount (event[0].cc);
@@ -320,7 +322,7 @@ void dTimerNow (const char *description)
   if (num < MAXNUM) {
     // do not serialize
     getClockCount (event[num].cc);
-    event[num].description = description;
+    event[num].description = const_cast<char*> (description);
     num++;
   }
 }
@@ -361,6 +363,7 @@ static void fprintDoubleWithPrefix (FILE *f, double a, const char *fmt)
   fprintf (f,fmt,a);
   fprintf (f,"n");
 }
+
 
 void dTimerReport (FILE *fout, int average)
 {
@@ -407,7 +410,7 @@ void dTimerReport (FILE *fout, int average)
       t = total;
       p = 100.0;
     }
-    fprintf (fout,"%-*s %7.2fms %6.2f%%",maxl,event[i].description,
+    fprintf (fout,"%-*s %7.2fms %6.2f%%",(int)maxl,event[i].description,
 	     t*ccunit * 1000.0, p);
     if (average && i < (num-1)) {
       fprintf (fout,"  (avg %7.2fms %6.2f%%)",

@@ -37,6 +37,73 @@
  */
 #define dACCESS33(A,i,j) ((A)[(i)*4+(j)])
 
+/*
+ * Macro to test for valid floating point values
+ */
+#define dVALIDVEC3(v) (!(dIsNan(v[0]) || dIsNan(v[1]) || dIsNan(v[2])))
+#define dVALIDVEC4(v) (!(dIsNan(v[0]) || dIsNan(v[1]) || dIsNan(v[2]) || dIsNan(v[3])))
+#define dVALIDMAT3(m) (!(dIsNan(m[0]) || dIsNan(m[1]) || dIsNan(m[2]) || dIsNan(m[3]) || dIsNan(m[4]) || dIsNan(m[5]) || dIsNan(m[6]) || dIsNan(m[7]) || dIsNan(m[8]) || dIsNan(m[9]) || dIsNan(m[10]) || dIsNan(m[11])))
+#define dVALIDMAT4(m) (!(dIsNan(m[0]) || dIsNan(m[1]) || dIsNan(m[2]) || dIsNan(m[3]) || dIsNan(m[4]) || dIsNan(m[5]) || dIsNan(m[6]) || dIsNan(m[7]) || dIsNan(m[8]) || dIsNan(m[9]) || dIsNan(m[10]) || dIsNan(m[11]) || dIsNan(m[12]) || dIsNan(m[13]) || dIsNan(m[14]) || dIsNan(m[15]) ))
+
+
+
+/*
+ * General purpose vector operations with other vectors or constants.
+ */
+
+#define dOP(a,op,b,c) do { \
+    (a)[0] = ((b)[0]) op ((c)[0]); \
+    (a)[1] = ((b)[1]) op ((c)[1]); \
+    (a)[2] = ((b)[2]) op ((c)[2]); \
+    } while (0)
+#define dOPC(a,op,b,c) do { \
+    (a)[0] = ((b)[0]) op (c); \
+    (a)[1] = ((b)[1]) op (c); \
+    (a)[2] = ((b)[2]) op (c); \
+    } while (0)
+#define dOPE(a,op,b) do {\
+    (a)[0] op ((b)[0]); \
+    (a)[1] op ((b)[1]); \
+    (a)[2] op ((b)[2]); \
+    } while (0)
+#define dOPEC(a,op,c) do { \
+    (a)[0] op (c); \
+    (a)[1] op (c); \
+    (a)[2] op (c); \
+    } while (0)
+
+/// Define an equation with operatos
+/// For example this function can be used to replace
+/// <PRE>
+/// for (int i=0; i<3; ++i)
+///   a[i] += b[i] + c[i];
+/// </PRE>
+#define dOPE2(a,op1,b,op2,c) do { \
+    (a)[0] op1 ((b)[0]) op2 ((c)[0]); \
+    (a)[1] op1 ((b)[1]) op2 ((c)[1]); \
+    (a)[2] op1 ((b)[2]) op2 ((c)[2]); \
+    } while (0)
+
+/*
+ * Length, and squared length helpers. dLENGTH returns the length of a dVector3.
+ * dLENGTHSQUARED return the squared length of a dVector3.
+ */
+
+#define dLENGTHSQUARED(a) (((a)[0])*((a)[0]) + ((a)[1])*((a)[1]) + ((a)[2])*((a)[2]))
+
+#ifdef __cplusplus
+
+PURE_INLINE dReal dLENGTH (const dReal *a) { return dSqrt(dLENGTHSQUARED(a)); }
+
+#else
+
+#define dLENGTH(a) ( dSqrt( ((a)[0])*((a)[0]) + ((a)[1])*((a)[1]) + ((a)[2])*((a)[2]) ) )
+
+#endif /* __cplusplus */
+
+
+
+
 
 /*
  * 3-way dot product. dDOTpq means that elements of `a' and `b' are spaced
@@ -78,13 +145,17 @@ PURE_INLINE dReal dDOT44 (const dReal *a, const dReal *b) { return dDOTpq(a,b,4,
  */
 
 #define dCROSS(a,op,b,c) \
+do { \
   (a)[0] op ((b)[1]*(c)[2] - (b)[2]*(c)[1]); \
   (a)[1] op ((b)[2]*(c)[0] - (b)[0]*(c)[2]); \
-  (a)[2] op ((b)[0]*(c)[1] - (b)[1]*(c)[0]);
+  (a)[2] op ((b)[0]*(c)[1] - (b)[1]*(c)[0]); \
+} while(0)
 #define dCROSSpqr(a,op,b,c,p,q,r) \
+do { \
   (a)[  0] op ((b)[  q]*(c)[2*r] - (b)[2*q]*(c)[  r]); \
   (a)[  p] op ((b)[2*q]*(c)[  0] - (b)[  0]*(c)[2*r]); \
-  (a)[2*p] op ((b)[  0]*(c)[  r] - (b)[  q]*(c)[  0]);
+  (a)[2*p] op ((b)[  0]*(c)[  r] - (b)[  q]*(c)[  0]); \
+} while(0)
 #define dCROSS114(a,op,b,c) dCROSSpqr(a,op,b,c,1,1,4)
 #define dCROSS141(a,op,b,c) dCROSSpqr(a,op,b,c,1,4,1)
 #define dCROSS144(a,op,b,c) dCROSSpqr(a,op,b,c,1,4,4)
@@ -103,22 +174,22 @@ PURE_INLINE dReal dDOT44 (const dReal *a, const dReal *b) { return dDOTpq(a,b,4,
  */
 
 #define dCROSSMAT(A,a,skip,plus,minus) \
+do { \
   (A)[1] = minus (a)[2]; \
   (A)[2] = plus (a)[1]; \
   (A)[(skip)+0] = plus (a)[2]; \
   (A)[(skip)+2] = minus (a)[0]; \
   (A)[2*(skip)+0] = minus (a)[1]; \
-  (A)[2*(skip)+1] = plus (a)[0];
+  (A)[2*(skip)+1] = plus (a)[0]; \
+} while(0)
 
 
 /*
- * compute the distance between two 3-vectors
+ * compute the distance between two 3D-vectors
  */
 
 #ifdef __cplusplus
-PURE_INLINE float dDISTANCE (const float a[3], const float b[3])
-	{ return (float) dSqrt( (a[0]-b[0])*(a[0]-b[0]) + (a[1]-b[1])*(a[1]-b[1]) + (a[2]-b[2])*(a[2]-b[2]) ); }
-PURE_INLINE double dDISTANCE (const double a[3], const double b[3])
+PURE_INLINE dReal dDISTANCE (const dVector3 a, const dVector3 b)
 	{ return dSqrt( (a[0]-b[0])*(a[0]-b[0]) + (a[1]-b[1])*(a[1]-b[1]) + (a[2]-b[2])*(a[2]-b[2]) ); }
 #else
 #define dDISTANCE(a,b) \
@@ -131,18 +202,25 @@ PURE_INLINE double dDISTANCE (const double a[3], const double b[3])
  */
 
 #define dMULTIPLYOP0_331(A,op,B,C) \
+do { \
   (A)[0] op dDOT((B),(C)); \
   (A)[1] op dDOT((B+4),(C)); \
-  (A)[2] op dDOT((B+8),(C));
+  (A)[2] op dDOT((B+8),(C)); \
+} while(0)
 #define dMULTIPLYOP1_331(A,op,B,C) \
+do { \
   (A)[0] op dDOT41((B),(C)); \
   (A)[1] op dDOT41((B+1),(C)); \
-  (A)[2] op dDOT41((B+2),(C));
+  (A)[2] op dDOT41((B+2),(C)); \
+} while(0)
 #define dMULTIPLYOP0_133(A,op,B,C) \
+do { \
   (A)[0] op dDOT14((B),(C)); \
   (A)[1] op dDOT14((B),(C+1)); \
-  (A)[2] op dDOT14((B),(C+2));
+  (A)[2] op dDOT14((B),(C+2)); \
+} while(0)
 #define dMULTIPLYOP0_333(A,op,B,C) \
+do { \
   (A)[0] op dDOT14((B),(C)); \
   (A)[1] op dDOT14((B),(C+1)); \
   (A)[2] op dDOT14((B),(C+2)); \
@@ -151,8 +229,10 @@ PURE_INLINE double dDISTANCE (const double a[3], const double b[3])
   (A)[6] op dDOT14((B+4),(C+2)); \
   (A)[8] op dDOT14((B+8),(C)); \
   (A)[9] op dDOT14((B+8),(C+1)); \
-  (A)[10] op dDOT14((B+8),(C+2));
+  (A)[10] op dDOT14((B+8),(C+2)); \
+} while(0)
 #define dMULTIPLYOP1_333(A,op,B,C) \
+do { \
   (A)[0] op dDOT44((B),(C)); \
   (A)[1] op dDOT44((B),(C+1)); \
   (A)[2] op dDOT44((B),(C+2)); \
@@ -161,8 +241,10 @@ PURE_INLINE double dDISTANCE (const double a[3], const double b[3])
   (A)[6] op dDOT44((B+1),(C+2)); \
   (A)[8] op dDOT44((B+2),(C)); \
   (A)[9] op dDOT44((B+2),(C+1)); \
-  (A)[10] op dDOT44((B+2),(C+2));
+  (A)[10] op dDOT44((B+2),(C+2)); \
+} while(0)
 #define dMULTIPLYOP2_333(A,op,B,C) \
+do { \
   (A)[0] op dDOT((B),(C)); \
   (A)[1] op dDOT((B),(C+4)); \
   (A)[2] op dDOT((B),(C+8)); \
@@ -171,25 +253,31 @@ PURE_INLINE double dDISTANCE (const double a[3], const double b[3])
   (A)[6] op dDOT((B+4),(C+8)); \
   (A)[8] op dDOT((B+8),(C)); \
   (A)[9] op dDOT((B+8),(C+4)); \
-  (A)[10] op dDOT((B+8),(C+8));
+  (A)[10] op dDOT((B+8),(C+8)); \
+} while(0)
 
 #ifdef __cplusplus
 
 #define DECL template <class TA, class TB, class TC> PURE_INLINE void
 
-DECL dMULTIPLY0_331(TA *A, const TB *B, const TC *C) { dMULTIPLYOP0_331(A,=,B,C) }
-DECL dMULTIPLY1_331(TA *A, const TB *B, const TC *C) { dMULTIPLYOP1_331(A,=,B,C) }
-DECL dMULTIPLY0_133(TA *A, const TB *B, const TC *C) { dMULTIPLYOP0_133(A,=,B,C) }
-DECL dMULTIPLY0_333(TA *A, const TB *B, const TC *C) { dMULTIPLYOP0_333(A,=,B,C) }
-DECL dMULTIPLY1_333(TA *A, const TB *B, const TC *C) { dMULTIPLYOP1_333(A,=,B,C) }
-DECL dMULTIPLY2_333(TA *A, const TB *B, const TC *C) { dMULTIPLYOP2_333(A,=,B,C) }
+/* 
+Note: NEVER call any of these functions/macros with the same variable for A and C, 
+it is not equivalent to A*=B.
+*/
 
-DECL dMULTIPLYADD0_331(TA *A, const TB *B, const TC *C) { dMULTIPLYOP0_331(A,+=,B,C) }
-DECL dMULTIPLYADD1_331(TA *A, const TB *B, const TC *C) { dMULTIPLYOP1_331(A,+=,B,C) }
-DECL dMULTIPLYADD0_133(TA *A, const TB *B, const TC *C) { dMULTIPLYOP0_133(A,+=,B,C) }
-DECL dMULTIPLYADD0_333(TA *A, const TB *B, const TC *C) { dMULTIPLYOP0_333(A,+=,B,C) }
-DECL dMULTIPLYADD1_333(TA *A, const TB *B, const TC *C) { dMULTIPLYOP1_333(A,+=,B,C) }
-DECL dMULTIPLYADD2_333(TA *A, const TB *B, const TC *C) { dMULTIPLYOP2_333(A,+=,B,C) }
+DECL dMULTIPLY0_331(TA *A, const TB *B, const TC *C) { dMULTIPLYOP0_331(A,=,B,C); }
+DECL dMULTIPLY1_331(TA *A, const TB *B, const TC *C) { dMULTIPLYOP1_331(A,=,B,C); }
+DECL dMULTIPLY0_133(TA *A, const TB *B, const TC *C) { dMULTIPLYOP0_133(A,=,B,C); }
+DECL dMULTIPLY0_333(TA *A, const TB *B, const TC *C) { dMULTIPLYOP0_333(A,=,B,C); }
+DECL dMULTIPLY1_333(TA *A, const TB *B, const TC *C) { dMULTIPLYOP1_333(A,=,B,C); }
+DECL dMULTIPLY2_333(TA *A, const TB *B, const TC *C) { dMULTIPLYOP2_333(A,=,B,C); }
+
+DECL dMULTIPLYADD0_331(TA *A, const TB *B, const TC *C) { dMULTIPLYOP0_331(A,+=,B,C); }
+DECL dMULTIPLYADD1_331(TA *A, const TB *B, const TC *C) { dMULTIPLYOP1_331(A,+=,B,C); }
+DECL dMULTIPLYADD0_133(TA *A, const TB *B, const TC *C) { dMULTIPLYOP0_133(A,+=,B,C); }
+DECL dMULTIPLYADD0_333(TA *A, const TB *B, const TC *C) { dMULTIPLYOP0_333(A,+=,B,C); }
+DECL dMULTIPLYADD1_333(TA *A, const TB *B, const TC *C) { dMULTIPLYOP1_333(A,+=,B,C); }
+DECL dMULTIPLYADD2_333(TA *A, const TB *B, const TC *C) { dMULTIPLYOP2_333(A,+=,B,C); }
 
 #undef DECL
 
@@ -219,21 +307,43 @@ extern "C" {
 /*
  * normalize 3x1 and 4x1 vectors (i.e. scale them to unit length)
  */
-ODE_API void dNormalize3_slow (dVector3 a); // XXX: original
-ODE_API void dNormalize4 (dVector4 a);
 
-inline void dNormalize3 (dVector3 a) // XXX: GSC custom
+#if defined(__ODE__)
+
+int  _dSafeNormalize3 (dVector3 a);
+int  _dSafeNormalize4 (dVector4 a);
+	
+static __inline void _dNormalize3(dVector3 a)
 {
-	dReal	sqr_magnitude	= a[0]*a[0] + a[1]*a[1] + a[2]*a[2];
-	dReal	epsilon			= 1.192092896e-05F;
-	if		(sqr_magnitude < epsilon)	dNormalize3_slow	(a)	;
-	else	{
-		dReal	l	=	dRecipSqrt(sqr_magnitude);
-		a[0]		*=	l;
-		a[1]		*=	l;
-		a[2]		*=	l;
-	}	
+	int bNormalizationResult = _dSafeNormalize3(a);
+	dIASSERT(bNormalizationResult);
+	dVARIABLEUSED(bNormalizationResult);
 }
+
+static __inline void _dNormalize4(dVector4 a)
+{
+	int bNormalizationResult = _dSafeNormalize4(a);
+	dIASSERT(bNormalizationResult);
+	dVARIABLEUSED(bNormalizationResult);
+}
+
+#endif // defined(__ODE__)
+
+// For DLL export
+ODE_API int  dSafeNormalize3 (dVector3 a);
+ODE_API int  dSafeNormalize4 (dVector4 a);
+ODE_API void dNormalize3 (dVector3 a); // Potentially asserts on zero vec
+ODE_API void dNormalize4 (dVector4 a); // Potentially asserts on zero vec
+
+#if defined(__ODE__)
+
+// For internal use
+#define dSafeNormalize3(a) _dSafeNormalize3(a)
+#define dSafeNormalize4(a) _dSafeNormalize4(a)
+#define dNormalize3(a) _dNormalize3(a)
+#define dNormalize4(a) _dNormalize4(a)
+
+#endif // defined(__ODE__)
 
 /*
  * given a unit length "normal" vector n, generate vectors p and q vectors
@@ -244,6 +354,10 @@ inline void dNormalize3 (dVector3 a) // XXX: GSC custom
  */
 
 ODE_API void dPlaneSpace (const dVector3 n, dVector3 p, dVector3 q);
+/* Makes sure the matrix is a proper rotation */
+ODE_API void dOrthogonalizeR(dMatrix3 m);
+
+
 
 #ifdef __cplusplus
 }

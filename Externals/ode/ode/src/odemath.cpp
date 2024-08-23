@@ -22,8 +22,21 @@
 
 #include <ode/common.h>
 #include <ode/odemath.h>
+
+// get some math functions under windows
+#ifdef WIN32
 #include <float.h>
-#include <cmath>
+#ifndef CYGWIN			// added by andy for cygwin
+#undef copysign
+#define copysign(a,b) ((dReal)_copysign(a,b))
+#endif				// added by andy for cygwin
+#endif
+
+#undef dSafeNormalize3
+#undef dSafeNormalize4
+#undef dNormalize3
+#undef dNormalize4
+
 
 // this may be called for vectors `a' with extremely small magnitude, for
 // example the result of a cross product on two nearly perpendicular vectors.
@@ -33,63 +46,57 @@
 // scale the components by 1/l. this has been verified to work with vectors
 // containing the smallest representable numbers.
 
-void dNormalize3_slow (dVector3 a)
+int _dSafeNormalize3 (dVector3 a)
 {
-	dReal a0,a1,a2,aa0,aa1,aa2,l;
-	dAASSERT (a);
-	a0 = a[0];
-	a1 = a[1];
-	a2 = a[2];
-	aa0 = dFabs(a0);
-	aa1 = dFabs(a1);
-	aa2 = dFabs(a2);
-	if (aa1 > aa0) {
-		if (aa2 > aa1) {
-			goto aa2_largest;
-		}
-		else {		// aa1 is largest
-			a0 /= aa1;
-			a2 /= aa1;
-			l = dRecipSqrt (a0*a0 + a2*a2 + 1);
-			a[0] = a0*l;
-			a[1] = (dReal)std::copysign(l,a1);
-			a[2] = a2*l;
-		}
-	}
-	else {
-		if (aa2 > aa0) {
-aa2_largest:	// aa2 is largest
-			a0 /= aa2;
-			a1 /= aa2;
-			l = dRecipSqrt (a0*a0 + a1*a1 + 1);
-			a[0] = a0*l;
-			a[1] = a1*l;
-			a[2] = (dReal)std::copysign(l,a2);
-		}
-		else {		// aa0 is largest
-			if (aa0 <= 0) {
-				// dDEBUGMSG ("vector has zero size"); ... this messace is annoying
-				a[0] = 1;	// if all a's are zero, this is where we'll end up.
-				a[1] = 0;	// return a default unit length vector.
-				a[2] = 0;
-				return;
-			}
-			a1 /= aa0;
-			a2 /= aa0;
-			l = dRecipSqrt (a1*a1 + a2*a2 + 1);
-			a[0] = (dReal)std::copysign(l,a0);
-			a[1] = a1*l;
-			a[2] = a2*l;
-		}
-	}
-}
+  dAASSERT (a);
 
+  int idx;
+  dReal aa[3], l;
+
+  aa[0] = dFabs(a[0]);
+  aa[1] = dFabs(a[1]);
+  aa[2] = dFabs(a[2]);
+  if (aa[1] > aa[0]) {
+    if (aa[2] > aa[1]) { // aa[2] is largest
+      idx = 2;
+    }
+    else {              // aa[1] is largest
+      idx = 1;
+    }
+  }
+  else {
+    if (aa[2] > aa[0]) {// aa[2] is largest
+      idx = 2;
+    }
+    else {              // aa[0] might be the largest
+      if (aa[0] <= 0) { // aa[0] might is largest
+	a[0] = 1;	// if all a's are zero, this is where we'll end up.
+	a[1] = 0;	// return a default unit length vector.
+	a[2] = 0;
+	return 0;
+      }
+      else {
+        idx = 0;
+      }
+    }
+  }
+
+  a[0] /= aa[idx];
+  a[1] /= aa[idx];
+  a[2] /= aa[idx];
+  l = dRecipSqrt (a[0]*a[0] + a[1]*a[1] + a[2]*a[2]);
+  a[0] *= l;
+  a[1] *= l;
+  a[2] *= l;
+  
+  return 1;
+}
 
 /* OLD VERSION */
 /*
 void dNormalize3 (dVector3 a)
 {
-  dASSERT (a);
+  dIASSERT (a);
   dReal l = dDOT(a,a);
   if (l > 0) {
     l = dRecipSqrt(l);
@@ -105,8 +112,18 @@ void dNormalize3 (dVector3 a)
 }
 */
 
+int  dSafeNormalize3 (dVector3 a)
+{
+	return _dSafeNormalize3(a);
+}
 
-void dNormalize4 (dVector4 a)
+void dNormalize3(dVector3 a)
+{
+	_dNormalize3(a);
+}
+
+
+int _dSafeNormalize4 (dVector4 a)
 {
   dAASSERT (a);
   dReal l = dDOT(a,a)+a[3]*a[3];
@@ -116,14 +133,25 @@ void dNormalize4 (dVector4 a)
     a[1] *= l;
     a[2] *= l;
     a[3] *= l;
+	return 1;
   }
   else {
-    dDEBUGMSG ("vector has zero size");
     a[0] = 1;
     a[1] = 0;
     a[2] = 0;
     a[3] = 0;
+    return 0;
   }
+}
+
+int  dSafeNormalize4 (dVector4 a)
+{
+	return _dSafeNormalize4(a);
+}
+
+void dNormalize4(dVector4 a)
+{
+	_dNormalize4(a);
 }
 
 
@@ -154,4 +182,35 @@ void dPlaneSpace (const dVector3 n, dVector3 p, dVector3 q)
     q[1] = n[2]*p[0];
     q[2] = a*k;
   }
+}
+
+
+/*
+* This takes what is supposed to be a rotation matrix,
+* and make sure it is correct.
+* Note: this operates on rows, not columns, because for rotations
+* both ways give equivalent results.
+*/
+void dOrthogonalizeR(dMatrix3 m)
+{
+	dReal n0 = dLENGTHSQUARED(m);
+	if (n0 != 1)
+		dSafeNormalize3(m);
+
+	// project row[0] on row[1], should be zero
+	dReal proj = dDOT(m, m+4);
+	if (proj != 0) {
+		// Gram-Schmidt step on row[1]
+		m[4] -= proj * m[0];
+		m[5] -= proj * m[1];
+		m[6] -= proj * m[2];
+	}
+	dReal n1 = dLENGTHSQUARED(m+4);
+	if (n1 != 1)
+		dSafeNormalize3(m+4);
+
+	/* just overwrite row[2], this makes sure the matrix is not
+	a reflection */
+	dCROSS(m+8, =, m, m+4);
+	m[3] = m[4+3] = m[8+3] = 0;
 }

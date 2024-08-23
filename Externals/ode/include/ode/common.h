@@ -22,16 +22,9 @@
 
 #ifndef _ODE_COMMON_H_
 #define _ODE_COMMON_H_
-#include <ode/config.h>
+#include <ode/odeconfig.h>
 #include <ode/error.h>
 #include <math.h>
-
-#if __has_include(<alloca.h>)
-#include <alloca.h> // for alloca under Linux
-#endif
-#if __has_include(<malloc.h>)
-#include <malloc.h> // for alloca under Windows
-#endif
 
 #ifdef __cplusplus
 extern "C" {
@@ -39,18 +32,6 @@ extern "C" {
 
 
 /* configuration stuff */
-
-/* the efficient alignment. most platforms align data structures to some
- * number of bytes, but this is not always the most efficient alignment.
- * for example, many x86 compilers align to 4 bytes, but on a pentium it
- * is important to align doubles to 8 byte boundaries (for speed), and
- * the 4 floats in a SIMD register to 16 byte boundaries. many other
- * platforms have similar behavior. setting a larger alignment can waste
- * a (very) small amount of memory. NOTE: this number must be a power of
- * two. this is set to 16 by default.
- */
-#define EFFICIENT_ALIGNMENT 16
-
 
 /* constants */
 
@@ -77,38 +58,65 @@ extern "C" {
  */
 
 #ifndef dNODEBUG
-#ifdef __GNUC__
-#define dIASSERT(a) if (!(a)) dDebug (d_ERR_IASSERT, \
-  "assertion \"" #a "\" failed in %s() [%s]",__FUNCTION__,__FILE__);
-#define dUASSERT(a,msg) if (!(a)) dDebug (d_ERR_UASSERT, \
-  msg " in %s()", __FUNCTION__);
-#define dDEBUGMSG(msg) dMessage (d_ERR_UASSERT, \
-  msg " in %s()", __FUNCTION__);
+#  if defined(__STDC__) && __STDC_VERSION__ >= 199901L
+#    define __FUNCTION__ __func__
+#  endif
+#  ifdef __GNUC__
+#    define dIASSERT(a) if (!(a)) dDebug (d_ERR_IASSERT, \
+       "assertion \"" #a "\" failed in %s() [%s]",__FUNCTION__,__FILE__);
+#    define dUASSERT(a,msg) if (!(a)) dDebug (d_ERR_UASSERT, \
+       msg " in %s()", __FUNCTION__);
+#    define dDEBUGMSG(msg) dMessage (d_ERR_UASSERT,				\
+       msg " in %s() File %s Line %d", __FUNCTION__, __FILE__,__LINE__);
+#  else // not __GNUC__
+#    define dIASSERT(a) if (!(a)) dDebug (d_ERR_IASSERT, \
+       "assertion \"" #a "\" failed in %s:%d",__FILE__,__LINE__);
+#    define dUASSERT(a,msg) if (!(a)) dDebug (d_ERR_UASSERT, \
+       msg " (%s:%d)", __FILE__,__LINE__);
+#    define dDEBUGMSG(msg) dMessage (d_ERR_UASSERT, \
+       msg " (%s:%d)", __FILE__,__LINE__);
+#  endif
 #else
-#define dIASSERT(a) if (!(a)) dDebug (d_ERR_IASSERT, \
-  "assertion \"" #a "\" failed in %s:%d",__FILE__,__LINE__);
-#define dUASSERT(a,msg) if (!(a)) dDebug (d_ERR_UASSERT, \
-  msg " (%s:%d)", __FILE__,__LINE__);
-#define dDEBUGMSG(msg) dMessage (d_ERR_UASSERT, \
-  msg " (%s:%d)", __FILE__,__LINE__);
-#endif
-#else
-#define dIASSERT(a) ;
-#define dUASSERT(a,msg) ;
-#define dDEBUGMSG(msg) ;
+#  define dIASSERT(a) ;
+#  define dUASSERT(a,msg) ;
+#  define dDEBUGMSG(msg) ;
 #endif
 #define dAASSERT(a) dUASSERT(a,"Bad argument(s)")
+
+// Macro used to suppress unused variable warning
+#define dVARIABLEUSED(a) ((void)a)
 
 /* floating point data type, vector, matrix and quaternion types */
 
 #if defined(dSINGLE)
 typedef float dReal;
+#ifdef dDOUBLE
+#error You can only #define dSINGLE or dDOUBLE, not both.
+#endif // dDOUBLE
 #elif defined(dDOUBLE)
 typedef double dReal;
 #else
 #error You must #define dSINGLE or dDOUBLE
 #endif
 
+// Detect if we've got both trimesh engines enabled.
+#if dTRIMESH_ENABLED
+#if dTRIMESH_OPCODE && dTRIMESH_GIMPACT
+#error You can only #define dTRIMESH_OPCODE or dTRIMESH_GIMPACT, not both.
+#endif
+#endif // dTRIMESH_ENABLED
+
+// Define a type for indices, either 16 or 32 bit, based on build option
+// TODO: Currently GIMPACT only supports 32 bit indices.
+#if dTRIMESH_16BIT_INDICES
+#if dTRIMESH_GIMPACT
+typedef uint32 dTriIndex;
+#else // dTRIMESH_GIMPACT
+typedef uint16 dTriIndex;
+#endif // dTRIMESH_GIMPACT
+#else // dTRIMESH_16BIT_INDICES
+typedef uint32 dTriIndex;
+#endif // dTRIMESH_16BIT_INDICES
 
 /* round an integer up to a multiple of 4, except that 0 and 1 are unmodified
  * (used to compute matrix leading dimensions)
@@ -129,15 +137,36 @@ typedef dReal dQuaternion[4];
 #if defined(dSINGLE)
 
 #define REAL(x) (x ## f)					/* form a constant */
-#define dRecip(x) ((float)(1.0f/(x)))				/* reciprocal */
-#define dSqrt(x) ((float)sqrtf(float(x)))			/* square root */
-#define dRecipSqrt(x) ((float)(1.0f/sqrtf(float(x))))		/* reciprocal square root */
-#define dSin(x) ((float)sinf(float(x)))				/* sine */
-#define dCos(x) ((float)cosf(float(x)))				/* cosine */
-#define dFabs(x) ((float)fabsf(float(x)))			/* absolute value */
-#define dAtan2(y,x) ((float)atan2f(float(y),float(x)))		/* arc tangent with 2 args */
-#define dFMod(a,b) ((float)fmodf(float(a),float(b)))		/* modulo */
-#define dCopySign(a,b) ((float)copysignf(float(a),float(b)))
+#define dRecip(x) ((1.0f/(x)))				/* reciprocal */
+#define dSqrt(x) (sqrtf(x))			/* square root */
+#define dRecipSqrt(x) ((1.0f/sqrtf(x)))		/* reciprocal square root */
+#define dSin(x) (sinf(x))				/* sine */
+#define dCos(x) (cosf(x))				/* cosine */
+#define dFabs(x) (fabsf(x))			/* absolute value */
+#define dAtan2(y,x) (atan2f(y,x))		/* arc tangent with 2 args */
+#define dFMod(a,b) (fmodf(a,b))		/* modulo */
+#define dFloor(x) floorf(x)			/* floor */
+
+#ifdef HAVE___ISNANF
+#define dIsNan(x) (__isnanf(x))
+#elif defined(HAVE__ISNANF)
+#define dIsNan(x) (_isnanf(x))
+#elif defined(HAVE_ISNANF)
+#define dIsNan(x) (isnanf(x))
+#else
+  /*
+     fall back to _isnan which is the VC way,
+     this may seem redundant since we already checked
+     for _isnan before, but if isnan is detected by
+     configure but is not found during compilation
+     we should always make sure we check for __isnanf,
+     _isnanf and isnanf in that order before falling
+     back to a default
+  */
+#define dIsNan(x) (_isnan(x))
+#endif
+
+#define dCopySign(a,b) ((dReal)copysignf(a,b))
 
 #elif defined(dDOUBLE)
 
@@ -150,28 +179,23 @@ typedef dReal dQuaternion[4];
 #define dFabs(x) fabs(x)
 #define dAtan2(y,x) atan2((y),(x))
 #define dFMod(a,b) (fmod((a),(b)))
+#define dFloor(x) floor(x)
+
+#ifdef HAVE___ISNAN
+#define dIsNan(x) (__isnan(x))
+#elif defined(HAVE__ISNAN)
+#define dIsNan(x) (_isnan(x))
+#elif defined(HAVE_ISNAN)
+#define dIsNan(x) (isnan(x))
+#else
+#define dIsNan(x) (_isnan(x))
+#endif
+
 #define dCopySign(a,b) (copysign((a),(b)))
 
 #else
 #error You must #define dSINGLE or dDOUBLE
 #endif
-
-
-/* utility */
-
-
-/* round something up to be a multiple of the EFFICIENT_ALIGNMENT */
-
-#define dEFFICIENT_SIZE(x) ((((x)-1)|(EFFICIENT_ALIGNMENT-1))+1)
-
-
-/* alloca aligned to the EFFICIENT_ALIGNMENT. note that this can waste
- * up to 15 bytes per allocation, depending on what alloca() returns.
- */
-
-#define dALLOCA16(n) \
-  ((char*)dEFFICIENT_SIZE(((size_t)(alloca((n)+(EFFICIENT_ALIGNMENT-1))))))
-
 
 /* internal object types (all prefixed with `dx') */
 
@@ -203,7 +227,7 @@ enum {
 
 /* joint type numbers */
 
-enum {
+typedef enum {
   dJointTypeNone = 0,		/* or "unknown" */
   dJointTypeBall,
   dJointTypeHinge,
@@ -213,8 +237,13 @@ enum {
   dJointTypeHinge2,
   dJointTypeFixed,
   dJointTypeNull,
-  dJointTypeAMotor
-};
+  dJointTypeAMotor,
+  dJointTypeLMotor,
+  dJointTypePlane2D,
+  dJointTypePR,
+  dJointTypePU,
+  dJointTypePiston
+} dJointType;
 
 
 /* an alternative way of setting joint parameters, using joint parameter
@@ -263,9 +292,19 @@ enum {
   dParamStopCFM, \
   /* parameters for suspension */ \
   dParamSuspensionERP, \
-  dParamSuspensionCFM,
+  dParamSuspensionCFM, \
+  dParamERP, \
 
+  //////////////////////////////////////////////////////////////////////////////
+  /// \enum  D_ALL_PARAM_NAMES_X
+  ///
+  /// \var dParamGroup This is the starting value of the different group
+  ///                  (i.e. dParamGroup1, dParamGroup2, dParamGroup3)
+  ///                  It also helps in the use of parameter
+  ///                  (dParamGroup2 | dParamFMax) == dParamFMax2
+  //////////////////////////////////////////////////////////////////////////////
 #define D_ALL_PARAM_NAMES_X(start,x) \
+  dParamGroup ## x = start, \
   /* parameters for limits and motors */ \
   dParamLoStop ## x = start, \
   dParamHiStop ## x, \
@@ -278,10 +317,13 @@ enum {
   dParamStopCFM ## x, \
   /* parameters for suspension */ \
   dParamSuspensionERP ## x, \
-  dParamSuspensionCFM ## x,
+  dParamSuspensionCFM ## x, \
+  dParamERP ## x,
 
 enum {
   D_ALL_PARAM_NAMES(0)
+  dParamsInGroup,     ///< Number of parameter in a group
+  D_ALL_PARAM_NAMES_X(0x000,1)
   D_ALL_PARAM_NAMES_X(0x100,2)
   D_ALL_PARAM_NAMES_X(0x200,3)
 
@@ -294,7 +336,7 @@ enum {
 
 /* angular motor mode numbers */
 
-enum{
+enum {
   dAMotorUser = 0,
   dAMotorEuler = 1
 };
@@ -317,9 +359,38 @@ typedef struct dJointFeedback {
  * when the ODE step function updates the body state.
  */
 
-ODE_API void dGeomMoved (dGeomID);
+void dGeomMoved (dGeomID);
 dGeomID dGeomGetBodyNext (dGeomID);
 
+/**
+ * dGetConfiguration returns the specific ODE build configuration as
+ * a string of tokens. The string can be parsed in a similar way to
+ * the OpenGL extension mechanism, the naming convention should be
+ * familiar too. The following extensions are reported:
+ *
+ * ODE
+ * ODE_single_precision
+ * ODE_double_precision
+ * ODE_EXT_no_debug
+ * ODE_EXT_trimesh
+ * ODE_EXT_opcode
+ * ODE_EXT_gimpact
+ * ODE_EXT_malloc_not_alloca
+ * ODE_EXT_gyroscopic
+ * ODE_OPC_16bit_indices
+ * ODE_OPC_new_collider
+*/
+ODE_API const char* dGetConfiguration (void);
+
+/**
+ * Helper to check for a token in the ODE configuration string.
+ * Caution, this function is case sensitive.
+ *
+ * @param token A configuration token, see dGetConfiguration for details
+ *
+ * @return 1 if exact token is present, 0 if not present
+ */
+ODE_API int dCheckConfiguration( const char* token );
 
 #ifdef __cplusplus
 }

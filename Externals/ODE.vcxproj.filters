@@ -146,6 +146,24 @@
     <ClInclude Include="ode\ode\src\util.h">
       <Filter>Source Files</Filter>
     </ClInclude>
+    <ClInclude Include="ode\ode\src\collision_trimesh_colliders.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="ode\ode\src\heightfield.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="ode\ode\src\odeou.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="ode\ode\src\odetls.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="ode\include\ode\odeconfig.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="ode\include\ode\odeinit.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="ode\ode\src\array.cpp">
@@ -247,11 +265,98 @@
     <ClCompile Include="ode\ode\src\util.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="ode\ode\src\box.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="ode\ode\src\capsule.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="ode\ode\src\collision_cylinder_box.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="ode\ode\src\collision_cylinder_plane.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="ode\ode\src\collision_cylinder_sphere.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="ode\ode\src\collision_cylinder_trimesh.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="ode\ode\src\collision_sapspace.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="ode\ode\src\collision_trimesh_box.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="ode\ode\src\collision_trimesh_ccylinder.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="ode\ode\src\collision_trimesh_disabled.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="ode\ode\src\collision_trimesh_distance.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="ode\ode\src\collision_trimesh_gimpact.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="ode\ode\src\collision_trimesh_opcode.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="ode\ode\src\collision_trimesh_plane.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="ode\ode\src\collision_trimesh_ray.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="ode\ode\src\collision_trimesh_sphere.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="ode\ode\src\collision_trimesh_trimesh.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="ode\ode\src\collision_trimesh_trimesh_new.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="ode\ode\src\convex.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="ode\ode\src\cylinder.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="ode\ode\src\heightfield.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="ode\ode\src\odeinit.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="ode\ode\src\odeou.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="ode\ode\src\odetls.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="ode\ode\src\plane.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="ode\ode\src\ray.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="ode\ode\src\sphere.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <None Include="ode\config\msvcdefs.def">
       <Filter>Source Files</Filter>
     </None>
+    <None Include="ode\ode\src\Makefile.am" />
+    <None Include="ode\ode\src\scrapbook.cpp_deprecated" />
+    <None Include="ode\ode\src\stack.cpp_deprecated" />
+    <None Include="ode\ode\src\stack.h_deprecated" />
+    <None Include="ode\include\ode\Makefile.am" />
+    <None Include="ode\include\ode\README" />
   </ItemGroup>
   <ItemGroup>
     <Text Include="ReadMe.txt" />

@@ -20,7 +20,8 @@
  *                                                                       *
  *************************************************************************/
 
-#include <ode/config.h>
+#include <ode/odeconfig.h>
+#include "config.h"
 #include <ode/misc.h>
 #include <ode/matrix.h>
 
@@ -61,10 +62,32 @@ int dTestRand()
 }
 
 
+// adam's all-int straightforward(?) dRandInt (0..n-1)
 int dRandInt (int n)
 {
-  double a = double(n) / 4294967296.0;
-  return (int) (double(dRand()) * a);
+  // seems good; xor-fold and modulus
+  const unsigned long un = n;
+  unsigned long r = dRand();
+  
+  // note: probably more aggressive than it needs to be -- might be
+  //       able to get away without one or two of the innermost branches.
+  if (un <= 0x00010000UL) {
+    r ^= (r >> 16);
+    if (un <= 0x00000100UL) {
+      r ^= (r >> 8);
+      if (un <= 0x00000010UL) {
+        r ^= (r >> 4);
+        if (un <= 0x00000004UL) {
+          r ^= (r >> 2);
+          if (un <= 0x00000002UL) {
+            r ^= (r >> 1);
+          }
+        }
+      }
+    }
+  }
+
+  return (int) (r % un);    
 }
 
 
@@ -76,7 +99,7 @@ dReal dRandReal()
 //****************************************************************************
 // matrix utility stuff
 
-void dPrintMatrix (const dReal *A, int n, int m, const char *fmt, FILE *f)
+void dPrintMatrix (const dReal *A, int n, int m, char *fmt, FILE *f)
 {
   int i,j;
   int skip = dPAD(m);

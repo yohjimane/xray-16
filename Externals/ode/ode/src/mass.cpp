@@ -20,18 +20,28 @@
  *                                                                       *
  *************************************************************************/
 
-#include <ode/config.h>
+#include <ode/odeconfig.h>
+#include "config.h"
 #include <ode/mass.h>
 #include <ode/odemath.h>
 #include <ode/matrix.h>
 
+// Local dependencies
+#include "collision_kernel.h"
+
+#if dTRIMESH_ENABLED
+  #include "collision_trimesh_internal.h"
+#endif // dTRIMESH_ENABLED
+
+#define	SQR(x)			((x)*(x))						//!< Returns x square
+#define	CUBE(x)			((x)*(x)*(x))					//!< Returns x cube
 
 #define _I(i,j) I[(i)*4+(j)]
 
 
 // return 1 if ok, 0 if bad
 
-static int checkMass (dMass *m)
+int dMassCheck (const dMass *m)
 {
   int i;
 
@@ -101,14 +111,14 @@ void dMassSetParameters (dMass *m, dReal themass,
   m->_I(1,0) = I12;
   m->_I(2,0) = I13;
   m->_I(2,1) = I23;
-  checkMass (m);
+  dMassCheck (m);
 }
 
 
 void dMassSetSphere (dMass *m, dReal density, dReal radius)
 {
-  dMassSetSphereTotal (m, (REAL(4.0)/REAL(3.0)) * M_PI *
-			  radius*radius*radius * density, radius);
+  dMassSetSphereTotal (m, (dReal) ((REAL(4.0)/REAL(3.0)) * M_PI *
+			  radius*radius*radius * density), radius);
 }
 
 
@@ -123,20 +133,20 @@ void dMassSetSphereTotal (dMass *m, dReal total_mass, dReal radius)
   m->_I(2,2) = II;
 
 # ifndef dNODEBUG
-  checkMass (m);
+  dMassCheck (m);
 # endif
 }
 
 
 void dMassSetCapsule (dMass *m, dReal density, int direction,
-			     dReal radius, dReal length)
+		      dReal radius, dReal length)
 {
   dReal M1,M2,Ia,Ib;
   dAASSERT (m);
   dUASSERT (direction >= 1 && direction <= 3,"bad direction number");
   dMassSetZero (m);
-  M1 = M_PI*radius*radius*length*density;			// cylinder mass
-  M2 = (REAL(4.0)/REAL(3.0))*M_PI*radius*radius*radius*density;	// total cap mass
+  M1 = (dReal) (M_PI*radius*radius*length*density);			  // cylinder mass
+  M2 = (dReal) ((REAL(4.0)/REAL(3.0))*M_PI*radius*radius*radius*density); // total cap mass
   m->mass = M1+M2;
   Ia = M1*(REAL(0.25)*radius*radius + (REAL(1.0)/REAL(12.0))*length*length) +
     M2*(REAL(0.4)*radius*radius + REAL(0.375)*radius*length + REAL(0.25)*length*length);
@@ -147,13 +157,13 @@ void dMassSetCapsule (dMass *m, dReal density, int direction,
   m->_I(direction-1,direction-1) = Ib;
 
 # ifndef dNODEBUG
-  checkMass (m);
+  dMassCheck (m);
 # endif
 }
 
 
 void dMassSetCapsuleTotal (dMass *m, dReal total_mass, int direction,
-			     dReal a, dReal b)
+			   dReal a, dReal b)
 {
   dMassSetCapsule (m, 1.0, direction, a, b);
   dMassAdjust (m, total_mass);
@@ -163,7 +173,7 @@ void dMassSetCapsuleTotal (dMass *m, dReal total_mass, int direction,
 void dMassSetCylinder (dMass *m, dReal density, int direction,
 		       dReal radius, dReal length)
 {
-  dMassSetCylinderTotal (m, M_PI*radius*radius*length*density,
+  dMassSetCylinderTotal (m, (dReal) (M_PI*radius*radius*length*density),
 			    direction, radius, length);
 }
 
@@ -172,6 +182,7 @@ void dMassSetCylinderTotal (dMass *m, dReal total_mass, int direction,
 {
   dReal r2,I;
   dAASSERT (m);
+  dUASSERT (direction >= 1 && direction <= 3,"bad direction number");
   dMassSetZero (m);
   r2 = radius*radius;
   m->mass = total_mass;
@@ -182,7 +193,7 @@ void dMassSetCylinderTotal (dMass *m, dReal total_mass, int direction,
   m->_I(direction-1,direction-1) = total_mass*REAL(0.5)*r2;
 
 # ifndef dNODEBUG
-  checkMass (m);
+  dMassCheck (m);
 # endif
 }
 
@@ -205,9 +216,226 @@ void dMassSetBoxTotal (dMass *m, dReal total_mass,
   m->_I(2,2) = total_mass/REAL(12.0) * (lx*lx + ly*ly);
 
 # ifndef dNODEBUG
-  checkMass (m);
+  dMassCheck (m);
 # endif
 }
+
+
+
+
+
+
+/*
+ * dMassSetTrimesh, implementation by Gero Mueller.
+ * Based on Brian Mirtich, "Fast and Accurate Computation of
+ * Polyhedral Mass Properties," journal of graphics tools, volume 1,
+ * number 2, 1996.
+*/
+void dMassSetTrimesh( dMass *m, dReal density, dGeomID g )
+{
+	dAASSERT (m);
+	dUASSERT(g && g->type == dTriMeshClass, "argument not a trimesh");
+
+	dMassSetZero (m);
+
+#if dTRIMESH_ENABLED
+
+	dxTriMesh *TriMesh = (dxTriMesh *)g;
+	unsigned int triangles = FetchTriangleCount( TriMesh );
+
+	dReal nx, ny, nz;
+	unsigned int i, A, B, C;
+	// face integrals
+	dReal Fa, Fb, Fc, Faa, Fbb, Fcc, Faaa, Fbbb, Fccc, Faab, Fbbc, Fcca;
+
+	// projection integrals
+	dReal P1, Pa, Pb, Paa, Pab, Pbb, Paaa, Paab, Pabb, Pbbb;
+
+	dReal T0 = 0;
+	dReal T1[3] = {0., 0., 0.};
+	dReal T2[3] = {0., 0., 0.};
+	dReal TP[3] = {0., 0., 0.};
+
+	for( i = 0; i < triangles; i++ )	 	
+	{
+		dVector3 v[3];
+		FetchTransformedTriangle( TriMesh, i, v);
+
+		dVector3 n, a, b;
+		dOP( a, -, v[1], v[0] ); 
+		dOP( b, -, v[2], v[0] ); 
+		dCROSS( n, =, b, a );
+		nx = fabs(n[0]);
+		ny = fabs(n[1]);
+		nz = fabs(n[2]);
+
+		if( nx > ny && nx > nz )
+			C = 0;
+		else
+			C = (ny > nz) ? 1 : 2;
+
+		// Even though all triangles might be initially valid, 
+		// a triangle may degenerate into a segment after applying 
+		// space transformation.
+		if (n[C] != REAL(0.0))
+		{
+			A = (C + 1) % 3;
+			B = (A + 1) % 3;
+
+			// calculate face integrals
+			{
+				dReal w;
+				dReal k1, k2, k3, k4;
+
+				//compProjectionIntegrals(f);
+				{
+					dReal a0=0, a1=0, da;
+					dReal b0=0, b1=0, db;
+					dReal a0_2, a0_3, a0_4, b0_2, b0_3, b0_4;
+					dReal a1_2, a1_3, b1_2, b1_3;
+					dReal C1, Ca, Caa, Caaa, Cb, Cbb, Cbbb;
+					dReal Cab, Kab, Caab, Kaab, Cabb, Kabb;
+
+					P1 = Pa = Pb = Paa = Pab = Pbb = Paaa = Paab = Pabb = Pbbb = 0.0;
+
+					for( int j = 0; j < 3; j++)
+					{
+						switch(j)
+						{
+						case 0:
+							a0 = v[0][A];
+							b0 = v[0][B];
+							a1 = v[1][A];
+							b1 = v[1][B];
+							break;
+						case 1:
+							a0 = v[1][A];
+							b0 = v[1][B];
+							a1 = v[2][A];
+							b1 = v[2][B];
+							break;
+						case 2:
+							a0 = v[2][A];
+							b0 = v[2][B];
+							a1 = v[0][A];
+							b1 = v[0][B];
+							break;
+						}
+						da = a1 - a0;
+						db = b1 - b0;
+						a0_2 = a0 * a0; a0_3 = a0_2 * a0; a0_4 = a0_3 * a0;
+						b0_2 = b0 * b0; b0_3 = b0_2 * b0; b0_4 = b0_3 * b0;
+						a1_2 = a1 * a1; a1_3 = a1_2 * a1; 
+						b1_2 = b1 * b1; b1_3 = b1_2 * b1;
+
+						C1 = a1 + a0;
+						Ca = a1*C1 + a0_2; Caa = a1*Ca + a0_3; Caaa = a1*Caa + a0_4;
+						Cb = b1*(b1 + b0) + b0_2; Cbb = b1*Cb + b0_3; Cbbb = b1*Cbb + b0_4;
+						Cab = 3*a1_2 + 2*a1*a0 + a0_2; Kab = a1_2 + 2*a1*a0 + 3*a0_2;
+						Caab = a0*Cab + 4*a1_3; Kaab = a1*Kab + 4*a0_3;
+						Cabb = 4*b1_3 + 3*b1_2*b0 + 2*b1*b0_2 + b0_3;
+						Kabb = b1_3 + 2*b1_2*b0 + 3*b1*b0_2 + 4*b0_3;
+
+						P1 += db*C1;
+						Pa += db*Ca;
+						Paa += db*Caa;
+						Paaa += db*Caaa;
+						Pb += da*Cb;
+						Pbb += da*Cbb;
+						Pbbb += da*Cbbb;
+						Pab += db*(b1*Cab + b0*Kab);
+						Paab += db*(b1*Caab + b0*Kaab);
+						Pabb += da*(a1*Cabb + a0*Kabb);
+					}
+
+					P1 /= 2.0;
+					Pa /= 6.0;
+					Paa /= 12.0;
+					Paaa /= 20.0;
+					Pb /= -6.0;
+					Pbb /= -12.0;
+					Pbbb /= -20.0;
+					Pab /= 24.0;
+					Paab /= 60.0;
+					Pabb /= -60.0;
+				}			
+
+				w = - dDOT(n, v[0]);
+
+				k1 = 1 / n[C]; k2 = k1 * k1; k3 = k2 * k1; k4 = k3 * k1;
+
+				Fa = k1 * Pa;
+				Fb = k1 * Pb;
+				Fc = -k2 * (n[A]*Pa + n[B]*Pb + w*P1);
+
+				Faa = k1 * Paa;
+				Fbb = k1 * Pbb;
+				Fcc = k3 * (SQR(n[A])*Paa + 2*n[A]*n[B]*Pab + SQR(n[B])*Pbb +
+					w*(2*(n[A]*Pa + n[B]*Pb) + w*P1));
+
+				Faaa = k1 * Paaa;
+				Fbbb = k1 * Pbbb;
+				Fccc = -k4 * (CUBE(n[A])*Paaa + 3*SQR(n[A])*n[B]*Paab 
+					+ 3*n[A]*SQR(n[B])*Pabb + CUBE(n[B])*Pbbb
+					+ 3*w*(SQR(n[A])*Paa + 2*n[A]*n[B]*Pab + SQR(n[B])*Pbb)
+					+ w*w*(3*(n[A]*Pa + n[B]*Pb) + w*P1));
+
+				Faab = k1 * Paab;
+				Fbbc = -k2 * (n[A]*Pabb + n[B]*Pbbb + w*Pbb);
+				Fcca = k3 * (SQR(n[A])*Paaa + 2*n[A]*n[B]*Paab + SQR(n[B])*Pabb
+					+ w*(2*(n[A]*Paa + n[B]*Pab) + w*Pa));
+			}
+
+
+			T0 += n[0] * ((A == 0) ? Fa : ((B == 0) ? Fb : Fc));
+
+			T1[A] += n[A] * Faa;
+			T1[B] += n[B] * Fbb;
+			T1[C] += n[C] * Fcc;
+			T2[A] += n[A] * Faaa;
+			T2[B] += n[B] * Fbbb;
+			T2[C] += n[C] * Fccc;
+			TP[A] += n[A] * Faab;
+			TP[B] += n[B] * Fbbc;
+			TP[C] += n[C] * Fcca;
+		}
+	}
+
+	T1[0] /= 2; T1[1] /= 2; T1[2] /= 2;
+	T2[0] /= 3; T2[1] /= 3; T2[2] /= 3;
+	TP[0] /= 2; TP[1] /= 2; TP[2] /= 2;
+
+	m->mass = density * T0;
+	m->_I(0,0) = density * (T2[1] + T2[2]);
+	m->_I(1,1) = density * (T2[2] + T2[0]);
+	m->_I(2,2) = density * (T2[0] + T2[1]);
+	m->_I(0,1) = - density * TP[0];
+	m->_I(1,0) = - density * TP[0];
+	m->_I(2,1) = - density * TP[1];
+	m->_I(1,2) = - density * TP[1];
+	m->_I(2,0) = - density * TP[2];
+	m->_I(0,2) = - density * TP[2];
+
+	// Added to address SF bug 1729095
+	dMassTranslate( m, T1[0] / T0,  T1[1] / T0,  T1[2] / T0 );
+
+# ifndef dNODEBUG
+	dMassCheck (m);
+# endif
+
+#endif // dTRIMESH_ENABLED
+}
+
+
+void dMassSetTrimeshTotal( dMass *m, dReal total_mass, dGeomID g)
+{
+  dAASSERT( m );
+  dUASSERT( g && g->type == dTriMeshClass, "argument not a trimesh" );
+  dMassSetTrimesh( m, 1.0, g );
+  dMassAdjust( m, total_mass );
+}
+
+
 
 
 void dMassAdjust (dMass *m, dReal newmass)
@@ -218,7 +446,7 @@ void dMassAdjust (dMass *m, dReal newmass)
   for (int i=0; i<3; i++) for (int j=0; j<3; j++) m->_I(i,j) *= scale;
 
 # ifndef dNODEBUG
-  checkMass (m);
+  dMassCheck (m);
 # endif
 }
 
@@ -262,7 +490,7 @@ void dMassTranslate (dMass *m, dReal x, dReal y, dReal z)
   m->c[2] += z;
 
 # ifndef dNODEBUG
-  checkMass (m);
+  dMassCheck (m);
 # endif
 }
 
@@ -297,7 +525,7 @@ void dMassRotate (dMass *m, const dMatrix3 R)
   m->c[2] = t2[2];
 
 # ifndef dNODEBUG
-  checkMass (m);
+  dMassCheck (m);
 # endif
 }
 
@@ -311,3 +539,16 @@ void dMassAdd (dMass *a, const dMass *b)
   a->mass += b->mass;
   for (i=0; i<12; i++) a->I[i] += b->I[i];
 }
+
+
+// Backwards compatible API
+void dMassSetCappedCylinder(dMass *a, dReal b, int c, dReal d, dReal e)
+{
+  return dMassSetCapsule(a,b,c,d,e);
+}
+
+void dMassSetCappedCylinderTotal(dMass *a, dReal b, int c, dReal d, dReal e)
+{
+  return dMassSetCapsuleTotal(a,b,c,d,e);
+}
+

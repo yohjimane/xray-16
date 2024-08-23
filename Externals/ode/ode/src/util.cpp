@@ -22,7 +22,7 @@
 
 #include "ode/ode.h"
 #include "objects.h"
-#include "joint.h"
+#include "joints/joint.h"
 #include "util.h"
 
 #define ALLOCA dALLOCA16
@@ -32,26 +32,111 @@
 
 void dInternalHandleAutoDisabling (dxWorld *world, dReal stepsize)
 {
-	/*
 	dxBody *bb;
-	for (bb=world->firstbody; bb; bb=(dxBody*)bb->next) {
+	for ( bb=world->firstbody; bb; bb=(dxBody*)bb->next )
+	{
+		// don't freeze objects mid-air (patch 1586738)
+		if ( bb->firstjoint == NULL ) continue;
+
 		// nothing to do unless this body is currently enabled and has
 		// the auto-disable flag set
-		if ((bb->flags & (dxBodyAutoDisable|dxBodyDisabled)) != dxBodyAutoDisable) continue;
-		
+		if ( (bb->flags & (dxBodyAutoDisable|dxBodyDisabled)) != dxBodyAutoDisable ) continue;
+
+		// if sampling / threshold testing is disabled, we can never sleep.
+		if ( bb->adis.average_samples == 0 ) continue;
+
+		//
 		// see if the body is idle
-		int idle = 1;			// initial assumption
-		dReal lspeed2 = dDOT(bb->lvel,bb->lvel);
-		if (lspeed2 > bb->adis.linear_threshold) {
-			idle = 0;		// moving fast - not idle
+		//
+		
+#ifndef dNODEBUG
+		// sanity check
+		if ( bb->average_counter >= bb->adis.average_samples )
+		{
+			dUASSERT( bb->average_counter < bb->adis.average_samples, "buffer overflow" );
+
+			// something is going wrong, reset the average-calculations
+			bb->average_ready = 0; // not ready for average calculation
+			bb->average_counter = 0; // reset the buffer index
 		}
-		else {
-			dReal aspeed = dDOT(bb->avel,bb->avel);
-			if (aspeed > bb->adis.angular_threshold) {
-				idle = 0;	// turning fast - not idle
+#endif // dNODEBUG
+
+		// sample the linear and angular velocity
+		bb->average_lvel_buffer[bb->average_counter][0] = bb->lvel[0];
+		bb->average_lvel_buffer[bb->average_counter][1] = bb->lvel[1];
+		bb->average_lvel_buffer[bb->average_counter][2] = bb->lvel[2];
+		bb->average_avel_buffer[bb->average_counter][0] = bb->avel[0];
+		bb->average_avel_buffer[bb->average_counter][1] = bb->avel[1];
+		bb->average_avel_buffer[bb->average_counter][2] = bb->avel[2];
+		bb->average_counter++;
+		
+		// buffer ready test
+		if ( bb->average_counter >= bb->adis.average_samples )
+		{
+			bb->average_counter = 0; // fill the buffer from the beginning
+			bb->average_ready = 1; // this body is ready now for average calculation
+		}
+
+		int idle = 0; // Assume it's in motion unless we have samples to disprove it.
+
+		// enough samples?
+		if ( bb->average_ready )
+		{
+			idle = 1; // Initial assumption: IDLE
+
+			// the sample buffers are filled and ready for calculation
+			dVector3 average_lvel, average_avel;
+
+			// Store first velocity samples
+			average_lvel[0] = bb->average_lvel_buffer[0][0];
+			average_avel[0] = bb->average_avel_buffer[0][0];
+			average_lvel[1] = bb->average_lvel_buffer[0][1];
+			average_avel[1] = bb->average_avel_buffer[0][1];
+			average_lvel[2] = bb->average_lvel_buffer[0][2];
+			average_avel[2] = bb->average_avel_buffer[0][2];
+			
+			// If we're not in "instantaneous mode"
+			if ( bb->adis.average_samples > 1 )
+			{
+				// add remaining velocities together
+				for ( unsigned int i = 1; i < bb->adis.average_samples; ++i )
+				{
+					average_lvel[0] += bb->average_lvel_buffer[i][0];
+					average_avel[0] += bb->average_avel_buffer[i][0];
+					average_lvel[1] += bb->average_lvel_buffer[i][1];
+					average_avel[1] += bb->average_avel_buffer[i][1];
+					average_lvel[2] += bb->average_lvel_buffer[i][2];
+					average_avel[2] += bb->average_avel_buffer[i][2];
+				}
+
+				// make average
+				dReal r1 = dReal( 1.0 ) / dReal( bb->adis.average_samples );
+
+				average_lvel[0] *= r1;
+				average_avel[0] *= r1;
+				average_lvel[1] *= r1;
+				average_avel[1] *= r1;
+				average_lvel[2] *= r1;
+				average_avel[2] *= r1;
+			}
+
+			// threshold test
+			dReal av_lspeed, av_aspeed;
+			av_lspeed = dDOT( average_lvel, average_lvel );
+			if ( av_lspeed > bb->adis.linear_average_threshold )
+			{
+				idle = 0; // average linear velocity is too high for idle
+			}
+			else
+			{
+				av_aspeed = dDOT( average_avel, average_avel );
+				if ( av_aspeed > bb->adis.angular_average_threshold )
+				{
+					idle = 0; // average angular velocity is too high for idle
+				}
 			}
 		}
-	
+
 		// if it's idle, accumulate steps and time.
 		// these counters won't overflow because this code doesn't run for disabled bodies.
 		if (idle) {
@@ -59,16 +144,26 @@ void dInternalHandleAutoDisabling (dxWorld *world, dReal stepsize)
 			bb->adis_timeleft -= stepsize;
 		}
 		else {
+			// Reset countdowns
 			bb->adis_stepsleft = bb->adis.idle_steps;
 			bb->adis_timeleft = bb->adis.idle_time;
 		}
 
 		// disable the body if it's idle for a long enough time
-		if (bb->adis_stepsleft < 0 && bb->adis_timeleft < 0) {
-			bb->flags |= dxBodyDisabled;
+		if ( bb->adis_stepsleft <= 0 && bb->adis_timeleft <= 0 )
+		{
+			bb->flags |= dxBodyDisabled; // set the disable flag
+
+			// disabling bodies should also include resetting the velocity
+			// should prevent jittering in big "islands"
+			bb->lvel[0] = 0;
+			bb->lvel[1] = 0;
+			bb->lvel[2] = 0;
+			bb->avel[0] = 0;
+			bb->avel[1] = 0;
+			bb->avel[2] = 0;
 		}
 	}
-	*/
 }
 
 
@@ -93,10 +188,20 @@ static inline dReal sinc (dReal x)
 
 void dxStepBody (dxBody *b, dReal h)
 {
+  // cap the angular velocity
+  if (b->flags & dxBodyMaxAngularSpeed) {
+        const dReal max_ang_speed = b->max_angular_speed;
+        const dReal aspeed = dDOT( b->avel, b->avel );
+        if (aspeed > max_ang_speed*max_ang_speed) {
+                const dReal coef = max_ang_speed/dSqrt(aspeed);
+                dOPEC(b->avel, *=, coef);
+        }
+  }
+  // end of angular velocity cap
+
+
   int j;
-#ifdef DEBUG_VALID
-dIASSERT(dValid(b->avel[0])&&dValid(b->avel[1])&&dValid(b->avel[2]));
-#endif
+
   // handle linear velocity
   for (j=0; j<3; j++) b->posr.pos[j] += h * b->lvel[j];
 
@@ -166,14 +271,28 @@ dIASSERT(dValid(b->avel[0])&&dValid(b->avel[1])&&dValid(b->avel[2]));
   for (dxGeom *geom = b->geom; geom; geom = dGeomGetBodyNext (geom))
     dGeomMoved (geom);
 
-#ifdef DEBUG_VALID
-dIASSERT(dValid(b->avel[0])&&dValid(b->avel[1])&&dValid(b->avel[2]));
-#endif
+  // notify the user
+  if (b->moved_callback)
+    b->moved_callback(b);
 
 
-
-
-
+  // damping
+  if (b->flags & dxBodyLinearDamping) {
+        const dReal lin_threshold = b->dampingp.linear_threshold;
+        const dReal lin_speed = dDOT( b->lvel, b->lvel );
+        if ( lin_speed > lin_threshold) {
+                const dReal k = 1 - b->dampingp.linear_scale;
+                dOPEC(b->lvel, *=, k);
+        }
+  }
+  if (b->flags & dxBodyAngularDamping) {
+        const dReal ang_threshold = b->dampingp.angular_threshold;
+        const dReal ang_speed = dDOT( b->avel, b->avel );
+        if ( ang_speed > ang_threshold) {
+                const dReal k = 1 - b->dampingp.angular_scale;
+                dOPEC(b->avel, *=, k);
+        }
+  }
 
 }
 
@@ -191,8 +310,6 @@ dIASSERT(dValid(b->avel[0])&&dValid(b->avel[1])&&dValid(b->avel[2]));
 // bodies will not be included in the simulation. disabled bodies are
 // re-enabled if they are found to be part of an active island.
 
-//no need Island collecting! @slipch
-/*
 void dxProcessIslands (dxWorld *world, dReal stepsize, dstepper_fn_t stepper)
 {
   dxBody *b,*bb,**body;
@@ -203,7 +320,7 @@ void dxProcessIslands (dxWorld *world, dReal stepsize, dstepper_fn_t stepper)
 
   // handle auto-disabling of bodies
   dInternalHandleAutoDisabling (world,stepsize);
-  
+
   // make arrays for body and joint lists (for a single island) to go into
   body = (dxBody**) ALLOCA (world->nb * sizeof(dxBody*));
   joint = (dxJoint**) ALLOCA (world->nj * sizeof(dxJoint*));
@@ -241,7 +358,7 @@ void dxProcessIslands (dxWorld *world, dReal stepsize, dstepper_fn_t stepper)
       // traverse and tag all body's joints, add untagged connected bodies
       // to stack
       for (dxJointNode *n=b->firstjoint; n; n=n->next) {
-	if (!n->joint->tag) {
+        if (!n->joint->tag && n->joint->isEnabled()) {
 	  n->joint->tag = 1;
 	  joint[jcount++] = n->joint;
 	  if (n->body && !n->body->tag) {
@@ -281,8 +398,10 @@ void dxProcessIslands (dxWorld *world, dReal stepsize, dstepper_fn_t stepper)
     }
   }
   for (j=world->firstjoint; j; j=(dxJoint*)j->next) {
-    if ((j->node[0].body && (j->node[0].body->flags & dxBodyDisabled)==0) ||
-	(j->node[1].body && (j->node[1].body->flags & dxBodyDisabled)==0)) {
+    if ( (( j->node[0].body && (j->node[0].body->flags & dxBodyDisabled)==0 ) ||
+          (j->node[1].body && (j->node[1].body->flags & dxBodyDisabled)==0) )
+         && 
+         j->isEnabled() ) {
       if (!j->tag) dDebug (0,"attached enabled joint not tagged");
     }
     else {
@@ -291,38 +410,6 @@ void dxProcessIslands (dxWorld *world, dReal stepsize, dstepper_fn_t stepper)
   }
 # endif
 }
-*/
-void dxProcessIslands (dxWorld *world, dReal stepsize, dstepper_fn_t stepper)
-{
-	// nothing to do if no bodies
-	if (world->nb <= 0)
-		return;
 
-#	ifdef TIMING
-	dTimerStart ("creating joint and body arrays");
-#	endif
-	dxBody **bodies, *body;
-	dxJoint **joints, *joint;
-	joints = (dxJoint **) ALLOCA (world->nj * sizeof (dxJoint *));
-	bodies = (dxBody **) ALLOCA (world->nb * sizeof (dxBody *));
 
-	int nj = 0;
-	for (joint = world->firstjoint; joint; joint = (dxJoint *) joint->next)
-		joints[nj++] = joint;
 
-	int nb = 0;
-	for (body = world->firstbody; body; body = (dxBody *) body->next)
-	{
-		body->flags &= ~dxBodyDisabled;
-		bodies[nb++] = body;
-
-	}
-
-	// now do something with body and joint lists
-	stepper (world,bodies,nb,joints,nj,stepsize);
-//stepper (world,body,bcount,joint,jcount,stepsize);
-#	ifdef TIMING
-	dTimerEnd ();
-	dTimerReport (stdout, 1);
-#	endif
-}
