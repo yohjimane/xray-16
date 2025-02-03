@@ -71,15 +71,15 @@ struct ControllerAxisState
 {
     union
     {
-        Fvector2 xy{};
+        Fvector2 xy;
         struct
         {
             float x, y;
         };
     };
-    float magnitude{}; // remember that magnitude should not be higher than 1
+    float magnitude;
 
-    constexpr ControllerAxisState() = default;
+    ControllerAxisState() = default;
 
     constexpr ControllerAxisState(const float v)
         : xy{ v, v }, magnitude{ v } {}
@@ -99,6 +99,9 @@ struct ControllerAxisState
     ControllerAxisState(const Fvector2& vec)
         : xy{ vec }, magnitude{ vec.magnitude() } {}
 };
+
+// Make sure it fits the C++ standard requirements on unions and we can use default constructor
+static_assert(std::is_trivial_v<ControllerAxisState>);
 
 struct ENGINE_API ControllerState
 {
