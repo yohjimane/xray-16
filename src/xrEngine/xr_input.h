@@ -126,8 +126,6 @@ struct ENGINE_API ControllerState
 
     s32 id{ -1 }; // The current active controller ID
 
-    constexpr ControllerState() = default;
-
     const ControllerAxisState& get_axis(const int key) const noexcept
     {
         if (key > XR_CONTROLLER_AXIS_INVALID && key < XR_CONTROLLER_AXIS_MAX)
