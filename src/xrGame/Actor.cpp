@@ -1179,7 +1179,8 @@ void CActor::UpdateCL()
 
     cam_Update(float(Device.dwTimeDelta) / 1000.0f, currentFOV());
 
-    Device.OnCameraUpdated();
+    if (IsGameTypeSingle())
+        Device.OnCameraUpdated();
 
     if (Level().CurrentEntity() && this->ID() == Level().CurrentEntity()->ID())
     {
