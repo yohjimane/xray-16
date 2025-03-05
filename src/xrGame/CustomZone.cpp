@@ -649,28 +649,31 @@ void CCustomZone::shedule_Update(u32 dt)
         if (!m_zone_flags.test(eFastMode))
             UpdateWorkload(dt);
 
-        const float act_distance = Level().CurrentControlEntity()->Position().distance_to(P) - s.R;
-        if (act_distance < ps_ssfx_int_grass_params_1.w)
-            GrassZoneUpdate();
-        else
+        if (Level().CurrentControlEntity())
         {
-            // Out of range, fadeOut if a grassbender_id is assigned
-            if (grassbender_id)
+            const float act_distance = Level().CurrentControlEntity()->Position().distance_to(P) - s.R;
+            if (act_distance < ps_ssfx_int_grass_params_1.w)
+                GrassZoneUpdate();
+            else
             {
-                IGame_Persistent::grass_data& GData = g_pGamePersistent->grass_shader_data;
-
-                // If the ID doesn't match... Just remove the grassbender_id.
-                if (GData.id[grassbender_id] == ID())
+                // Out of range, fadeOut if a grassbender_id is assigned
+                if (grassbender_id)
                 {
-                    GData.str_target[grassbender_id] += g_pGamePersistent->GrassBenderToValue(GData.str_target[grassbender_id], 0.0f, 4.0f, false);
+                    IGame_Persistent::grass_data& GData = g_pGamePersistent->grass_shader_data;
 
-                    // Remove ( Don't worry, GrassBenderToValue() it's going to get the == 0 )
-                    if (GData.str_target[grassbender_id] == 0)
-                        g_pGamePersistent->GrassBendersRemoveByIndex(grassbender_id);
-                }
-                else
-                {
-                    grassbender_id = 0;
+                    // If the ID doesn't match... Just remove the grassbender_id.
+                    if (GData.id[grassbender_id] == ID())
+                    {
+                        GData.str_target[grassbender_id] += g_pGamePersistent->GrassBenderToValue(GData.str_target[grassbender_id], 0.0f, 4.0f, false);
+
+                        // Remove ( Don't worry, GrassBenderToValue() it's going to get the == 0 )
+                        if (GData.str_target[grassbender_id] == 0)
+                            g_pGamePersistent->GrassBendersRemoveByIndex(grassbender_id);
+                    }
+                    else
+                    {
+                        grassbender_id = 0;
+                    }
                 }
             }
         }
