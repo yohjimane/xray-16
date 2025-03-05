@@ -705,6 +705,36 @@ void jump_to_level(const Fvector& m_position, u32 m_level_vertex_id, GameGraph::
     Level().Send(p, net_flags(TRUE));
 }
 
+bool is_dedicated()
+{
+    return GEnv.isDedicatedServer;
+}
+
+void print_msg(LPCSTR str)
+{
+    Msg("[lua] %s", str);
+}
+
+bool check_params(LPCSTR p)
+{
+    return strstr(Core.Params, p);
+}
+
+bool OnServerExport()
+{
+    return g_pGameLevel != nullptr ? Level().IsServer() : false;
+}
+
+bool OnClientExport()
+{
+    return g_pGameLevel != nullptr ? Level().IsClient() : false;
+}
+
+bool IsGameTypeSingleExport()
+{
+    return g_pGamePersistent->GameType() == eGameIDSingle;
+}
+
 // XXX nitrocaster: one can export enum like class, without defining dummy type
 template<typename T>
 struct EnumCallbackType {};
@@ -878,7 +908,13 @@ IC static void CLevel_Export(lua_State* luaState)
         def("command_line", &command_line),
         def("IsGameTypeSingle", (bool (*)())&IsGameTypeSingle),
         def("IsDynamicMusic", &IsDynamicMusic), def("render_get_dx_level", &render_get_dx_level),
-        def("IsImportantSave", &IsImportantSave)
+        def("IsImportantSave", &IsImportantSave),
+        def("print_msg", &print_msg),
+        def("IsDedicated", &is_dedicated),
+        def("OnClient", &OnClientExport),
+        def("OnServer", &OnServerExport),
+        def("IsGameTypeSingle", &IsGameTypeSingleExport),
+        def("CheckParams", &check_params)
     ];
 
     module(luaState, "relation_registry")
