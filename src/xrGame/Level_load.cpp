@@ -36,8 +36,7 @@ bool CLevel::Load_GameSpecific_Before()
 
     g_pGamePersistent->LoadTitle("st_loading_ai_objects");
 
-    if (GamePersistent().GameType() == eGameIDSingle && !ai().get_alife() && FS.exist(fn_game, "$level$", "level.ai") &&
-        !net_Hosts.empty())
+    if (FS.exist(fn_game, "$level$", "level.ai") && !net_Hosts.empty())
         ai().load(net_SessionName());
 
     if (!GEnv.isDedicatedServer && !ai().get_alife() && ai().get_game_graph() && FS.exist(fn_game, "$level$", "level.game"))
