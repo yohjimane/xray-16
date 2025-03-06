@@ -152,7 +152,7 @@ protected:
 public:
     game_sv_GameState();
     virtual ~game_sv_GameState();
-#define TEAM_COUNT 4
+#define TEAM_COUNT 32
 
     BOOL sv_force_sync;
     float rpoints_MinDist[TEAM_COUNT];
