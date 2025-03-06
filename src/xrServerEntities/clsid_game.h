@@ -218,12 +218,14 @@ constexpr CLASS_ID CLSID_SV_GAME_DEATHMATCH         = MK_CLSID('S', 'V', '_', 'D
 constexpr CLASS_ID CLSID_SV_GAME_TEAMDEATHMATCH     = MK_CLSID('S', 'V', '_', 'T', 'D', 'M', ' ', ' ');
 constexpr CLASS_ID CLSID_SV_GAME_ARTEFACTHUNT       = MK_CLSID('S', 'V', '_', 'A', 'H', 'U', 'N', 'T');
 constexpr CLASS_ID CLSID_SV_GAME_CAPTURETHEARTEFACT = MK_CLSID('S', 'V', '_', 'C', 'T', 'A', ' ', ' ');
+constexpr CLASS_ID CLSID_SV_GAME_FREE_MP = MK_CLSID('S', 'V', '_', 'F', 'R', 'E', 'E', ' ');
 //constexpr CLASS_ID CLSID_GAME_CS                    = MK_CLSID('S','V','_','C','S',' ',' ',' ');
 constexpr CLASS_ID CLSID_CL_GAME_SINGLE             = MK_CLSID('C', 'L', '_', 'S', 'I', 'N', 'G', 'L');
 constexpr CLASS_ID CLSID_CL_GAME_DEATHMATCH         = MK_CLSID('C', 'L', '_', 'D', 'M', ' ', ' ', ' ');
 constexpr CLASS_ID CLSID_CL_GAME_TEAMDEATHMATCH     = MK_CLSID('C', 'L', '_', 'T', 'D', 'M', ' ', ' ');
 constexpr CLASS_ID CLSID_CL_GAME_ARTEFACTHUNT       = MK_CLSID('C', 'L', '_', 'A', 'H', 'U', 'N', 'T');
 constexpr CLASS_ID CLSID_CL_GAME_CAPTURETHEARTEFACT = MK_CLSID('C', 'L', '_', 'C', 'T', 'A', ' ', ' ');
+constexpr CLASS_ID CLSID_CL_GAME_FREE_MP = MK_CLSID('C', 'L', '_', 'F', 'R', 'E', 'E', ' ');
 
 // Game UI types
 constexpr CLASS_ID CLSID_GAME_UI_SINGLE             = MK_CLSID('U', 'I', '_', 'S', 'I', 'N', 'G', 'L');
@@ -231,5 +233,6 @@ constexpr CLASS_ID CLSID_GAME_UI_DEATHMATCH         = MK_CLSID('U', 'I', '_', 'D
 constexpr CLASS_ID CLSID_GAME_UI_TEAMDEATHMATCH     = MK_CLSID('U', 'I', '_', 'T', 'D', 'M', ' ', ' ');
 constexpr CLASS_ID CLSID_GAME_UI_ARTEFACTHUNT       = MK_CLSID('U', 'I', '_', 'A', 'H', 'U', 'N', 'T');
 constexpr CLASS_ID CLSID_GAME_UI_CAPTURETHEARTEFACT = MK_CLSID('U', 'I', '_', 'C', 'T', 'A', ' ', ' ');
+constexpr CLASS_ID CLSID_GAME_UI_FREEMP = MK_CLSID('U', 'I', '_', 'F', 'M', 'P', ' ', ' ');
 
 constexpr CLASS_ID CLSID_ONLINE_OFFLINE_GROUP       = MK_CLSID('O', 'N', '_', 'O', 'F', 'F', '_', 'G');

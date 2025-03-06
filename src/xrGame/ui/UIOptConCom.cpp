@@ -9,8 +9,14 @@
 #include "xrGameSpy/GameSpy_GP.h"
 #include "ui/UICDkey.h"
 
-xr_token g_GameModes[] = {{"st_deathmatch", eGameIDDeathmatch}, {"st_team_deathmatch", eGameIDTeamDeathmatch},
-    {"st_artefacthunt", eGameIDArtefactHunt}, {"st_capture_the_artefact", eGameIDCaptureTheArtefact}, {0, 0}};
+xr_token g_GameModes[] = {
+    {"st_deathmatch", eGameIDDeathmatch},
+    {"st_team_deathmatch", eGameIDTeamDeathmatch},
+    {"st_artefacthunt", eGameIDArtefactHunt},
+    {"st_capture_the_artefact", eGameIDCaptureTheArtefact},
+    { "st_freemp", eGameIDFreeMp },
+    { 0, 0 }
+};
 
 class CCC_UserName : public CCC_String
 {

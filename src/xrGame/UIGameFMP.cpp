@@ -1,11 +1,11 @@
 #include "stdafx.h"
 #include "UIGameFMP.h"
 #include "game_cl_freemp.h"
-#include "../xrEngine/xr_input.h"
+#include "xrEngine/xr_input.h"
 
 #include "Actor.h"
 #include "level.h"
-#include "xr_level_controller.h"
+#include "xrEngine/xr_level_controller.h"
 
 CUIGameFMP::CUIGameFMP()
 {
@@ -47,17 +47,17 @@ bool CUIGameFMP::IR_UIOnKeyboardPress(int dik)
 	if (!pActor->g_Alive())
 		return false;
 
-	switch (get_binded_action(dik))
+	switch (GetBindedAction(dik))
 	{
 	case kACTIVE_JOBS:
 		{
 			if (!pActor->inventory_disabled())
-				ShowPdaMenu();			
+				ShowPdaMenu();
 		} break;
 	case kINVENTORY:
 		{
 			if (!pActor->inventory_disabled())
-				ShowActorMenu();			
+				ShowActorMenu();
 		} break;
 	default:
 		break;

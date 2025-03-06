@@ -21,6 +21,7 @@ enum EGameIDs
     eGameIDCaptureTheArtefact = u32(1) << 4,
     eGameIDDominationZone = u32(1) << 5,
     eGameIDTeamDominationZone = u32(1) << 6,
+    eGameIDFreeMp = u32(1) << 7,
 };
 
 // This enum should "extend" EGameIDs with the values which are defined in SoC.
@@ -45,6 +46,7 @@ inline EGameIDs ParseStringToGameType(pcstr str)
     if (IS("capturetheartefact") || IS("cta")) return eGameIDCaptureTheArtefact;
     if (IS("dominationzone"))                  return eGameIDDominationZone;
     if (IS("teamdominationzone"))              return eGameIDTeamDominationZone;
+    if (IS("freemp") || IS("fmp"))             return eGameIDFreeMp;
     return eGameIDNoGame; //EGameIDs
 }
 

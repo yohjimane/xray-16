@@ -158,16 +158,19 @@
 #include "game_sv_teamdeathmatch.h"
 #include "game_sv_artefacthunt.h"
 #include "game_sv_capture_the_artefact.h"
+#include "game_sv_freemp.h"
 
 #include "game_cl_single.h"
 #include "game_cl_deathmatch.h"
 #include "game_cl_teamdeathmatch.h"
 #include "game_cl_artefacthunt.h"
 #include "game_cl_capture_the_artefact.h"
+#include "game_cl_freemp.h"
 
 #include "UIGameSP.h"
 #include "UIGameAHunt.h"
 #include "UIGameCTA.h"
+#include "UIGameFMP.h"
 #include "ClimableObject.h"
 #include "space_restrictor.h"
 #include "smart_zone.h"
@@ -196,18 +199,21 @@ void CObjectFactory::register_classes()
     add<game_sv_TeamDeathmatch>(CLSID_SV_GAME_TEAMDEATHMATCH, "game_sv_team_deathmatch");
     add<game_sv_ArtefactHunt>(CLSID_SV_GAME_ARTEFACTHUNT, "game_sv_artefact_hunt");
     add<game_sv_CaptureTheArtefact>(CLSID_SV_GAME_CAPTURETHEARTEFACT, "game_sv_capture_the_artefact");
+    add<game_sv_freemp>(CLSID_SV_GAME_FREE_MP, "game_sv_freemp");
     // Client Game type
     add<game_cl_Single>(CLSID_CL_GAME_SINGLE, "game_cl_single");
     add<game_cl_Deathmatch>(CLSID_CL_GAME_DEATHMATCH, "game_cl_deathmatch");
     add<game_cl_TeamDeathmatch>(CLSID_CL_GAME_TEAMDEATHMATCH, "game_cl_team_deathmatch");
     add<game_cl_ArtefactHunt>(CLSID_CL_GAME_ARTEFACTHUNT, "game_cl_artefact_hunt");
     add<game_cl_CaptureTheArtefact>(CLSID_CL_GAME_CAPTURETHEARTEFACT, "game_cl_capture_the_artefact");
+    add<game_cl_freemp>(CLSID_CL_GAME_FREE_MP, "game_cl_freemp");
 
     add<CUIGameSP>(CLSID_GAME_UI_SINGLE, "game_ui_single");
     add<CUIGameDM>(CLSID_GAME_UI_DEATHMATCH, "game_ui_deathmatch");
     add<CUIGameTDM>(CLSID_GAME_UI_TEAMDEATHMATCH, "game_ui_team_deathmatch");
     add<CUIGameAHunt>(CLSID_GAME_UI_ARTEFACTHUNT, "game_ui_artefact_hunt");
     add<CUIGameCTA>(CLSID_GAME_UI_CAPTURETHEARTEFACT, "game_ui_capture_the_artefact");
+    add<CUIGameFMP>(CLSID_GAME_UI_FREEMP, "game_ui_freemp");
 #endif // NO_XR_GAME
 
 #ifndef NO_XR_GAME

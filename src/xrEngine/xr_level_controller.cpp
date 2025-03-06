@@ -90,7 +90,7 @@ game_action actions[] =
     { "buy_menu",               kBUY,                       _mp },
     { "skin_menu",              kSKIN,                      _mp },
     { "team_menu",              kTEAM,                      _mp },
-    { "active_jobs",            kACTIVE_JOBS,               _sp },
+    { "active_jobs",            kACTIVE_JOBS,               _both },
     { "map",                    kMAP,                       _both },
     { "contacts",               kCONTACTS,                  _sp },
     { "ext_1",                  kEXT_1,                     _both },

@@ -188,6 +188,7 @@ LPCSTR GameTypeToString(EGameIDs gt, bool bShort)
     case eGameIDCaptureTheArtefact: return (bShort) ? "cta" : "capturetheartefact";
     case eGameIDDominationZone:     return (bShort) ? "dz"  : "dominationzone";
     case eGameIDTeamDominationZone: return (bShort) ? "tdz" : "teamdominationzone";
+    case eGameIDFreeMp: return (bShort) ? "fmp" : "freemp";
     default: return "---";
     }
 }

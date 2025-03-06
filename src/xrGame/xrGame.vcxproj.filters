@@ -2245,6 +2245,12 @@
     <Filter Include="UI\GameTypes\FreeMp">
       <UniqueIdentifier>{d4178439-35ae-4a2f-9abd-5b552dead9c8}</UniqueIdentifier>
     </Filter>
+    <Filter Include="Core\Server\Games\client\freemp">
+      <UniqueIdentifier>{729415f8-8934-4918-9d5a-1308ebce49c0}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Core\Server\Games\server\freemp">
+      <UniqueIdentifier>{f00d869a-eacc-47e3-a6f6-2897883ecdbd}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="mt_config.h">
@@ -6347,6 +6353,12 @@
     <ClInclude Include="UIGameFMP.h">
       <Filter>UI\GameTypes\FreeMp</Filter>
     </ClInclude>
+    <ClInclude Include="game_cl_freemp.h">
+      <Filter>Core\Server\Games\client\freemp</Filter>
+    </ClInclude>
+    <ClInclude Include="game_sv_freemp.h">
+      <Filter>Core\Server\Games\server\freemp</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="damage_manager.cpp">
@@ -9575,6 +9587,12 @@
     </ClCompile>
     <ClCompile Include="UIGameFMP.cpp">
       <Filter>UI\GameTypes\FreeMp</Filter>
+    </ClCompile>
+    <ClCompile Include="game_cl_freemp.cpp">
+      <Filter>Core\Server\Games\client\freemp</Filter>
+    </ClCompile>
+    <ClCompile Include="game_sv_freemp.cpp">
+      <Filter>Core\Server\Games\server\freemp</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>

@@ -390,11 +390,14 @@ int __cdecl callback_count(qr2_key_type keytype, void* userdata)
         switch (pServer->GetGameState()->Type())
         {
         case eGameIDDominationZone:
-        case eGameIDDeathmatch: return 1;
+        case eGameIDDeathmatch:
+        case eGameIDFreeMp:
+            return 1;
         case eGameIDTeamDeathmatch:
         case eGameIDArtefactHunt:
         case eGameIDCaptureTheArtefact:
-        case eGameIDTeamDominationZone: return 2;
+        case eGameIDTeamDominationZone:
+            return 2;
         default: R_ASSERT(0); return 0;
         }
     }

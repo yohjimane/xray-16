@@ -359,12 +359,18 @@ LPCSTR CSE_Abstract::name_replace() const { return (s_name_replace); }
 Fvector& CSE_Abstract::position() { return (o_Position); }
 Fvector& CSE_Abstract::angle() { return (o_Angle); }
 Flags16& CSE_Abstract::flags() { return (s_flags); }
-const xr_token game_types[] = {{"any_game", eGameIDNoGame}, {"single", eGameIDSingle}, {"deathmatch", eGameIDDeathmatch},
-    {"team_deathmatch", eGameIDTeamDeathmatch}, {"artefacthunt", eGameIDArtefactHunt},
+const xr_token game_types[] = {
+    {"any_game", eGameIDNoGame},
+    {"single", eGameIDSingle},
+    {"deathmatch", eGameIDDeathmatch},
+    {"team_deathmatch", eGameIDTeamDeathmatch},
+    {"artefacthunt", eGameIDArtefactHunt},
     {"capture_the_artefact", eGameIDCaptureTheArtefact},
+    {"freemp", eGameIDFreeMp},
     // eGameIDDominationZone
     // eGameIDTeamDominationZone
-    {nullptr, 0}};
+    {nullptr, 0}
+};
 
 #ifndef MASTER_GOLD
 void CSE_Abstract::FillProps(LPCSTR pref, PropItemVec& items)

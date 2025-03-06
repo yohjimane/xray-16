@@ -194,7 +194,8 @@ SCRIPT_EXPORT(EnumGameIDs, (),
                 value("eGameIDDeathmatch", int(eGameIDDeathmatch)),
                 value("eGameIDTeamDeathmatch", int(eGameIDTeamDeathmatch)),
                 value("eGameIDArtefactHunt", int(eGameIDArtefactHunt)),
-                value("eGameIDCaptureTheArtefact", int(eGameIDCaptureTheArtefact))
+                value("eGameIDCaptureTheArtefact", int(eGameIDCaptureTheArtefact)),
+                value("eGameIDFreeMp", int(eGameIDFreeMp))
             ]
     ];
 });

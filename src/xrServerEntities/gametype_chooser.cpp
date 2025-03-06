@@ -13,12 +13,19 @@ enum ERPGameType
     rpgtGameTeamDeathmatch,
     rpgtGameArtefactHunt,
     rpgtGameCaptureTheArtefact,
+    rpgtFreeMp,
     rpgtGameCount,
 };
 
-const xr_token rpoint_game_type[] = {{"Any game", rpgtGameAny}, {"Deathmatch", rpgtGameDeathmatch},
-    {"TeamDeathmatch", rpgtGameTeamDeathmatch}, {"ArtefactHunt", rpgtGameArtefactHunt},
-    {"CaptureTheArtefact", rpgtGameCaptureTheArtefact}, {nullptr, 0}};
+const xr_token rpoint_game_type[] = {
+    {"Any game", rpgtGameAny},
+    {"Deathmatch", rpgtGameDeathmatch},
+    {"TeamDeathmatch", rpgtGameTeamDeathmatch},
+    {"ArtefactHunt", rpgtGameArtefactHunt},
+    {"CaptureTheArtefact", rpgtGameCaptureTheArtefact},
+    {"FreeMp", rpgtFreeMp},
+    {nullptr, 0}
+};
 
 #ifdef _EDITOR
 bool GameTypeChooser::LoadStream(IReader& F)
@@ -41,6 +48,7 @@ bool GameTypeChooser::LoadLTX(CInifile& ini, LPCSTR sect_name, bool bOldFormat)
         case rpgtGameTeamDeathmatch: m_GameType.set(eGameIDTeamDeathmatch, TRUE); break;
         case rpgtGameArtefactHunt: m_GameType.set(eGameIDArtefactHunt, TRUE); break;
         case rpgtGameCaptureTheArtefact: m_GameType.set(eGameIDCaptureTheArtefact, TRUE); break;
+        case rpgtFreeMp: m_GameType.set(eGameIDFreeMp, TRUE); break;
         }
     }
     else
