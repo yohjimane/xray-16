@@ -55,8 +55,7 @@ void CObjectFactory::register_script_class(LPCSTR unknown_class, LPCSTR clsid, L
 
 void CObjectFactory::register_script_classes()
 {
-    if (!GEnv.isDedicatedServer)
-        ai();
+    ai();
 }
 
 struct CInternal

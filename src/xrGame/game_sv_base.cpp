@@ -411,28 +411,24 @@ void game_sv_GameState::Create(shared_str& options)
 
         FS.r_close(F);
     }
+    // loading scripts
+    auto& scriptEngine = *GEnv.ScriptEngine;
+    scriptEngine.remove_script_process(ScriptProcessor::Game);
+    string_path S;
+    FS.update_path(S, "$game_config$", "script.ltx");
+    CInifile* l_tpIniFile = xr_new<CInifile>(S);
+    R_ASSERT(l_tpIniFile);
 
-    if (!GEnv.isDedicatedServer)
+    if (l_tpIniFile->section_exist(type_name()))
     {
-        // loading scripts
-        auto& scriptEngine = *GEnv.ScriptEngine;
-        scriptEngine.remove_script_process(ScriptProcessor::Game);
-        string_path S;
-        FS.update_path(S, "$game_config$", "script.ltx");
-        CInifile* l_tpIniFile = xr_new<CInifile>(S);
-        R_ASSERT(l_tpIniFile);
-
-        if (l_tpIniFile->section_exist(type_name()))
-        {
-            shared_str scripts;
-            if (l_tpIniFile->r_string(type_name(), "script"))
-                scripts = l_tpIniFile->r_string(type_name(), "script");
-            else
-                scripts = "";
-            scriptEngine.add_script_process(ScriptProcessor::Game, scriptEngine.CreateScriptProcess("game", scripts));
-        }
-        xr_delete(l_tpIniFile);
+        shared_str scripts;
+        if (l_tpIniFile->r_string(type_name(), "script"))
+            scripts = l_tpIniFile->r_string(type_name(), "script");
+        else
+            scripts = "";
+        scriptEngine.add_script_process(ScriptProcessor::Game, scriptEngine.CreateScriptProcess("game", scripts));
     }
+    xr_delete(l_tpIniFile);
 
     //---------------------------------------------------------------------
     ConsoleCommands_Create();
@@ -614,14 +610,11 @@ void game_sv_GameState::Update()
         m_item_respawner.update(Level().timeServer());
     }
 
-    if (!GEnv.isDedicatedServer)
+    if (Level().game)
     {
-        if (Level().game)
-        {
-            CScriptProcess* script_process = GEnv.ScriptEngine->script_process(ScriptProcessor::Game);
-            if (script_process)
-                script_process->update();
-        }
+        CScriptProcess* script_process = GEnv.ScriptEngine->script_process(ScriptProcessor::Game);
+        if (script_process)
+            script_process->update();
     }
 }
 
@@ -644,8 +637,7 @@ game_sv_GameState::game_sv_GameState()
 
 game_sv_GameState::~game_sv_GameState()
 {
-    if (!GEnv.isDedicatedServer)
-        GEnv.ScriptEngine->remove_script_process(ScriptProcessor::Game);
+    GEnv.ScriptEngine->remove_script_process(ScriptProcessor::Game);
     xr_delete(m_event_queue);
 
     SaveMapList();

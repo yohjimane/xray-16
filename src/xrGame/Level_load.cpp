@@ -161,7 +161,6 @@ bool CLevel::Load_GameSpecific_After()
         }
     }
 
-    if (!GEnv.isDedicatedServer)
     {
         // loading scripts
         auto& scriptEngine = *GEnv.ScriptEngine;

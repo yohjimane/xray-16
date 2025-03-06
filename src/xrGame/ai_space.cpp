@@ -41,7 +41,6 @@ void CAI_Space::init()
 
     R_ASSERT(!m_inited);
 
-    if (!GEnv.isDedicatedServer)
     {
         AISpaceBase::Initialize();
 
@@ -194,9 +193,6 @@ void CAI_Space::load(LPCSTR level_name)
 
 void CAI_Space::unload(bool reload)
 {
-    if (GEnv.isDedicatedServer)
-        return;
-
     ZoneScoped;
 
     GEnv.ScriptEngine->unload();
