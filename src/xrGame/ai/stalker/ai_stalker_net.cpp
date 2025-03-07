@@ -413,7 +413,7 @@ void CAI_Stalker::ApplyAnimation(
 		u_last_torso_motion_idx = u_torso_motion_idx;
 		motion.idx = u_torso_motion_idx;
 		motion.slot = u_torso_motion_slot;
-		if (motion.valid())
+		if (motion.valid_net())
 		{
 			ik_anim_obj->LL_PlayCycle(ik_anim_obj->LL_PartID("torso"), motion, TRUE,
 				ik_anim_obj->LL_GetMotionDef(motion)->Accrue(), ik_anim_obj->LL_GetMotionDef(motion)->Falloff(),
@@ -425,7 +425,7 @@ void CAI_Stalker::ApplyAnimation(
 		u_last_legs_motion_idx = u_legs_motion_idx;
 		motion.idx = u_legs_motion_idx;
 		motion.slot = u_legs_motion_slot;
-		if (motion.valid())
+		if (motion.valid_net())
 		{
 			CStepManager::on_animation_start(motion, ik_anim_obj->LL_PlayCycle(ik_anim_obj->LL_PartID("legs"), motion,
 				TRUE, ik_anim_obj->LL_GetMotionDef(motion)->Accrue(),
@@ -437,7 +437,7 @@ void CAI_Stalker::ApplyAnimation(
 		u_last_head_motion_idx = u_head_motion_idx;
 		motion.idx = u_head_motion_idx;
 		motion.slot = u_head_motion_slot;
-		if (motion.valid())
+		if (motion.valid_net())
 		{
 			ik_anim_obj->LL_PlayCycle(ik_anim_obj->LL_PartID("head"), motion, TRUE,
 				ik_anim_obj->LL_GetMotionDef(motion)->Accrue(), ik_anim_obj->LL_GetMotionDef(motion)->Falloff(),
@@ -449,7 +449,7 @@ void CAI_Stalker::ApplyAnimation(
 		motion.idx = u_script_motion_idx;
 		motion.slot = u_script_motion_slot;
 		u_last_script_motion_idx = u_script_motion_idx;
-		if (motion.valid())
+		if (motion.valid_net())
 		{
 			ik_anim_obj->LL_PlayCycle(ik_anim_obj->LL_GetMotionDef(motion)->bone_or_part, motion, TRUE,
 				ik_anim_obj->LL_GetMotionDef(motion)->Accrue(), ik_anim_obj->LL_GetMotionDef(motion)->Falloff(),

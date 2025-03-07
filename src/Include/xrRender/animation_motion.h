@@ -62,6 +62,7 @@ public:
 
     [[nodiscard]]
     ICF bool valid() const noexcept { return val != u32(-1); }
+    ICF bool valid_net() const noexcept { return val != u32(-1) && slot != u16(-1) && idx != u16(-1); }
 
     [[nodiscard]]
     ICF const MotionID* get() const noexcept { return this; };

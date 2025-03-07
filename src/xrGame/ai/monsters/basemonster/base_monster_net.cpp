@@ -477,7 +477,7 @@ void CBaseMonster::ApplyAnimation(u16 motion_idx, u8 motion_slot)
         u_last_motion_slot = motion_slot;
         motion.idx = motion_idx;
         motion.slot = motion_slot;
-        if (motion.valid())
+        if (motion.valid_net())
         {
             CStepManager::on_animation_start(motion, ik_anim_obj->LL_PlayCycle(ik_anim_obj->LL_GetMotionDef(motion)->bone_or_part, motion, TRUE,
                 ik_anim_obj->LL_GetMotionDef(motion)->Accrue(), ik_anim_obj->LL_GetMotionDef(motion)->Falloff(),
