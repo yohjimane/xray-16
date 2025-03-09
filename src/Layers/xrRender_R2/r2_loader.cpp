@@ -91,7 +91,8 @@ void CRender::level_Load(IReader* fs)
 
 #if defined(USE_DX11)
     // 3D Fluid
-    Load3DFluid();
+    if (!GEnv.isDedicatedServer)
+        Load3DFluid();
 #endif
 
     // HOM
@@ -347,12 +348,15 @@ void CRender::LoadSectors(IReader* fs)
 
             // Search for default sector - assume "default" or "outdoor" sector is the largest one
             // XXX: hack: need to know real outdoor sector
-            auto* V = static_cast<dxRender_Visual*>(RImplementation.getVisual(sector_data.root_id));
-            float vol = V->vis.box.getvolume();
-            if (vol > largest_sector_vol)
+            if (!GEnv.isDedicatedServer)
             {
-                largest_sector_vol = vol;
-                largest_sector_id = static_cast<IRender_Sector::sector_id_t>(i);
+                auto* V = static_cast<dxRender_Visual*>(RImplementation.getVisual(sector_data.root_id));
+                float vol = V->vis.box.getvolume();
+                if (vol > largest_sector_vol)
+                {
+                    largest_sector_vol = vol;
+                    largest_sector_id = static_cast<IRender_Sector::sector_id_t>(i);
+                }
             }
         }
         P->close();

@@ -33,7 +33,7 @@ void CheckAndSetupRenderer()
 {
     if (GEnv.isDedicatedServer)
     {
-        Console->Execute("renderer renderer_r1");
+        Console->Execute("renderer renderer_r2");
         return;
     }
 

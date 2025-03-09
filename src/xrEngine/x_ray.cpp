@@ -154,10 +154,7 @@ void InitConsole()
 {
     ZoneScoped;
 
-    if (GEnv.isDedicatedServer)
-        Console = xr_new<CTextConsole>();
-    else
-        Console = xr_new<CConsole>();
+    Console = xr_new<CConsole>();
 
     Console->Initialize();
     xr_strcpy(Console->ConfigFile, "user.ltx");
@@ -317,6 +314,9 @@ CApplication::CApplication(pcstr commandLine, GameModule* game, const std::span<
     if (g_pGamePersistent)
         g_pGamePersistent->OnAppStart();
     else
+        Console->Show();
+
+    if (GEnv.isDedicatedServer)
         Console->Show();
 
     FrameMarkEnd(FRAME_MARK_APPLICATION_STARTUP);

@@ -64,6 +64,8 @@ dx113DFluidManager::dx113DFluidManager()
 dx113DFluidManager::~dx113DFluidManager() { Destroy(); }
 void dx113DFluidManager::Initialize(int width, int height, int depth)
 {
+    if (GEnv.isDedicatedServer)
+        return;
     // if (strstr(Core.Params,"-no_volumetric_fog"))
     if (!RImplementation.o.volumetricfog)
         return;

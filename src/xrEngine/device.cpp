@@ -32,9 +32,6 @@ using namespace xray;
 
 bool CRenderDevice::RenderBegin()
 {
-    if (GEnv.isDedicatedServer)
-        return true;
-
     ZoneScoped;
 
     switch (GEnv.Render->GetDeviceState())
@@ -62,9 +59,6 @@ void CRenderDevice::Clear() { GEnv.Render->Clear(); }
 
 void CRenderDevice::RenderEnd(void)
 {
-    if (GEnv.isDedicatedServer)
-        return;
-
     ZoneScoped;
     if (dwPrecacheFrame)
     {
@@ -224,9 +218,6 @@ static void UpdateViewports()
 
 void CRenderDevice::DoRender()
 {
-    if (GEnv.isDedicatedServer)
-        return;
-
     ZoneScoped;
 
     CStatTimer renderTotalReal;
@@ -241,6 +232,9 @@ void CRenderDevice::DoRender()
 
         CalcFrameStats();
         Statistic->Show();
+
+        if (GEnv.isDedicatedServer)
+            GEnv.Render->RenderMenu();
 
         ImGui::Render();
         m_imgui_render->Render(ImGui::GetDrawData());
