@@ -474,9 +474,12 @@ void CHW::Reset()
         cd.BufferCount, desc.Width, desc.Height, desc.Format, cd.Flags));
 }
 
-void CHW::SetPrimaryAttributes(u32& /*windowFlags*/)
+void CHW::SetPrimaryAttributes(u32& windowFlags)
 {
-
+    if (GEnv.isDedicatedServer)
+        windowFlags = SDL_WINDOW_HIDDEN | SDL_WINDOW_RESIZABLE;
+    else
+        windowFlags = SDL_WINDOW_BORDERLESS | SDL_WINDOW_HIDDEN | SDL_WINDOW_RESIZABLE;
 }
 
 bool CHW::CheckFormatSupport(const DXGI_FORMAT format, const u32 feature) const

@@ -70,7 +70,11 @@ void CRenderDevice::Initialize()
         xr_strcpy(Core.ApplicationTitle, title);
         SetSDLSettings(title);
 
-        m_sdlWnd = SDL_CreateWindow(title, 0, 0, 640, 480, flags);
+        if (GEnv.isDedicatedServer)
+            m_sdlWnd = SDL_CreateWindow(title, SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, 640, 480, flags);
+        else
+            m_sdlWnd = SDL_CreateWindow(title, 0, 0, 640, 480, flags);
+
         R_ASSERT3(m_sdlWnd, "Unable to create SDL window", SDL_GetError());
 
         SDL_SetWindowHitTest(m_sdlWnd, WindowHitTest, nullptr);
