@@ -184,14 +184,7 @@ void CRenderDevice::UpdateWindowRects()
 
 void CRenderDevice::SelectResolution(const bool windowed)
 {
-    // Dedicated server hardcoded resolution
-    // XXX: to be removed
-    if (GEnv.isDedicatedServer)
-    {
-        psDeviceMode.Width = 640;
-        psDeviceMode.Height = 480;
-    }
-    else if (psDeviceMode.Width == 0 && psDeviceMode.Height == 0 && psDeviceMode.RefreshRate == 0)
+    if (psDeviceMode.Width == 0 && psDeviceMode.Height == 0 && psDeviceMode.RefreshRate == 0)
     {
         SDL_DisplayMode current;
         SDL_GetCurrentDisplayMode(psDeviceMode.Monitor, &current);
