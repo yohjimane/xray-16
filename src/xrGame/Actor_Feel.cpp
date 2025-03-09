@@ -152,7 +152,7 @@ void CActor::PickupModeUpdate_COD()
     if (Level().CurrentViewEntity() != this)
         return;
 
-    if (!g_Alive() || eacFirstEye != cam_active || !g_b_COD_PickUpMode)
+    if (!GEnv.isDedicatedServer && (!g_Alive() || eacFirstEye != cam_active || !g_b_COD_PickUpMode))
     {
         CurrentGameUI()->UIMainIngameWnd->SetPickUpItem(nullptr);
         return;
@@ -225,7 +225,8 @@ void CActor::PickupModeUpdate_COD()
             pNearestItem = NULL;
     }
 
-    CurrentGameUI()->UIMainIngameWnd->SetPickUpItem(pNearestItem);
+    if (!GEnv.isDedicatedServer)
+        CurrentGameUI()->UIMainIngameWnd->SetPickUpItem(pNearestItem);
 
     if (pNearestItem && m_bPickupMode)
     {

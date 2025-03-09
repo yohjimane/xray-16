@@ -41,13 +41,18 @@ CALifeSimulator::CALifeSimulator(IPureServer* server, shared_str* command_line)
     typedef IGame_Persistent::params params;
     params& p = g_pGamePersistent->m_game_params;
 
-    string256 temp;
-    xr_strcpy(temp, p.m_game_or_spawn);
-    xr_strcat(temp, "/");
-    xr_strcat(temp, p.m_game_type);
-    xr_strcat(temp, "/");
-    xr_strcat(temp, p.m_alife);
-    *command_line = temp;
+    bool is_single = !xr_strcmp(p.m_game_type, "single");
+
+    if (is_single)
+    {
+        string256 temp;
+        xr_strcpy(temp, p.m_game_or_spawn);
+        xr_strcat(temp, "/");
+        xr_strcat(temp, p.m_game_type);
+        xr_strcat(temp, "/");
+        xr_strcat(temp, p.m_alife);
+        *command_line = temp;
+    }
 
     const bool isNewGame = xr_strcmp(p.m_new_or_load, "new") != -1;
 
@@ -56,10 +61,9 @@ CALifeSimulator::CALifeSimulator(IPureServer* server, shared_str* command_line)
     R_ASSERT2(GEnv.ScriptEngine->functor(start_game_callback, functor), "failed to get start game callback");
     functor(isNewGame);
 
-    R_ASSERT2(xr_strlen(p.m_game_or_spawn) && !xr_strcmp(p.m_alife, "alife") && !xr_strcmp(p.m_game_type, "single"),
-        "Invalid server options!");
-
-	if (!xr_strcmp(p.m_game_type, "single")) {
+	if (is_single) {
+        R_ASSERT2(xr_strlen(p.m_game_or_spawn) && !xr_strcmp(p.m_alife, "alife") && is_single,
+            "Invalid server options!");
 		load(p.m_game_or_spawn, !xr_strcmp(p.m_new_or_load, "load") ? false : true, !xr_strcmp(p.m_new_or_load, "new"));
 	}
 	else

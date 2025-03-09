@@ -1443,7 +1443,7 @@ void CActor::shedule_Update(u32 DT)
         }
         mstate_old = mstate_real;
     }
-    if (this == Level().CurrentViewEntity())
+    if (this == Level().CurrentViewEntity() && !GEnv.isDedicatedServer)
     {
         UpdateMotionIcon(mstate_real);
     };

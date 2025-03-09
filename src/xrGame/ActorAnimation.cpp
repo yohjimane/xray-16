@@ -647,7 +647,7 @@ void CActor::g_SetAnimation(u32 mstate_rl)
 #endif
 
 #ifdef DEBUG
-    if (g_ShowAnimationInfo && Level().CurrentControlEntity() == this)
+    if (g_ShowAnimationInfo && Level().CurrentControlEntity() == this && !GEnv.isDedicatedServer)
     {
         auto movement = character_physics_support()->movement();
         auto pFontStat = UI().Font().pFontStat;

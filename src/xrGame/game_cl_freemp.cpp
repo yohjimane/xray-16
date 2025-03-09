@@ -91,6 +91,9 @@ LPCSTR game_cl_freemp::GetGameScore(string32&	score_dest)
 
 void game_cl_freemp::OnConnected()
 {
+    if (GEnv.isDedicatedServer)
+        return;
+
 	inherited::OnConnected();
 	if (m_game_ui)
 	{

@@ -803,7 +803,7 @@ bool game_sv_GameState::CheckNewPlayer(xrClientData* CL)
         }
     }
 
-    if (error_msg)
+    if (false)
     {
         m_server->SendProfileCreationError(CL, error_msg);
         if (CL != m_server->GetServerClient()) // CL can be NULL

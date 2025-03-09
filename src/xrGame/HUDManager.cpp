@@ -223,6 +223,9 @@ void CHUDManager::OnUIReset()
 {
     ZoneScoped;
 
+    if (!pUIGame)
+        return;
+
     pUIGame->HideShownDialogs();
 
     pUIGame->UnLoad();
