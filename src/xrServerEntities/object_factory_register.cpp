@@ -408,11 +408,6 @@ void CObjectFactory::register_classes()
     ADD(smart_cover::object, CSE_SmartCover, TEXT2CLSID("SMRTCOVR"), "smart_cover");
 
 #ifndef NO_XR_GAME
-    // hack, for dedicated server only
-    // because we do not have scripts
-    // and script functionality is not
-    // needed here
-    if (!GEnv.isDedicatedServer)
         return;
 
     ADD(CElectricBall, CSE_ALifeItemArtefact, TEXT2CLSID("SCRPTART"), "artefact_s");
