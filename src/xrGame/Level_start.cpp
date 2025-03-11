@@ -30,12 +30,14 @@ bool CLevel::net_Start(const char* op_server, const char* op_client)
     g_pGamePersistent->LoadBegin();
 
     string64 player_name;
-    GetPlayerName_FromRegistry(player_name, sizeof(player_name));
+
+    xr_strcpy(player_name, Console->GetString("mm_net_player_name"));
 
     if (xr_strlen(player_name) == 0)
-    {
+        GetPlayerName_FromRegistry(player_name, sizeof(player_name));
+    if (xr_strlen(player_name) == 0)
         xr_strcpy(player_name, xr_strlen(Core.UserName) ? Core.UserName : Core.CompName);
-    }
+
     VERIFY(xr_strlen(player_name));
 
     // make Client Name if options doesn't have it

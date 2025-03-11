@@ -18,7 +18,7 @@ void CBaseMonster::net_Save(NET_Packet& P)
 bool CBaseMonster::net_SaveRelevant() { return (inherited::net_SaveRelevant() || BOOL(PPhysicsShell() != NULL)); }
 void CBaseMonster::net_Export(NET_Packet& P)
 {
-    if (IsGameTypeSingle())
+    if (IsGameTypeSingle() && !CoopEnabled())
     {
         R_ASSERT(Local());
 
@@ -85,7 +85,7 @@ void CBaseMonster::net_Export(NET_Packet& P)
 
 void CBaseMonster::net_Import(NET_Packet& P)
 {
-    if (IsGameTypeSingle())
+    if (IsGameTypeSingle() && !CoopEnabled())
     {
         R_ASSERT(Remote());
         net_update N;
@@ -246,7 +246,7 @@ void CBaseMonster::postprocess_packet(monster_interpolation::net_update_A& N_A)
 
 void CBaseMonster::PH_B_CrPr()
 {
-    if (IsGameTypeSingle())
+    if (IsGameTypeSingle() && !CoopEnabled())
     {
         inherited::PH_B_CrPr();
         return;
@@ -304,7 +304,7 @@ void CBaseMonster::PH_B_CrPr()
 
 void CBaseMonster::PH_I_CrPr()
 {
-    if (IsGameTypeSingle())
+    if (IsGameTypeSingle() && !CoopEnabled())
     {
         inherited::PH_I_CrPr();
         return;
@@ -323,7 +323,7 @@ void CBaseMonster::PH_I_CrPr()
 
 void CBaseMonster::PH_A_CrPr()
 {
-    if (IsGameTypeSingle())
+    if (IsGameTypeSingle() && !CoopEnabled())
     {
         inherited::PH_A_CrPr();
         return;

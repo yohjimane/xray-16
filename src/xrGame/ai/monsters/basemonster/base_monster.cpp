@@ -330,7 +330,7 @@ void CBaseMonster::UpdateCL()
 
     inherited::UpdateCL();
 
-    if (g_Alive() && Remote() && !IsGameTypeSingle())
+    if (g_Alive() && Remote() && (!IsGameTypeSingle() || CoopEnabled()))
     {
         make_Interpolation();
     }

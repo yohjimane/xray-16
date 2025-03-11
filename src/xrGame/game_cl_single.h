@@ -19,6 +19,10 @@ public:
     virtual float GetEnvironmentGameTimeFactor();
     virtual void SetEnvironmentGameTimeFactor(const float fTimeFactor);
     virtual void SetEnvironmentGameTimeFactor(ALife::_TIME_ID GameTime, const float fTimeFactor) override;
+    virtual	bool OnKeyboardPress(int key);
+    virtual void OnConnected();
+    virtual	void net_import_state(NET_Packet& P);
+    virtual	void net_import_update(NET_Packet& P);
 
     void OnDifficultyChanged();
 };

@@ -40,7 +40,7 @@ void CUIAchievements::init_from_xml(CUIXml& xml)
 }
 void CUIAchievements::Update()
 {
-	if (!IsGameTypeSingle())
+	if (!IsGameTypeSingle() || g_pGamePersistent->m_game_params.coopEnabled)
 		return;
 
 	if (ParentHasMe() && !m_repeat)

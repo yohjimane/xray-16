@@ -345,6 +345,9 @@ void CUILines::Draw(float x, float y)
     if (m_text.size() == 0)
         return;
 
+    if (!m_pFont)
+        m_pFont = UI().Font().pFontLetterica16Russian;
+
     R_ASSERT(m_pFont);
     m_pFont->SetColor(m_dwTextColor);
 

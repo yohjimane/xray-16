@@ -537,14 +537,14 @@ bool CSE_ALifeObject::used_ai_locations() const /* noexcept */
 { return !!m_flags.is(flUsedAI_Locations); }
 bool CSE_ALifeObject::can_switch_online() const /* noexcept */
 {
-    if (g_pGamePersistent->GameType() == eGameIDSingle)
+    if (g_pGamePersistent->GameType() == eGameIDSingle && !g_pGamePersistent->m_game_params.coopEnabled)
         return (match_configuration() && !!m_flags.is(flSwitchOnline));
     else
         return true;
 }
 bool CSE_ALifeObject::can_switch_offline() const /* noexcept */
 {
-    if (g_pGamePersistent->GameType() == eGameIDSingle)
+    if (g_pGamePersistent->GameType() == eGameIDSingle && !g_pGamePersistent->m_game_params.coopEnabled)
         return (match_configuration() && !!m_flags.is(flSwitchOffline));
     else
         return true;

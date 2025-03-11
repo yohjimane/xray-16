@@ -732,7 +732,7 @@ void CAI_Stalker::UpdateCL()
     START_PROFILE("stalker/client_update")
     VERIFY2(PPhysicsShell() || getEnabled(), *cName());
 
-    if (g_Alive() && Remote() && !IsGameTypeSingle())
+    if (g_Alive() && Remote() && (!IsGameTypeSingle() || CoopEnabled()))
     {
         make_Interpolation();
     }

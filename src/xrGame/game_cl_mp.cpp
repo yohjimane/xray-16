@@ -1101,23 +1101,6 @@ void game_cl_mp::net_import_state(NET_Packet& P)
     m_bSpectator_TeamCamera = (m_u8SpectatorModes & (1 << CSpectator::eacMaxCam)) != 0;
 }
 
-bool game_cl_mp::Is_Spectator_Camera_Allowed(CSpectator::EActorCameras Camera)
-{
-    if (Level().IsDemoPlay()) // all cameras allowed in demo play mode
-        return true;
-    /*
-    switch (Camera)
-    {
-    case CSpectator::eacFreeFly		 : return m_bSpectator_FreeFly	;
-    case CSpectator::eacFirstEye	 : return m_bSpectator_FirstEye	;
-    case CSpectator::eacLookAt		 : return m_bSpectator_LookAt	;
-    case CSpectator::eacFreeLook	 : return m_bSpectator_FreeLook	;
-    }
-    return false;
-    */
-    return (!!(m_u8SpectatorModes & (1 << Camera)));
-};
-
 void game_cl_mp::OnEventMoneyChanged(NET_Packet& P)
 {
     if (!local_player)

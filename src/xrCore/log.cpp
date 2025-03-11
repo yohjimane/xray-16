@@ -83,6 +83,9 @@ void Log(pcstr s)
 
 void __cdecl Msg(pcstr format, ...)
 {
+    if (GEnv.isDedicatedServer && strstr(format, "[LUA]"))
+        return;
+
     va_list mark;
     string2048 buf;
     va_start(mark, format);
@@ -95,6 +98,9 @@ void __cdecl Msg(pcstr format, ...)
 
 void Log(pcstr msg, pcstr dop)
 {
+    if (GEnv.isDedicatedServer && strstr(msg, "[LUA]"))
+        return;
+
     if (!dop)
     {
         Log(msg);

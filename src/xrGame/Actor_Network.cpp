@@ -596,6 +596,8 @@ bool CActor::net_Spawn(CSE_Abstract* DC)
                     {
                         Msg("mp_actor_spawn");
                         g_actor = this;
+                        Level().SetControlEntity(g_actor);
+                        Level().SetEntity(g_actor); // do not switch !!!
                     }
                 }
             }

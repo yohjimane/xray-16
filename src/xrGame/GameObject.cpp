@@ -1027,6 +1027,9 @@ void CGameObject::setDestroy(bool _destroy)
     Props.bDestroy = _destroy ? 1 : 0;
     if (_destroy)
     {
+        /*if (this == g_actor)
+            return;*/
+
         g_pGameLevel->Objects.register_object_to_destroy(this);
 #ifdef DEBUG
         if (debug_destroy)

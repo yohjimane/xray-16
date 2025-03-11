@@ -275,7 +275,6 @@ void CSpectator::IR_OnKeyboardHold(int cmd)
     if (Remote())
         return;
 
-    game_cl_mp* pMPGame = smart_cast<game_cl_mp*>(&Game());
     game_PlayerState* PS = Game().local_player;
 
     if ((cam_active == eacFreeFly) || (cam_active == eacFreeLook))
@@ -311,7 +310,7 @@ void CSpectator::IR_OnKeyboardHold(int cmd)
         break;
         }
         if (cam_active != eacFreeFly ||
-            (pMPGame->Is_Spectator_Camera_Allowed(eacFreeFly) || (PS && PS->testFlag(GAME_PLAYER_FLAG_SPECTATOR))))
+            (Game().Is_Spectator_Camera_Allowed(eacFreeFly) || (PS && PS->testFlag(GAME_PLAYER_FLAG_SPECTATOR))))
             XFORM().c.add(vmove);
     }
 }

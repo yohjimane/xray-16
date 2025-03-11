@@ -71,7 +71,7 @@ game_sv_mp::game_sv_mp()
 
 game_sv_mp::~game_sv_mp()
 {
-    xr_delete(m_alife_simulator);
+    delete_data(m_alife_simulator);
     xr_delete(m_strWeaponsData);
 }
 void game_sv_mp::Update()

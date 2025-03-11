@@ -28,7 +28,8 @@ bool CAI_Stalker::net_SaveRelevant()
 void CAI_Stalker::net_Export(NET_Packet& P)
 {
     R_ASSERT(Local());
-    if (IsGameTypeSingle()) {
+    if (IsGameTypeSingle() && !CoopEnabled())
+    {
         // export last known packet
         R_ASSERT(!NET.empty());
         net_update& N = NET.back();
@@ -118,7 +119,7 @@ void CAI_Stalker::net_Export(NET_Packet& P)
 void CAI_Stalker::net_Import(NET_Packet& P)
 {
     R_ASSERT(Remote());
-    if (IsGameTypeSingle())
+    if (IsGameTypeSingle() && !CoopEnabled())
     {
         net_update						N;
 
@@ -296,7 +297,7 @@ void CAI_Stalker::postprocess_packet(stalker_interpolation::net_update_A &N_A)
 
 void CAI_Stalker::PH_B_CrPr()
 {
-	if (IsGameTypeSingle())
+    if (IsGameTypeSingle() && !CoopEnabled())
 	{
 		inherited::PH_B_CrPr();
 		return;
@@ -304,7 +305,6 @@ void CAI_Stalker::PH_B_CrPr()
 
 	if (CrPr_IsActivated()) return;
 	if (CrPr_GetActivationStep() > physics_world()->StepsNum()) return;
-
 
 	if (g_Alive())
 	{
@@ -356,7 +356,7 @@ void CAI_Stalker::PH_B_CrPr()
 
 void CAI_Stalker::PH_I_CrPr()
 {
-	if (IsGameTypeSingle())
+    if (IsGameTypeSingle() && !CoopEnabled())
 	{
 		inherited::PH_I_CrPr();
 		return;
@@ -375,7 +375,7 @@ void CAI_Stalker::PH_I_CrPr()
 
 void CAI_Stalker::PH_A_CrPr()
 {
-	if (IsGameTypeSingle())
+    if (IsGameTypeSingle() && !CoopEnabled())
 	{
 		inherited::PH_A_CrPr();
 		return;

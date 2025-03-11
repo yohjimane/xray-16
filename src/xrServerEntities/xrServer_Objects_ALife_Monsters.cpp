@@ -873,7 +873,7 @@ u32 CSE_ALifeCreatureAbstract::ef_detector_type() const
 void CSE_ALifeCreatureAbstract::on_death(CSE_Abstract* killer)
 {
     //VERIFY(!m_game_death_time);
-    if (IsGameTypeSingle())
+    if (IsGameTypeSingle() && !CoopEnabled())
         m_game_death_time = ai().get_alife() ? alife().time_manager().game_time() : Level().GetGameTime();
     else
         m_game_death_time = Level().GetGameTime();
@@ -1689,7 +1689,7 @@ void CSE_ALifeMonsterBase::STATE_Write(NET_Packet& tNetPacket)
 
 void CSE_ALifeMonsterBase::UPDATE_Read(NET_Packet& tNetPacket)
 {
-    if (IsGameTypeSingle())
+    if (IsGameTypeSingle() && !CoopEnabled())
     {
         inherited1::UPDATE_Read(tNetPacket);
         inherited2::UPDATE_Read(tNetPacket);
@@ -1718,7 +1718,7 @@ void CSE_ALifeMonsterBase::UPDATE_Read(NET_Packet& tNetPacket)
 
 void CSE_ALifeMonsterBase::UPDATE_Write(NET_Packet& tNetPacket)
 {
-    if (IsGameTypeSingle())
+    if (IsGameTypeSingle() && !CoopEnabled())
     {
         inherited1::UPDATE_Write(tNetPacket);
         inherited2::UPDATE_Write(tNetPacket);
@@ -1751,7 +1751,7 @@ void CSE_ALifeMonsterBase::load(NET_Packet& tNetPacket)
 
 BOOL CSE_ALifeMonsterBase::Net_Relevant()
 {
-    if (IsGameTypeSingle())
+    if (IsGameTypeSingle() && !CoopEnabled())
     {
         return inherited1::Net_Relevant();
     }
@@ -1881,7 +1881,7 @@ void CSE_ALifeHumanStalker::STATE_Read(NET_Packet& tNetPacket, u16 size)
 
 void CSE_ALifeHumanStalker::UPDATE_Write(NET_Packet& tNetPacket)
 {
-    if (IsGameTypeSingle())
+    if (IsGameTypeSingle() && !CoopEnabled())
     {
         inherited1::UPDATE_Write(tNetPacket);
         inherited2::UPDATE_Write(tNetPacket);
@@ -1918,7 +1918,7 @@ void CSE_ALifeHumanStalker::UPDATE_Write(NET_Packet& tNetPacket)
 
 void CSE_ALifeHumanStalker::UPDATE_Read(NET_Packet& tNetPacket)
 {
-    if (IsGameTypeSingle())
+    if (IsGameTypeSingle() && !CoopEnabled())
     {
         inherited1::UPDATE_Read(tNetPacket);
         inherited2::UPDATE_Read(tNetPacket);
@@ -1972,7 +1972,7 @@ void CSE_ALifeHumanStalker::FillProps(LPCSTR pref, PropItemVec& values)
 
 BOOL CSE_ALifeHumanStalker::Net_Relevant()
 {
-    if (IsGameTypeSingle())
+    if (IsGameTypeSingle() && !CoopEnabled())
     {
         return inherited1::Net_Relevant();
     }

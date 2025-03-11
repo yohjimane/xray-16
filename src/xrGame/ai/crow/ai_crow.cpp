@@ -366,7 +366,7 @@ void CAI_Crow::shedule_Update(u32 DT)
     if ((eDeathFall != st_current) && (eDeathDead != st_current))
     {
         // At random times, change the direction (goal) of the plane
-        if (fGoalChangeTime <= 0)
+        if (fGoalChangeTime <= 0 && Actor())
         {
             fGoalChangeTime += fGoalChangeDelta + fGoalChangeDelta * Random.randF(-0.5f, 0.5f);
             Fvector vP = Actor()->Position();

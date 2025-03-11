@@ -3,6 +3,7 @@
 #include "game_base.h"
 #include "xrCore/client_id.h"
 #include "WeaponAmmo.h"
+#include "Spectator.h"
 
 class NET_Packet;
 class CGameObject;
@@ -119,4 +120,7 @@ public:
 
     virtual bool IsPlayerInTeam(game_PlayerState* ps, ETeam team) { return ps->team == team; };
     virtual void OnConnected();
+
+    u8 m_u8SpectatorModes;
+    virtual bool Is_Spectator_Camera_Allowed(CSpectator::EActorCameras Camera);
 };

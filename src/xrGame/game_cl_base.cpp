@@ -410,3 +410,20 @@ void game_cl_GameState::set_type_name(LPCSTR s)
 };
 
 void game_cl_GameState::OnConnected() { m_game_ui_custom = CurrentGameUI(); }
+
+bool game_cl_GameState::Is_Spectator_Camera_Allowed(CSpectator::EActorCameras Camera)
+{
+    if (Level().IsDemoPlay()) // all cameras allowed in demo play mode
+        return true;
+    /*
+    switch (Camera)
+    {
+    case CSpectator::eacFreeFly		 : return m_bSpectator_FreeFly	;
+    case CSpectator::eacFirstEye	 : return m_bSpectator_FirstEye	;
+    case CSpectator::eacLookAt		 : return m_bSpectator_LookAt	;
+    case CSpectator::eacFreeLook	 : return m_bSpectator_FreeLook	;
+    }
+    return false;
+    */
+    return (!!(m_u8SpectatorModes & (1 << Camera)));
+};

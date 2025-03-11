@@ -344,3 +344,226 @@ void game_sv_Single::restart_simulator(LPCSTR saved_game_name)
     Device.PreCache(60, true);
     g_pGamePersistent->LoadEnd();
 }
+
+void game_sv_Single::RespawnPlayer(ClientID id_who, bool NoSpectator)
+{
+    //------------------------------------------------------------
+
+    xrClientData* xrCData = m_server->ID_to_client(id_who);
+    if (!xrCData || !xrCData->owner)
+        return;
+    //	game_PlayerState*	ps	=	&(xrCData->ps);
+    CSE_Abstract* pOwner = xrCData->owner;
+    CSE_ALifeCreatureActor* pA = smart_cast<CSE_ALifeCreatureActor*>(pOwner);
+    CSE_Spectator* pS = smart_cast<CSE_Spectator*>(pOwner);
+
+    if (pA)
+    {
+        //------------------------------------------------------------
+        //AllowDeadBodyRemove(id_who, xrCData->ps->GameID);
+        //------------------------------------------------------------
+        //m_CorpseList.push_back(pOwner->ID);
+        //------------------------------------------------------------
+    };
+
+    if (pA && !NoSpectator)
+    {
+        //------------------------------------------------------------
+        SpawnPlayer(id_who, "spectator");
+        //------------------------------------------------------------
+    }
+    else
+    {
+        //------------------------------------------------------------
+        if (pOwner->owner != m_server->GetServerClient())
+        {
+            pOwner->owner = (xrClientData*)m_server->GetServerClient();
+        };
+        //------------------------------------------------------------
+        // remove spectator entity
+        if (pS)
+        {
+            NET_Packet P;
+            u_EventGen(P, GE_DESTROY, pS->ID);
+            //		pObject->u_EventSend		(P);
+            Level().Send(P, net_flags(TRUE, TRUE));
+        };
+        //------------------------------------------------------------
+        SpawnPlayer(id_who, "actor");
+        //------------------------------------------------------------
+        //		SpawnWeaponsForActor(xrCData->owner, ps);
+        //------------------------------------------------------------
+    };
+};
+
+void game_sv_Single::SpawnPlayer(ClientID id, LPCSTR N)
+{
+    xrClientData* CL = m_server->ID_to_client(id);
+    //-------------------------------------------------
+    CL->net_PassUpdates = TRUE;
+    //-------------------------------------------------
+    game_PlayerState* ps_who = CL->ps;
+    ps_who->setFlag(GAME_PLAYER_FLAG_VERY_VERY_DEAD);
+
+    // Spawn "actor"
+    CSE_Abstract* E = spawn_begin(N); // create SE
+
+    E->set_name_replace(get_name_id(id)); // name
+
+    E->s_flags.assign(M_SPAWN_OBJECT_LOCAL | M_SPAWN_OBJECT_ASPLAYER); // flags
+
+    CSE_ALifeCreatureActor* pA = smart_cast<CSE_ALifeCreatureActor*>(E);
+    CSE_Spectator* pS = smart_cast<CSE_Spectator*>(E);
+
+    R_ASSERT2(pA || pS, "Respawned Client is not Actor nor Spectator");
+
+    if (pA)
+    {
+        pA->s_team = u8(ps_who->team);
+        assign_RP(pA, ps_who);
+        ps_who->resetFlag(GAME_PLAYER_FLAG_VERY_VERY_DEAD);
+        if (!ps_who->RespawnTime)
+        {
+            OnPlayerEnteredGame(id);
+        };
+        ps_who->RespawnTime = Device.dwTimeGlobal;
+
+        // Game().m_WeaponUsageStatistic->OnPlayerSpawned(ps_who);
+    }
+    else
+    {
+        if (pS)
+        {
+            assign_RP(E, ps_who);
+        }
+        else
+        {
+            Fvector Pos, Angle;
+            E->o_Angle.set(Angle);
+            E->o_Position.set(Pos);
+        }
+    };
+
+    Msg("* %s [%d] respawned as %s", get_name_id(id), E->ID, (0 == pA) ? "spectator" : "actor");
+    spawn_end(E, id);
+
+    ps_who->SetGameID(CL->owner->ID);
+
+    signal_Syncronize();
+}
+
+// player connect #1
+void game_sv_Single::OnPlayerConnect(ClientID id_who)
+{
+    inherited::OnPlayerConnect(id_who);
+
+    xrClientData* xrCData = m_server->ID_to_client(id_who);
+    game_PlayerState* ps_who = get_id(id_who);
+
+    if (!xrCData->flags.bReconnect)
+    {
+        ps_who->clear();
+        ps_who->team = 0;
+        ps_who->skin = -1;
+    };
+    ps_who->setFlag(GAME_PLAYER_FLAG_SPECTATOR);
+
+    ps_who->resetFlag(GAME_PLAYER_FLAG_SKIP);
+
+    if (GEnv.isDedicatedServer && (xrCData == m_server->GetServerClient()))
+    {
+        ps_who->setFlag(GAME_PLAYER_FLAG_SKIP);
+        return;
+    }
+}
+
+// player connect #2
+void game_sv_Single::OnPlayerConnectFinished(ClientID id_who)
+{
+    xrClientData* xrCData = m_server->ID_to_client(id_who);
+    SpawnPlayer(id_who, "spectator");
+
+    if (xrCData)
+    {
+        R_ASSERT2(xrCData->ps, "Player state not created yet");
+        NET_Packet					P;
+        GenerateGameMessage(P);
+        P.w_u32(GAME_EVENT_PLAYER_CONNECTED);
+        P.w_clientID(id_who);
+        xrCData->ps->team = 0;
+        xrCData->ps->setFlag(GAME_PLAYER_FLAG_SPECTATOR);
+        xrCData->ps->setFlag(GAME_PLAYER_FLAG_READY);
+        xrCData->ps->net_Export(P, TRUE);
+        u_EventSend(P);
+        xrCData->net_Ready = TRUE;
+    };
+}
+
+void game_sv_Single::OnPlayerReady(ClientID id_who)
+{
+    switch (Phase())
+    {
+    case GAME_PHASE_INPROGRESS:
+    {
+        xrClientData* xrCData = (xrClientData*)m_server->ID_to_client(id_who);
+        game_PlayerState* ps = get_id(id_who);
+        if (ps->IsSkip())					break;
+
+        if (!(ps->testFlag(GAME_PLAYER_FLAG_VERY_VERY_DEAD)))	break;
+
+        xrClientData* xrSCData = (xrClientData*)m_server->GetServerClient();
+
+        CSE_Abstract* pOwner = xrCData->owner;
+
+        RespawnPlayer(id_who, false);
+        pOwner = xrCData->owner;
+
+    } break;
+
+    default:
+        break;
+    };
+}
+
+// player disconnect
+void game_sv_Single::OnPlayerDisconnect(ClientID id_who, LPSTR Name, u16 GameID)
+{
+    inherited::OnPlayerDisconnect(id_who, Name, GameID);
+}
+
+/*
+void game_sv_Single::OnPlayerKillPlayer(game_PlayerState* ps_killer, game_PlayerState* ps_killed, KILL_TYPE KillType, SPECIAL_KILL_TYPE SpecialKillType, CSE_Abstract* pWeaponA)
+{
+    if (ps_killed)
+    {
+        ps_killed->setFlag(GAME_PLAYER_FLAG_VERY_VERY_DEAD);
+        ps_killed->DeathTime = Device.dwTimeGlobal;
+    }
+    signal_Syncronize();
+}
+*/
+
+void game_sv_Single::OnEvent(NET_Packet& P, u16 type, u32 time, ClientID sender)
+{
+    switch (type)
+    {
+    case GAME_EVENT_PLAYER_READY: // cs & dm
+    {
+        xrClientData* l_pC = m_server->ID_to_client(sender);
+        if (!l_pC)
+            break;
+        OnPlayerReady(l_pC->ID);
+    }
+    break;
+    case GAME_EVENT_PLAYER_KILL: // (g_kill)
+    {
+        u16 ID = P.r_u16();
+        xrClientData* l_pC = (xrClientData*)get_client(ID);
+        if (!l_pC) break;
+        //KillPlayer(l_pC->ID, l_pC->ps->GameID);
+    }
+    break;
+    default:
+        inherited::OnEvent(P, type, time, sender);
+    };
+}

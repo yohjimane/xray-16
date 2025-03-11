@@ -538,12 +538,16 @@ void game_sv_GameState::assign_RP(CSE_Abstract* E, game_PlayerState* ps_who)
                 rp[i].TimeToUnfreeze = 0;
             };
         };
-        rpoint = ::Random.randI((int)rp.size());
+        rpoint = rp.size() ? ::Random.randI((int)rp.size()) : 0;
     }
 //-----------------------------------------------------------
 #ifdef DEBUG
     Msg("--- Result rpoint is [%d]", rpoint);
 #endif // #ifdef DEBUG
+
+    if (!rp.size())
+        return;
+
     RPoint& r = rp[rpoint];
     if (!tpSpectator)
     {

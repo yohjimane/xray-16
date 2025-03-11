@@ -179,7 +179,7 @@ void CActorCondition::UpdateCondition()
 
         m_fAlcohol += m_fV_Alcohol * m_fDeltaTime;
         clamp(m_fAlcohol, 0.0f, 1.0f);
-        if (IsGameTypeSingle())
+        if (IsGameTypeSingle() && Actor())
         {
             CEffectorCam* ce = Actor()->Cameras().GetCamEffector((ECamEffectorType)effAlcohol);
             if (ce)

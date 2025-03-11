@@ -53,6 +53,19 @@ public:
     virtual void on_death(CSE_Abstract* e_dest, CSE_Abstract* e_src);
     void restart_simulator(LPCSTR saved_game_name);
 
+    void RespawnPlayer(ClientID id_who, bool NoSpectator);
+    void SpawnPlayer(ClientID id, LPCSTR N);
+
+    void __stdcall net_Relcase(IGameObject* O) {};
+
+    virtual void OnPlayerReady(ClientID id_who);
+    virtual void OnPlayerConnect(ClientID id_who);
+    virtual void OnPlayerConnectFinished(ClientID id_who);
+    virtual void OnPlayerDisconnect(ClientID id_who, LPSTR Name, u16 GameID);
+    // virtual void OnPlayerKillPlayer(game_PlayerState* ps_killer, game_PlayerState* ps_killed, KILL_TYPE KillType, SPECIAL_KILL_TYPE SpecialKillType, CSE_Abstract* pWeaponA);
+    virtual void OnEvent(NET_Packet& tNetPacket, u16 type, u32 time, ClientID sender);
+
+
     IC xrServer& server() const
     {
         VERIFY(m_server);

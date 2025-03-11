@@ -111,3 +111,63 @@ SCRIPT_EXPORT(CScriptGameDifficulty, (),
         ]
     ];
 });
+
+bool game_cl_Single::OnKeyboardPress(int key)
+{
+    if (kJUMP == key)
+    {
+        bool b_need_to_send_ready = false;
+
+        IGameObject* curr = Level().CurrentControlEntity();
+        if (!curr) return(false);
+
+        bool is_actor = !!smart_cast<CActor*>(curr);
+        bool is_spectator = !!smart_cast<CSpectator*>(curr);
+
+        game_PlayerState* ps = local_player;
+
+        if (is_spectator || (is_actor && ps && ps->testFlag(GAME_PLAYER_FLAG_VERY_VERY_DEAD)))
+        {
+            b_need_to_send_ready = true;
+        }
+
+        if (b_need_to_send_ready)
+        {
+            CGameObject* GO = smart_cast<CGameObject*>(curr);
+            NET_Packet			P;
+            GO->u_EventGen(P, GE_GAME_EVENT, GO->ID());
+            P.w_u16(GAME_EVENT_PLAYER_READY);
+            GO->u_EventSend(P);
+            return				true;
+        }
+        else
+        {
+            return false;
+        }
+    };
+
+    return inherited::OnKeyboardPress(key);
+}
+
+
+void game_cl_Single::OnConnected()
+{
+    if (GEnv.isDedicatedServer)
+        return;
+
+    inherited::OnConnected();
+
+    luabind::functor<void>	funct;
+    R_ASSERT(GEnv.ScriptEngine->functor("coop_game_cl.on_connected", funct));
+    funct();
+}
+
+void game_cl_Single::net_import_state(NET_Packet& P)
+{
+    inherited::net_import_state(P);
+}
+
+void game_cl_Single::net_import_update(NET_Packet& P)
+{
+    inherited::net_import_update(P);
+}

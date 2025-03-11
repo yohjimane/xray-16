@@ -735,6 +735,31 @@ bool IsGameTypeSingleExport()
     return g_pGamePersistent->GameType() == eGameIDSingle;
 }
 
+CScriptGameObject* get_object_by_client(u32 clientID)
+{
+    xrClientData* xrCData = Level().Server->ID_to_client(clientID);
+    if (!xrCData || !xrCData->owner) return NULL;
+
+    CGameObject* pGameObject = smart_cast<CGameObject*>(Level().Objects.net_Find(xrCData->owner->ID));
+    if (!pGameObject)
+        return NULL;
+
+    return pGameObject->lua_game_object();
+}
+
+int get_local_player_id()
+{
+    return Game().local_player->GameID;
+}
+
+int get_g_actor_id()
+{
+    if (!Actor())
+        return -1;
+
+    return Actor()->ID();
+}
+
 // script events
 
 void send_script_event_to_server(NET_Packet& P)
@@ -898,7 +923,11 @@ IC static void CLevel_Export(lua_State* luaState)
         def("remove_complex_effector", &remove_complex_effector),
 
         def("game_id", &GameID),
-        def("ray_pick", &ray_pick)
+        def("ray_pick", &ray_pick),
+
+        def("get_object_by_client", &get_object_by_client),
+        def("get_local_player_id", &get_local_player_id),
+        def("get_g_actor_id", &get_g_actor_id)
     ];
 
     module(luaState, "level")
