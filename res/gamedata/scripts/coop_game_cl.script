@@ -1,0 +1,7 @@
+
+function on_connected()
+	if OnClient() then
+		print_msg("coop client connected")
+		start_game_callback()
+	end
+end

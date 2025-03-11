@@ -104,18 +104,23 @@ function del_anomaly( anomaly )
 end
 
 function add_actor( obj )
+	Msg("Yohji debug - Add db.actor")
 	actor = obj
 	actor_proxy:net_spawn( obj )
 	add_obj( obj )
 end
 
 function del_actor()
-	del_obj( actor )
-	actor_proxy:net_destroy()
-	actor = nil
+	if actor ~= nil then
+		Msg("Yohji debug - Remove db.actor")
+		del_obj( actor )
+		actor_proxy:net_destroy()
+		actor = nil
+	end
 end
 
 function add_mp_actor(obj)
+	Msg("Yohji debug - Add mp actor")
 	if obj == nil then
 		printf_msg('empty obj')
 	end

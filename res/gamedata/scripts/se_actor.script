@@ -11,8 +11,10 @@ function se_actor:on_register()
 	simulation_objects.get_sim_obj_registry():register(self)
 	self.m_registred = true
 	if not self.start_position_filled then
+		Msg("Yohji debug - fill start position")
 		sim_board.get_sim_board():fill_start_position()
 		self.start_position_filled = true
+		Msg("Yohji debug - finish filling start position")
 	end
 end
 

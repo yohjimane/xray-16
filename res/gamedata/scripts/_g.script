@@ -796,9 +796,7 @@ function vec_to_str (vector)
 end
 -- выводит в лог стэк вызова функций.
 function callstack()
-	if debug ~= nil then
-		log(debug.traceback(2))
-	end
+	Msg("Yohji debug - callstack")
 end
 -- меняет team:squad:group обьекта.
 function change_team_squad_group(se_obj, team, squad, group)

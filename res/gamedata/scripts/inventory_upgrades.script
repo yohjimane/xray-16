@@ -103,8 +103,9 @@ function effect_functor_a( param2, section, loading ) --( string, string, int )
 	-- Функция отнимания денег при апгрейде.
 	-- Используется ТОЛЬКО ДЛЯ СИНГЛПЛЕЕРА.
 	if IsGameTypeSingle() == false then
-		abort("effect_functor_a() is not supported in multiplayer")
+		return
 	end
+	
 	if loading == 0 then
 	 	db.actor:give_money(-1 * how_much_upgrade(section))
 	 end

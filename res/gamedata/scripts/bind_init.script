@@ -3,7 +3,8 @@ function none(obj) end
 
 function mp_actor_init (obj)
 	if 	level.game_id() ~= game_types.eGameIDFreeMp and
-		level.game_id() ~= game_types.eGameIDRolePlay
+		level.game_id() ~= game_types.eGameIDRolePlay and
+		level.game_id() ~= game_types.eGameIDSingle
 	then
 		return
 	end
@@ -20,7 +21,11 @@ end
 
 function actor_init(obj)
 	if IsGameTypeSingle() then
-		bind_stalker.actor_init(obj)
+		if CoopEnabled() then
+			coop_bind_actor.actor_init(obj)
+		else
+			bind_stalker.actor_init(obj)
+		end
 	else
 		mp_bind_single_actor.actor_init(obj)
 	end
