@@ -48,9 +48,9 @@ af_soul 		= zone_mincer_weak, 5, 100.0
 af_electra_sparkler 	= zone_witches_galantine, 2, 30.0
 af_electra_flash 	= zone_witches_galantine, 3, 50.0
 af_electra_moonlight 	= zone_witches_galantine, 5, 100.0
-mp_af_electra_flash 	= zone_witches_galantine, 3, 50.0
-mp_af_cta_green		= zone_witches_galantine, 3, 50.0
-mp_af_cta_blue		= zone_witches_galantine, 3, 50.0
+mp_af_electra_flash 	= mp_zone_witches_galantine, 3, 50.0
+mp_af_cta_green		= mp_zone_witches_galantine, 3, 50.0
+mp_af_cta_blue		= mp_zone_witches_galantine, 3, 50.0
 
 [af_activation_gravi]
 ;----------------------------------------------------------------------------------------------------------------------------------------
@@ -1603,3 +1603,15 @@ telepatic_immunity = 0
 chemical_burn_immunity = 0
 explosion_immunity = 0
 fire_wound_immunity  = 0
+
+
+
+;;;;;;;;;;;;;;;;;;;;;; FOR MP ;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+[af_medusa_mp]:af_medusa
+$spawn				= "artefacts\gravitational_1_medusa_mp"
+af_rank				= 0
+
+[af_mincer_meat_mp]:af_mincer_meat
+$spawn				= "artefacts\acidic_2_mincer_meat_mp"
+af_rank				= 0

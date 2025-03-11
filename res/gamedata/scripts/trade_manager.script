@@ -16,6 +16,10 @@ function trade_init(npc, cfg)
 	trade_manager[npc:id()].cfg_ltx = cfg
 	trade_manager[npc:id()].config = ini_file(cfg)
 
+	if not IsGameTypeSingle() and OnServer() then
+		mp_trade_sync.sv_set_trade(npc, cfg)
+	end
+
 	-- коэфициенты покупки
 	local str = utils.cfg_get_string(trade_manager[npc:id()].config, "trader", "buy_condition", npc, true, "")
 	if str == nil then
@@ -48,15 +52,21 @@ function update(npc)
 	local tt = trade_manager[npc:id()]
 
 	if tt == nil then
+		printf("TRADE [%s]:  tt is nil", npc:name())
 		return
 	end
 
-	if tt.update_time ~= nil and tt.update_time < time_global() then
+	local actor = db.get_actor()
+	if actor == nil then
 		return
 	end
-	tt.update_time = time_global() + 3600000
 
-	local str = xr_logic.pick_section_from_condlist(db.actor, npc, tt.buy_condition)
+	if tt.update_time ~= nil and tt.update_time > time_global() then
+		return
+	end
+	tt.update_time = time_global() + 60000
+
+	local str = xr_logic.pick_section_from_condlist(actor, npc, tt.buy_condition)
 	if(str=="" or str==nil) then
 		abort("Wrong section in buy_condition condlist for npc [%s]!", npc:name())
 	end
@@ -66,17 +76,19 @@ function update(npc)
 		tt.current_buy_condition = str
 	end
 
-	str = xr_logic.pick_section_from_condlist(db.actor, npc, tt.sell_condition)
+	str = xr_logic.pick_section_from_condlist(actor, npc, tt.sell_condition)
 	if(str=="" or str==nil) then
 		abort("Wrong section in buy_condition condlist for npc [%s]!", npc:name())
 	end
 	if tt.current_sell_condition ~= str then
-		--'printf("TRADE [%s]: sell condition = %s", npc:name(), str)
+		printf("TRADE [%s]: sell condition = %s", npc:name(), str)
 		npc:sell_condition(tt.config, str)
 		tt.current_sell_condition = str
+	else
+		printf("TRADE [%s]: current = %s   sell = %s", npc:name(), tostring(tt.current_sell_condition), tostring(str))
 	end
 
-	str = tonumber(xr_logic.pick_section_from_condlist(db.actor, npc, tt.buy_item_condition_factor))
+	str = tonumber(xr_logic.pick_section_from_condlist(actor, npc, tt.buy_item_condition_factor))
 	if tt.current_buy_item_condition_factor ~= str then
 		npc:buy_item_condition_factor(str)
 		tt.current_buy_item_condition_factor = str
@@ -86,7 +98,7 @@ function update(npc)
 		return
 	end
 
-	str = xr_logic.pick_section_from_condlist(db.actor, npc, tt.buy_supplies)
+	str = xr_logic.pick_section_from_condlist(actor, npc, tt.buy_supplies)
 	if(str=="" or str==nil) then
 		abort("Wrong section in buy_condition condlist for npc [%s]!", npc:name())
 	end
@@ -205,23 +217,31 @@ function load(obj, packet)
 end
 ----------- NOT TO DELETE!!!!!!!!! called from engine
 function get_buy_discount(npc_id)
+	if not IsGameTypeSingle() then
+		return 1
+	end
+
 	local str = utils.cfg_get_string(trade_manager[npc_id].config, "trader", "discounts", nil, false, "", "")
 	if(str=="") then
 		return 1
 	end
 
-	local sect = xr_logic.pick_section_from_condlist(db.actor, nil, xr_logic.parse_condlist(nil, "trade_manager", "discounts", str))
+	local sect = xr_logic.pick_section_from_condlist(db.get_actor(), nil, xr_logic.parse_condlist(nil, "trade_manager", "discounts", str))
 	str = utils.cfg_get_number(trade_manager[npc_id].config, sect, "buy", nil, false, 1)
 		return str
 end
 ----------- NOT TO DELETE!!!!!!!!! called from engine
 function get_sell_discount(npc_id)
+	if not IsGameTypeSingle() then
+		return 1
+	end
+	
 	local str = utils.cfg_get_string(trade_manager[npc_id].config, "trader", "discounts", nil, false, "", "")
 	if(str=="") then
 		return 1
 	end
 
-	local sect = xr_logic.pick_section_from_condlist(db.actor, nil, xr_logic.parse_condlist(npc, "trade_manager", "discounts", str))
+	local sect = xr_logic.pick_section_from_condlist(db.get_actor(), nil, xr_logic.parse_condlist(npc, "trade_manager", "discounts", str))
 	str = utils.cfg_get_number(trade_manager[npc_id].config, sect, "sell", nil, false, 1)
 
 	return str

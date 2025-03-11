@@ -20,6 +20,15 @@ function empty	(container)
 	return			(true)
 end
 
+-- Общие функции для string
+
+function starts_with(str, start)
+	return str:sub(1, #start) == start
+ end
+ 
+function ends_with(str, ending)
+	return ending == "" or str:sub(-#ending) == ending
+end
 
 schemes = {} -- соответствие схем модулям
 stypes = {} -- типv схем
@@ -38,6 +47,7 @@ dev_debug = false
 sim_debug = false
 mus_vol = 0
 amb_vol = 0
+b_discard_settings_shown = false
 ----------------------------------------------------------------------
 local scripts_to_print =	{
 							["stalker_generic"] = true,
@@ -80,7 +90,7 @@ local scripts_to_print =	{
 							["task_objects"]	 = true
 							}
 function printf(fmt,...)
---[[
+
 	local is_g = 0
 	local result = fmt
 	if debug == nil then
@@ -100,7 +110,19 @@ function printf(fmt,...)
 		result = fmt
 	end
 	log(string.format(result,...))
-	]]
+
+end
+
+----------------------------------------------------------------------
+
+function printf_msg(fmt,...)
+	print_msg(string.format(fmt,...))
+end
+
+function server_msg(fmt,...)
+	if OnServer() then
+		printf_msg(fmt,...)
+	end
 end
 
 ----------------------------------------------------------------------
@@ -476,7 +498,7 @@ end
 -- Крешнуть игру (после вывода сообщения об ошибке в лог)
 function abort(fmt, ...)
 	local reason = string.format(fmt, ...)
-	--error_log(reason)
+	error_log(reason)
 end
 
 function set_inactivate_input_time(delta)
@@ -511,7 +533,9 @@ function npc_in_actor_frustrum(npc)
 end
 
 function start_game_callback()
-	aa = alife()
+	if OnServer() then
+		aa = alife()
+	end
 
 	squad_community_by_behaviour = {
 		["stalker"]							= "stalker",
@@ -548,7 +572,7 @@ function start_game_callback()
 --		[clsid.fracture_s] 				= true,
 		[clsid.poltergeist_s] 			= true,
 		[clsid.gigant_s] 				= true,
---		[clsid.zombie_s] 				= true,
+		[clsid.zombie_s] 				= true,
 		[clsid.snork_s] 				= true,
 		[clsid.tushkano_s] 				= true,
 		[clsid.psy_dog_s] 				= true,
@@ -865,4 +889,16 @@ function show_all_ui(show)
 --	    db.actor:hide_weapon()
 			db.actor:disable_hit_marks(true)
 	end
+end
+
+function get_nearest_actor(pos)
+	local nearest_actor = nil
+	local min_distance = 100000
+	for _, player in pairs(db.players) do
+		local distance = pos:distance_to_sqr(pos)
+		if distance < min_distance then
+			nearest_actor = player
+		end
+	end
+	return nearest_actor
 end

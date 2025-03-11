@@ -1285,7 +1285,7 @@ function destroy_object(actor, obj, p)
 		end
 		local target_position, target_id, target_init = xr_remark.init_target(obj, target_str)
 		if target_id == nil then
-			printf("You are trying to set non-existant target [%s] for object [%s] in section [%s]", target_str, npc:name(), db.storage[npc:id()].active_section)
+			printf("You are trying to set non-existant target [%s] for object [%s] in section [%s]", tostring(target_str), tostring(obj:name()), tostring(db.storage[obj:id()].active_section))
 		end
 		sobj = alife():object(target_id)
 	end
@@ -3055,7 +3055,7 @@ local actor_torch		= false
 
 function disable_actor_nightvision(actor, npc)
 	local nightvision = db.actor:object("device_torch")
-	if nightvision:night_vision_enabled() then
+	if nightvision ~= nil and nightvision:night_vision_enabled() then
 		nightvision:enable_night_vision(false)
 		actor_nightvision = true
 	end
@@ -3063,7 +3063,7 @@ end
 
 function enable_actor_nightvision(actor, npc)
 	local nightvision = db.actor:object("device_torch")
-	if not nightvision:night_vision_enabled() and actor_nightvision then
+	if nightvision ~= nil and not nightvision:night_vision_enabled() and actor_nightvision then
 		nightvision:enable_night_vision(true)
 		actor_nightvision = false
 	end
@@ -3071,7 +3071,7 @@ end
 
 function disable_actor_torch(actor, npc)
 	local torch = db.actor:object("device_torch")
-	if torch:torch_enabled() then
+	if torch ~= nil and torch:torch_enabled() then
 		torch:enable_torch(false)
 		actor_torch = true
 	end
@@ -3079,7 +3079,7 @@ end
 
 function enable_actor_torch(actor, npc)
 	local torch = db.actor:object("device_torch")
-	if not torch:torch_enabled() and actor_torch then
+	if torch ~= nil and not torch:torch_enabled() and actor_torch then
 		torch:enable_torch(true)
 		actor_torch = false
 	end
@@ -3369,7 +3369,7 @@ function jup_b200_count_found(actor)
 	for k,v in pairs(mat_table) do
 		local material_obj = get_story_object(v)
 		if material_obj then
-			local parent = material_obj:parent() 
+			local parent = material_obj:parent()
 			if parent then
 				local parent_id = parent:id()
 				if parent_id ~= 65535 and parent_id == actor:id() then
@@ -3381,4 +3381,18 @@ function jup_b200_count_found(actor)
 	
 	cnt = cnt + xr_logic.pstor_retrieve(actor, "jup_b200_tech_materials_brought_counter", 0)
 	xr_logic.pstor_store(actor, "jup_b200_tech_materials_found_counter", cnt)
+end
+
+
+-- new functions for mp
+
+function log(actor, npc, p)
+	print_msg(tostring(p[1]))
+end
+
+function teleport_player(actor, npc, p)
+	if not db.mp_actor or db.mp_actor:id() ~= actor:id() then
+		return
+	end
+	mp_teleport.cl_send_teleport_event(p[1], p[2])
 end

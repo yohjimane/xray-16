@@ -71,7 +71,8 @@ end
 
 -- проверка, что актер жив
 function actor_alive(actor, npc)
-	if db.actor and db.actor:alive() then
+	local actor = db.get_actor()
+	if actor and actor:alive() then
 		return true
 	end
 	return false
@@ -1728,4 +1729,10 @@ function upgrade_hint_kardan(actor, npc, p)
 	inventory_upgrades.cur_hint = hint_table
 
 	return can_upgrade >= 2
+end
+
+--------------------------------------------------------------------------------
+
+function actor_has_item_mp(actor, npc, p)
+	return p[1] ~= nil and actor and actor:object( p[1] ) ~= nil
 end

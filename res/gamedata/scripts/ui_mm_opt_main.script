@@ -59,12 +59,6 @@ function options_dialog:InitControls()
 	self.dlg_video_adv:Show		(false)
 	self.dialog:AttachChild		(self.dlg_video_adv)
 	xml:InitWindow				("tab_size", 0, self.dlg_video_adv)
-	
-	self.dlg_controls_gpad		= ui_mm_opt_controls_gpad.opt_controls_gpad()
-	self.dlg_controls_gpad:InitControls(0,0, xml, self)
-	self.dlg_controls_gpad:Show	(false)
-	self.dialog:AttachChild		(self.dlg_controls_gpad)
-	xml:InitWindow				("tab_size", 0, self.dlg_controls_gpad)
 
 	local btn
 	btn = xml:Init3tButton		("main_dialog:btn_accept", self.dialog)
@@ -110,16 +104,11 @@ function options_dialog:SetCurrentValues()
 
 	opt:SetCurrentValues("mm_opt_controls")
 	opt:SaveBackupValues("mm_opt_controls")
-	
-	--opt:SetCurrentValues("mm_opt_controls_adv")
-	--opt:SaveBackupValues("mm_opt_controls_adv")
 
 	opt:SetCurrentValues("key_binding")
 	opt:SaveBackupValues("key_binding")
-	
-	opt:SetCurrentValues("key_binding_gamepad")
-	opt:SaveBackupValues("key_binding_gamepad")
 
+	self.dlg_sound:UpdateControls()
 	self:UpdateDependControls()
 end
 
@@ -145,31 +134,6 @@ function options_dialog:UpdateDependControls()
 
 	self.texture_lod_track:SetOptIBounds(min_texture_lod, max_texture_lod)
 	self:OnAOOptionChange()
-	self:OnShaderPresetChanged()
-end
-
-function options_dialog:OnDynWetSurfNearUpdate()
-    local near = self.track_r3_dyn_wet_surf_near:GetFValue()
-    local far = self.track_r3_dyn_wet_surf_far:GetFValue()
-
-    if (near > far) then
-        local console = get_console()
-        console:execute("r3_dynamic_wet_surfaces_far " .. near + 1)
-    end
-
-    self.track_r3_dyn_wet_surf_far:SetCurrentValue()
-end
-
-function options_dialog:OnDynWetSurfFarUpdate()
-    local near = self.track_r3_dyn_wet_surf_near:GetFValue()
-    local far = self.track_r3_dyn_wet_surf_far:GetFValue()
-    
-    if (far < near) then
-        local console = get_console()
-        console:execute("r3_dynamic_wet_surfaces_near " .. far - 1)
-    end
-
-    self.track_r3_dyn_wet_surf_near:SetCurrentValue()
 end
 
 function options_dialog:InitCallBacks()
@@ -180,20 +144,12 @@ function options_dialog:InitCallBacks()
 	self:AddCallback("btn_default_graphic",	ui_events.BUTTON_CLICKED,	self.OnBtnDefGraph,			self)
 	self:AddCallback("btn_default_sound",	ui_events.BUTTON_CLICKED,	self.OnBtnDefSound,			self)
 	self:AddCallback("combo_preset",		ui_events.LIST_ITEM_SELECT,	self.OnPresetChanged,		self)
-	self:AddCallback("combo_shader_preset",	ui_events.LIST_ITEM_SELECT,	self.OnShaderPresetChanged,	self)
-	self:AddCallback("combo_color_grading_preset",	ui_events.LIST_ITEM_SELECT,	self.OnPresetChanged,	self)
 	self:AddCallback("btn_simply_graphic",	ui_events.BUTTON_CLICKED,	self.OnSimplyGraphic,		self)
 	self:AddCallback("btn_keyb_default",	ui_events.BUTTON_CLICKED,	self.OnBtnKeybDefault,		self)
 	self:AddCallback("btn_check_updates",	ui_events.BUTTON_CLICKED,	self.OnBtnCheckUpdates,		self)
 	self:AddCallback("combo_renderer",		ui_events.LIST_ITEM_SELECT,	self.UpdateDependControls,	self)
 	self:AddCallback("btn_cancel_download",	ui_events.BUTTON_CLICKED,	self.OnBtn_CancelDownload,	self)
 	self:AddCallback("tab_ao_opt",			ui_events.TAB_CHANGED,		self.OnAOOptionChange,		self)
-	self:AddCallback("check_simple_pickup",	ui_events.BUTTON_CLICKED,	self.OnPickupOptionChange,	self)
-	self:AddCallback("track_r3_dyn_wet_surf_near", ui_events.BUTTON_CLICKED, self.OnDynWetSurfNearUpdate, self)
-	self:AddCallback("track_r3_dyn_wet_surf_far", ui_events.BUTTON_CLICKED,  self.OnDynWetSurfFarUpdate, self)
-	self:AddCallback("btn_gpad_controls", 	ui_events.BUTTON_CLICKED,	self.OnBtnGpadControls,		self)
-	self:AddCallback("btn_keyboard_controls", ui_events.BUTTON_CLICKED,	self.OnBtnKbdControls,		self)
-	self:AddCallback("btn_gpad_default",	ui_events.BUTTON_CLICKED,	self.OnBtnGpadDefault,		self)
 
 	self:AddCallback("mb",					ui_events.MESSAGE_BOX_YES_CLICKED, self.OnApplyChanges, self)
 	self:AddCallback("mb",					ui_events.MESSAGE_BOX_NO_CLICKED, self.OnDiscardChanges,self)
@@ -221,13 +177,6 @@ function options_dialog:OnPresetChanged()
 	opt:SetCurrentValues		("mm_opt_video_adv")
 end
 
-function options_dialog:OnShaderPresetChanged()
-	local opt					= COptionsManager()
-	opt:SetCurrentValues		("mm_opt_video_adv")
-
-    local current_preset = self.combo_shader_preset:CurrentID()
-    self.combo_color_grading_preset:Enable(current_preset ~= 0)
-end
 
 function options_dialog:OnBtnDefGraph()
 	local opt = COptionsManager()
@@ -253,8 +202,6 @@ function options_dialog:OnBtnAccept()
 	opt:SaveValues("mm_opt_gameplay")
 	opt:SaveValues("mm_opt_sound")
 	opt:SaveValues("mm_opt_controls")
-	--opt:SaveValues("mm_opt_controls_adv")
-	opt:SaveValues("key_binding_gamepad")
 
 	if opt:NeedVidRestart() then
 		_G.b_discard_settings_shown = true
@@ -289,12 +236,12 @@ function options_dialog:OnTabChange()
 	self.dlg_gameplay:Show	(false)
 	self.dlg_controls:Show	(false)
 	self.dlg_video_adv:Show	(false)
-	self.dlg_controls_gpad:Show(false)
 
 	local ids = self.tab:GetActiveId()
 	if ids == "video" then
 		self.dlg_video:Show(true)
 	elseif ids == "sound" then
+		self.dlg_sound:UpdateControls()
 		self.dlg_sound:Show(true)
 	elseif ids == "gameplay" then
 		self.dlg_gameplay:Show(true)
@@ -315,17 +262,6 @@ function options_dialog:OnAOOptionChange()
 	self.combo_ssao:SetCurrentOptValue()
 end
 
-function options_dialog:OnPickupOptionChange()
-	local simple = self.check_simple_pickup
-	local multi = self.check_multi_pickup
-
-	if (simple:GetCheck()) then
-		multi:Enable(true)
-	else
-		multi:Enable(false)
-	end
-end
-
 function options_dialog:OnBtnAdvGraphic()
 	self.dlg_video:Show		(false)
 	self.dlg_video_adv:Show	(true)
@@ -336,25 +272,6 @@ function options_dialog:OnSimplyGraphic()
 	self.dlg_video_adv:Show	(false)
 end
 
-function options_dialog:OnBtnGpadControls()
-	self.dlg_controls:Show		(false)
-	self.dlg_controls_gpad:Show	(true)
-end
-
-function options_dialog:OnBtnKbdControls()
-	self.dlg_controls:Show		(true)
-	self.dlg_controls_gpad:Show	(false)
-end
-
-function options_dialog:OnBtnGpadDefault()
-	local console			= get_console()
-	console:execute			("default_controls")
-
-	local opt				= COptionsManager()
-	opt:SetCurrentValues	("mm_opt_controls")
-	opt:SetCurrentValues	("key_binding_gamepad")
-end
-
 function options_dialog:OnKeyboard(dik, keyboard_action)
 	local res = CUIScriptWnd.OnKeyboard(self,dik,keyboard_action)
 
@@ -363,16 +280,14 @@ function options_dialog:OnKeyboard(dik, keyboard_action)
 		local bind = dik_to_bind(dik)
 
 		if keyboard_action == ui_events.WINDOW_KEY_PRESSED then
-			if bind == key_bindings.kQUIT then
+			if dik == DIK_keys.DIK_ESCAPE then
 				if self.dlg_video_adv:IsShown() then
 					self.dlg_video_adv:Show	(false)
 					self.dlg_video:Show		(true)
-					return true
 				else
 					self.owner:ShowDialog(true)
 					self:HideDialog()
 					self.owner:Show(true)
-					return true
 				end
 			end
 

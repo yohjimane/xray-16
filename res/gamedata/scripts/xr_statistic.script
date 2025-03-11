@@ -20,6 +20,7 @@ monster_classes = {
 			[clsid.dog_s] 			  = "dog",
 			[clsid.flesh_s] 		  = "flesh",
 			[clsid.gigant_s] 		  = "gigant",
+			[clsid.zombie_s] 		  = "zombie",
 			[clsid.poltergeist_s] 	  = "poltergeist",
 			[clsid.psy_dog_s] 		  = "psy_dog",
 			[clsid.pseudodog_s]		  = "pseudodog",
@@ -108,12 +109,25 @@ function inc_killed_stalkers_counter()
 end
 function inc_founded_artefacts_counter(art_id)
 	if(taken_artefacts[art_id]==nil) then
-			actor_statistic.artefacts_founded = actor_statistic.artefacts_founded + 1
+		actor_statistic.artefacts_founded = actor_statistic.artefacts_founded + 1
 		taken_artefacts[art_id] = art_id
-		local s_art = alife():object(art_id)
-			if(s_art and s_art:section_name()) then
-					artefacts_table[s_art:section_name()] = true
+
+		local s_art
+		if not IsGameTypeSingle() then
+			s_art = level.object_by_id(art_id)
+		else
+			s_art = alife():object(art_id)
+		end
+
+		if not IsGameTypeSingle() then
+			if s_art and s_art:section() then
+				artefacts_table[s_art:section()] = true
 			end
+		else
+			if s_art and s_art:section_name() then
+				artefacts_table[s_art:section_name()] = true
+			end
+		end
 	end
 end
 function inc_founded_secrets_counter()
@@ -128,9 +142,20 @@ function set_best_monster(obj)
 		if not(community) then
 			abort("Statistic ERROR: cannot find monster class for [%s] clsid [%s]", obj:name(), tostring(get_clsid(obj)))
 		end
-		local s_obj = alife():object(obj:id())
+		local s_obj
+		if not IsGameTypeSingle() then
+			s_obj = level.object_by_id(obj:id())
+		else
+			s_obj = alife():object(obj:id())
+		end
+
 		if(s_obj) then
-			local rank = s_obj:rank()
+			local rank
+			if not IsGameTypeSingle() then
+				rank = s_obj:character_rank()
+			else
+				rank = s_obj:rank()
+			end
 			if(community=="flesh") then
 				if(rank==3) then
 					community = community.."_strong"
@@ -173,11 +198,28 @@ function set_best_monster(obj)
 end
 
 function set_best_weapon(hit_amount)
-	local active_item = db.actor:active_item()
+	local active_item
+
+	if not IsGameTypeSingle() then
+		active_item = db.mp_actor:active_item()
+	else
+		active_item = db.actor:active_item()
+	end
+
 	if(active_item) then
-		local s_obj = alife():object(active_item:id())
+		local s_obj
+		if not IsGameTypeSingle() then
+			s_obj = level.object_by_id(active_item:id())
+		else
+			s_obj = alife():object(active_item:id())
+		end
 		if(s_obj) then
-			local s = s_obj:section_name()
+			local s
+			if not IsGameTypeSingle() then
+				s = s_obj:section()
+			else
+				s = s_obj:section_name()
+			end
 			for w in string.gfind(s, "%w+") do
 				if(weapons_table[w]~=nil) then
 					weapons_table[w] = weapons_table[w] + hit_amount
@@ -480,7 +522,7 @@ end
 
 function balance_advocate_functor()
 	if not has_alife_info("balance_advocate_gained") then
-		if has_alife_info("jup_b46_duty_founder_pda_to_owl")
+		if has_alife_info("jup_b46_duty_founder_pda_to_stalkers")
 				and has_alife_info("jup_b207_dealers_pda_sold_owl")
 				and has_alife_info("zat_b106_found_soroka_done") then
 			db.actor:give_info_portion("balance_advocate_gained")
@@ -510,15 +552,17 @@ function keeper_of_secrets_functor()
 end
 
 function marked_by_zone_functor()
-	if has_alife_info("actor_marked_by_zone_3_times") then
-		return true
-	end
-	local counter_name = "actor_marked_by_zone_cnt"
-	local cnt_value = xr_logic.pstor_retrieve(db.actor, counter_name, 0)
-	if cnt_value > 2 then
-		db.actor:give_info_portion("actor_marked_by_zone_3_times")
-		news_manager.send_tip(db.actor, "st_ach_marked_by_zone", nil, "marked_by_zone", nil, nil)
-		return true
+	if IsGameTypeSingle() then
+		if has_alife_info("actor_marked_by_zone_3_times") then
+			return true
+		end
+		local counter_name = "actor_marked_by_zone_cnt"
+		local cnt_value = xr_logic.pstor_retrieve(db.actor, counter_name, 0)
+		if cnt_value > 2 then
+			db.actor:give_info_portion("actor_marked_by_zone_3_times")
+			news_manager.send_tip(db.actor, "st_ach_marked_by_zone", nil, "marked_by_zone", nil, nil)
+			return true
+		end
 	end
 
 	return false
@@ -555,6 +599,7 @@ function information_dealer_functor()
 		if count >= 10 then
 			news_manager.send_tip(db.actor, "st_ach_information_dealer", nil, "information_dealer", nil, nil)
 			db.actor:give_info_portion("actor_information_dealer")
+			return true
 		end
 	end
 	return has_alife_info("actor_information_dealer")
