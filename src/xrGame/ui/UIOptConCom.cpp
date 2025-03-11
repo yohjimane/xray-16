@@ -10,6 +10,7 @@
 #include "ui/UICDkey.h"
 
 xr_token g_GameModes[] = {
+    {"st_single", eGameIDSingle},
     {"st_deathmatch", eGameIDDeathmatch},
     {"st_team_deathmatch", eGameIDTeamDeathmatch},
     {"st_artefacthunt", eGameIDArtefactHunt},

@@ -191,6 +191,7 @@ SCRIPT_EXPORT(EnumGameIDs, (),
                 value("GAME_TEAMDEATHMATCH", int(eGameIDTeamDeathmatch)),
                 value("GAME_ARTEFACTHUNT", int(eGameIDArtefactHunt)),
                 // CS/COP ids
+                value("eGameIDSingle", int(eGameIDSingle)),
                 value("eGameIDDeathmatch", int(eGameIDDeathmatch)),
                 value("eGameIDTeamDeathmatch", int(eGameIDTeamDeathmatch)),
                 value("eGameIDArtefactHunt", int(eGameIDArtefactHunt)),

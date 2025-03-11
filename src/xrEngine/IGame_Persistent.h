@@ -56,6 +56,7 @@ public:
             string256 m_game_type;
             string256 m_alife;
             string256 m_new_or_load;
+            bool coopEnabled;
             EGameIDs m_e_game_type;
         };
         string256 m_params[4];

@@ -392,6 +392,7 @@ int __cdecl callback_count(qr2_key_type keytype, void* userdata)
         case eGameIDDominationZone:
         case eGameIDDeathmatch:
         case eGameIDFreeMp:
+        case eGameIDSingle:
             return 1;
         case eGameIDTeamDeathmatch:
         case eGameIDArtefactHunt:

@@ -154,7 +154,9 @@ EGameIDs CUIMapList::GetCurGameType()
     if (combo_ms)
     {
         text = combo_ms->GetText();
-        if (0 == xr_strcmp(text, StringTable().translate(get_token_name(g_GameModes, eGameIDDeathmatch))))
+        if (0 == xr_strcmp(text, StringTable().translate(get_token_name(g_GameModes, eGameIDSingle))))
+            return eGameIDSingle;
+        else if (0 == xr_strcmp(text, StringTable().translate(get_token_name(g_GameModes, eGameIDDeathmatch))))
             return eGameIDDeathmatch;
         else if (0 == xr_strcmp(text, StringTable().translate(get_token_name(g_GameModes, eGameIDTeamDeathmatch))))
             return eGameIDTeamDeathmatch;
@@ -170,6 +172,8 @@ EGameIDs CUIMapList::GetCurGameType()
     else if (spin_ms)
     {
         text = spin_ms->GetTokenText();
+        if (0 == xr_strcmp(text, get_token_name(g_GameModes, eGameIDSingle)))
+            return eGameIDSingle;
         if (0 == xr_strcmp(text, get_token_name(g_GameModes, eGameIDDeathmatch)))
             return eGameIDDeathmatch;
         else if (0 == xr_strcmp(text, get_token_name(g_GameModes, eGameIDTeamDeathmatch)))

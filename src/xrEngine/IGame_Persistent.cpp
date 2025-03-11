@@ -344,6 +344,11 @@ void IGame_Persistent::PreStart(pcstr op)
     params new_game_params;
     xr_strcpy(prev_type, m_game_params.m_game_type);
     new_game_params.parse_cmd_line(op);
+    new_game_params.coopEnabled = false;
+    if (op && strstr(op, "/coop_enabled"))
+    {
+        new_game_params.coopEnabled = true;
+    }
 
     // change game type
     if (0 != xr_strcmp(prev_type, new_game_params.m_game_type))
@@ -358,6 +363,11 @@ void IGame_Persistent::Start(pcstr op)
     string256 prev_type;
     xr_strcpy(prev_type, m_game_params.m_game_type);
     m_game_params.parse_cmd_line(op);
+    m_game_params.coopEnabled = false;
+    if (op && strstr(op, "/coop_enabled"))
+    {
+        m_game_params.coopEnabled = true;
+    }
     // change game type
     if ((0 != xr_strcmp(prev_type, m_game_params.m_game_type)))
     {

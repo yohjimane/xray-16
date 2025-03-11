@@ -712,7 +712,7 @@ bool is_dedicated()
 
 void print_msg(LPCSTR str)
 {
-    Msg("[lua] %s", str);
+    Msg("[LUA TO CPP] %s", str);
 }
 
 bool check_params(LPCSTR p)
@@ -954,14 +954,15 @@ IC static void CLevel_Export(lua_State* luaState)
     module(luaState)
     [
         def("command_line", &command_line),
+        def("CoopEnabled", (bool (*)())&CoopEnabled),
         def("IsGameTypeSingle", (bool (*)())&IsGameTypeSingle),
         def("IsDynamicMusic", &IsDynamicMusic), def("render_get_dx_level", &render_get_dx_level),
         def("IsImportantSave", &IsImportantSave),
         def("print_msg", &print_msg),
+        def("Msg", &print_msg),
         def("IsDedicated", &is_dedicated),
-        def("OnClient", &OnClientExport),
-        def("OnServer", &OnServerExport),
-        def("IsGameTypeSingle", &IsGameTypeSingleExport),
+        def("OnClient", (bool (*)())&OnClient),
+        def("OnServer", (bool (*)())&OnServer),
         def("CheckParams", &check_params)
     ];
 

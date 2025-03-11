@@ -12,6 +12,7 @@ struct GameDescriptionData
     string128 map_name;
     string128 map_version;
     string512 download_url;
+    bool coop_enabled;
 };
 
 #define NET_MERGE_PACKETS 1

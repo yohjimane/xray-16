@@ -19,7 +19,10 @@ bool CLevel::Load_GameSpecific_Before()
     g_pGamePersistent->LoadTitle();
     string_path fn_game;
 
-    if (GamePersistent().GameType() != eGameIDSingle && OnClient() && FS.exist(fn_game, "$level$", "alife.spawn")) {
+    bool gameTypeValid = (GamePersistent().GameType() != eGameIDSingle || g_pGamePersistent->m_game_params.coopEnabled);
+    bool spawnValid = g_pGamePersistent->m_game_params.coopEnabled ? FS.exist(fn_game, "$game_spawn$", "all", ".spawn") : FS.exist(fn_game, "$level$", "alife.spawn");
+
+    if (gameTypeValid && spawnValid && OnClient()) {
         spawn = FS.r_open(fn_game);
 
         IReader* chunk;

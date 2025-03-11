@@ -23,6 +23,10 @@ void xrServer::OnProcessClientMapData(NET_Packet& P, ClientID const& clientID)
 
     responseP.w_begin(M_SV_MAP_NAME);
 
+    // yohji MP todo: hacky override to use all.spawn for single-player maps on coop servers.
+    if (!xr_strcmp(client_map_name, "zaton") || !xr_strcmp(client_map_name, "jupiter") || !xr_strcmp(client_map_name, "pripyat"))
+        xr_sprintf(client_map_name, "%s", "all");
+
     if ((xr_strcmp(server_map_name, client_map_name)) || (xr_strcmp(server_map_version, client_map_version)))
     {
         responseP.w_u8(static_cast<u8>(YouHaveOtherMap));

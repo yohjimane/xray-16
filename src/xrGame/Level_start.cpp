@@ -110,7 +110,7 @@ bool CLevel::net_start1()
         typedef IGame_Persistent::params params;
         params& p = g_pGamePersistent->m_game_params;
         // Connect
-        if (!xr_strcmp(p.m_game_type, "single"))
+        if (!xr_strcmp(p.m_game_type, "single") && !p.coopEnabled)
         {
             Server = xr_new<xrServer>();
         }

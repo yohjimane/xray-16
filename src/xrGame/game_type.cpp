@@ -17,6 +17,11 @@ bool IsGameTypeSingle() noexcept
     return g_pGamePersistent->GameType() == eGameIDSingle;
 }
 
+bool CoopEnabled() noexcept
+{
+    return g_pGamePersistent->m_game_params.coopEnabled;
+}
+
 bool CheckGameFlag(u64 flag) noexcept
 {
     return g_game_flags[flag] & g_pGamePersistent->GameType();

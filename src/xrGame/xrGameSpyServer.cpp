@@ -88,7 +88,9 @@ xrGameSpyServer::EConnect xrGameSpyServer::Connect(shared_str& session_name, Gam
     //	m_bCheckCDKey = game->get_option_i		(*session_name,"cdkey",0) != 0;
     m_bCheckCDKey = game->get_option_i(*session_name, "public", 0) != 0;
     //--------------------------------------------//
-    if (game->Type() != eGameIDSingle)
+    typedef IGame_Persistent::params params;
+    params& p = g_pGamePersistent->m_game_params;
+    if (game->Type() != eGameIDSingle || p.coopEnabled)
     {
         //----- Check for Backend Services ---
         CGameSpy_Available GSA;

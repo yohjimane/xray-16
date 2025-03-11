@@ -80,8 +80,10 @@ bool CLevel::net_start_client3()
         LPCSTR level_name = NULL;
         LPCSTR level_ver = NULL;
         LPCSTR download_url = NULL;
+        typedef IGame_Persistent::params params;
+        params& p = g_pGamePersistent->m_game_params;
 
-        if (psNET_direct_connect) // single
+        if (psNET_direct_connect || (p.coopEnabled && GEnv.isDedicatedServer)) // single
         {
             shared_str const& server_options = Server->GetConnectOptions();
             level_name = name().c_str(); // Server->level_name		(server_options).c_str();
@@ -89,7 +91,13 @@ bool CLevel::net_start_client3()
         }
         else // multiplayer
         {
+            p.coopEnabled = get_net_DescriptionData().coop_enabled;
+
             level_name = get_net_DescriptionData().map_name;
+
+            if (p.coopEnabled) // yohji MP todo: this should not be hardcoded- we should pull level name based on current level the host is on...
+                level_name = "zaton";
+
             level_ver = get_net_DescriptionData().map_version;
             download_url = get_net_DescriptionData().download_url;
             rescan_mp_archives(); // because if we are using psNET_direct_connect, we not download map...
@@ -121,7 +129,7 @@ bool CLevel::net_start_client3()
         // Load level
         R_ASSERT2(Load(level_id), "Loading failed.");
         map_data.m_level_geom_crc32 = 0;
-        if (!IsGameTypeSingle())
+        if (!IsGameTypeSingle() && !p.coopEnabled)
             CalculateLevelCrc32();
     }
     return true;
@@ -260,7 +268,9 @@ bool CLevel::net_start_client6()
             {
                 game->OnConnected();
             }
-            if (game->Type() != eGameIDSingle)
+            typedef IGame_Persistent::params params;
+            params& p = g_pGamePersistent->m_game_params;
+            if (game->Type() != eGameIDSingle || p.coopEnabled)
             {
                 m_file_transfer = xr_new<file_transfer::client_site>();
             }
