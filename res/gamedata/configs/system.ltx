@@ -85,7 +85,7 @@ ang_speed3  = 2.0
 
 
 [info_portions]
-;список xml файлов, содержаих info_portions
+;Г±ГЇГЁГ±Г®ГЄ xml ГґГ Г©Г«Г®Гў, Г±Г®Г¤ГҐГ°Г¦Г ГЁГµ info_portions
 files = info_portions, info_zaton, info_jupiter, info_pripyat, info_upgrades
 
 [dialogs]
@@ -96,10 +96,10 @@ files = dialogs, dialogs_zaton, dialogs_jupiter, dialogs_pripyat, dialogs_mp
 files = encyclopedia_infos
 
 [profiles]
-;список xml файлов, содержаих профили сталкеров и торговцев
+;Г±ГЇГЁГ±Г®ГЄ xml ГґГ Г©Г«Г®Гў, Г±Г®Г¤ГҐГ°Г¦Г ГЁГµ ГЇГ°Г®ГґГЁГ«ГЁ Г±ГІГ Г«ГЄГҐГ°Г®Гў ГЁ ГІГ®Г°ГЈГ®ГўГ¶ГҐГў
 files =  npc_profile
 
-;список xml файлов, содержаих описаниљ конкретнvх сталкеров и торговцев
+;Г±ГЇГЁГ±Г®ГЄ xml ГґГ Г©Г«Г®Гў, Г±Г®Г¤ГҐГ°Г¦Г ГЁГµ Г®ГЇГЁГ±Г Г­ГЁЕЎ ГЄГ®Г­ГЄГ°ГҐГІГ­vГµ Г±ГІГ Г«ГЄГҐГ°Г®Гў ГЁ ГІГ®Г°ГЈГ®ГўГ¶ГҐГў
 specific_characters_files = character_desc_general, character_desc_zaton, character_desc_pripyat, character_desc_jupiter, character_desc_underpass, character_desc_mp
 
 
@@ -132,7 +132,7 @@ slot_persistent_7   = false  ;outfit
 slot_active_7       = false
 
 slot_persistent_8   = true   ;pda
-slot_active_8       = false
+slot_active_8       = true
 
 slot_persistent_9   = true   ;detector
 slot_active_9       = false
@@ -177,37 +177,37 @@ max_count     = 5
 
 [bloody_marks]
 wallmarks     = wm\wm_blood_1,wm\wm_blood_2,wm\wm_blood_3
-dist        = 2.0 ;2.4  ;(м) max расстољние отлета крови
-max_size      = 0.4 ;0.3  ;(м)радиус пљтна при хите силой nominal hit по большому объекту (по маленькому *0.5)
-min_size      = 0.06      ;(м)минимальнvй радиус пљтна
-nominal_hit     = 0.5     ;величина номинального хита, при котором разлетаетсљ максимум крови (max_size)
+dist        = 2.0 ;2.4  ;(Г¬) max Г°Г Г±Г±ГІГ®ЕЎГ­ГЁГҐ Г®ГІГ«ГҐГІГ  ГЄГ°Г®ГўГЁ
+max_size      = 0.4 ;0.3  ;(Г¬)Г°Г Г¤ГЁГіГ± ГЇЕЎГІГ­Г  ГЇГ°ГЁ ГµГЁГІГҐ Г±ГЁГ«Г®Г© nominal hit ГЇГ® ГЎГ®Г«ГјГёГ®Г¬Гі Г®ГЎГєГҐГЄГІГі (ГЇГ® Г¬Г Г«ГҐГ­ГјГЄГ®Г¬Гі *0.5)
+min_size      = 0.06      ;(Г¬)Г¬ГЁГ­ГЁГ¬Г Г«ГјГ­vГ© Г°Г Г¤ГЁГіГ± ГЇЕЎГІГ­Г 
+nominal_hit     = 0.5     ;ГўГҐГ«ГЁГ·ГЁГ­Г  Г­Г®Г¬ГЁГ­Г Г«ГјГ­Г®ГЈГ® ГµГЁГІГ , ГЇГ°ГЁ ГЄГ®ГІГ®Г°Г®Г¬ Г°Г Г§Г«ГҐГІГ ГҐГІГ±ЕЎ Г¬Г ГЄГ±ГЁГ¬ГіГ¬ ГЄГ°Г®ГўГЁ (max_size)
 
-;капли крови
+;ГЄГ ГЇГ«ГЁ ГЄГ°Г®ГўГЁ
 
 blood_drops     = wm\wm_blood_drop_1,wm\wm_blood_drop_2,wm\wm_blood_drop_3,wm\wm_blood_drop_4
-start_blood_size  = 0.4     ;размер ранv чтоб начала капать кровь
-stop_blood_size   = 0.025     ;размер ранv чтоб кровь остановилась (должно бvть меньше start_blood_size)
+start_blood_size  = 0.4     ;Г°Г Г§Г¬ГҐГ° Г°Г Г­v Г·ГІГ®ГЎ Г­Г Г·Г Г«Г  ГЄГ ГЇГ ГІГј ГЄГ°Г®ГўГј
+stop_blood_size   = 0.025     ;Г°Г Г§Г¬ГҐГ° Г°Г Г­v Г·ГІГ®ГЎ ГЄГ°Г®ГўГј Г®Г±ГІГ Г­Г®ГўГЁГ«Г Г±Гј (Г¤Г®Г«Г¦Г­Г® ГЎvГІГј Г¬ГҐГ­ГјГёГҐ start_blood_size)
 
 blood_drop_time     = 0.1     ;OBSOLETE
 blood_drop_time_min = 0.3     ;
 blood_drop_time_max = 2.0     ;
-blood_drop_size   = 0.1     ;размер капли (м) крови, котораљ упала
+blood_drop_size   = 0.1     ;Г°Г Г§Г¬ГҐГ° ГЄГ ГЇГ«ГЁ (Г¬) ГЄГ°Г®ГўГЁ, ГЄГ®ГІГ®Г°Г ЕЎ ГіГЇГ Г«Г 
 
 
 [entity_fire_particles]
 fire_particles = damage_fx\burn_creatures
-start_burn_size = 0.0003    ;размер ожега после которого начать играть партиклv огнљ
-stop_burn_size  = 0.0001    ;размер ожега после которого остановить партиклv
-min_burn_time = 10000   ;минимальное времљ отvгрvша партиклов (даже если рана уже зажила)
+start_burn_size = 0.0003    ;Г°Г Г§Г¬ГҐГ° Г®Г¦ГҐГЈГ  ГЇГ®Г±Г«ГҐ ГЄГ®ГІГ®Г°Г®ГЈГ® Г­Г Г·Г ГІГј ГЁГЈГ°Г ГІГј ГЇГ Г°ГІГЁГЄГ«v Г®ГЈГ­ЕЎ
+stop_burn_size  = 0.0001    ;Г°Г Г§Г¬ГҐГ° Г®Г¦ГҐГЈГ  ГЇГ®Г±Г«ГҐ ГЄГ®ГІГ®Г°Г®ГЈГ® Г®Г±ГІГ Г­Г®ГўГЁГІГј ГЇГ Г°ГІГЁГЄГ«v
+min_burn_time = 10000   ;Г¬ГЁГ­ГЁГ¬Г Г«ГјГ­Г®ГҐ ГўГ°ГҐГ¬ЕЎ Г®ГІvГЈГ°vГёГ  ГЇГ Г°ГІГЁГЄГ«Г®Гў (Г¤Г Г¦ГҐ ГҐГ±Г«ГЁ Г°Г Г­Г  ГіГ¦ГҐ Г§Г Г¦ГЁГ«Г )
 
 [hud_cursor]
-;все размерv в процентах от длинv экрана
-cross_length    = 0.015         ;длина "палочки" прицела
-min_radius      = 0.0         ;минимальнvй радиус прицела (при нулевой дисперсии)
-max_radius      = 1.0         ;максимальнvй радиус
-radius_lerp_speed = 0.08          ;скорость интерполљции положений прицела
-cross_color     = 0.7,0.7,0.7,0.5   ;цвет прицела
-disp_scale      = 0.08          ;масштаб прицела (относительно радиан)
+;ГўГ±ГҐ Г°Г Г§Г¬ГҐГ°v Гў ГЇГ°Г®Г¶ГҐГ­ГІГ Гµ Г®ГІ Г¤Г«ГЁГ­v ГЅГЄГ°Г Г­Г 
+cross_length    = 0.015         ;Г¤Г«ГЁГ­Г  "ГЇГ Г«Г®Г·ГЄГЁ" ГЇГ°ГЁГ¶ГҐГ«Г 
+min_radius      = 0.0         ;Г¬ГЁГ­ГЁГ¬Г Г«ГјГ­vГ© Г°Г Г¤ГЁГіГ± ГЇГ°ГЁГ¶ГҐГ«Г  (ГЇГ°ГЁ Г­ГіГ«ГҐГўГ®Г© Г¤ГЁГ±ГЇГҐГ°Г±ГЁГЁ)
+max_radius      = 1.0         ;Г¬Г ГЄГ±ГЁГ¬Г Г«ГјГ­vГ© Г°Г Г¤ГЁГіГ±
+radius_lerp_speed = 0.08          ;Г±ГЄГ®Г°Г®Г±ГІГј ГЁГ­ГІГҐГ°ГЇГ®Г«ЕЎГ¶ГЁГЁ ГЇГ®Г«Г®Г¦ГҐГ­ГЁГ© ГЇГ°ГЁГ¶ГҐГ«Г 
+cross_color     = 0.7,0.7,0.7,0.5   ;Г¶ГўГҐГІ ГЇГ°ГЁГ¶ГҐГ«Г 
+disp_scale      = 0.08          ;Г¬Г Г±ГёГІГ ГЎ ГЇГ°ГЁГ¶ГҐГ«Г  (Г®ГІГ­Г®Г±ГЁГІГҐГ«ГјГ­Г® Г°Г Г¤ГЁГ Г­)
 
 [hud_hitmark]
 hit_mark_texture    = ui\ui_hud_hit_mark; ui\ui_empty
@@ -366,12 +366,12 @@ $spawn               = "ai\graph point"
 ; Trade
 ;-----------------------------------------------------------------
 [trade]
-;коэффициентv изменениљ ценv при торговле в зависимости от отношениљ к персонажу
-;линейно апроксимируітсљ между значениљ
-buy_price_factor_hostile  = 1   ;коэффициент покупки при goodwill = -100
-buy_price_factor_friendly = 1   ;коэффициент покупки при goodwill = 100
-sell_price_factor_hostile = 1   ;коэффициент покупки при goodwill = -100
-sell_price_factor_friendly  = 1   ;коэффициент покупки при goodwill = 100
+;ГЄГ®ГЅГґГґГЁГ¶ГЁГҐГ­ГІv ГЁГ§Г¬ГҐГ­ГҐГ­ГЁЕЎ Г¶ГҐГ­v ГЇГ°ГЁ ГІГ®Г°ГЈГ®ГўГ«ГҐ Гў Г§Г ГўГЁГ±ГЁГ¬Г®Г±ГІГЁ Г®ГІ Г®ГІГ­Г®ГёГҐГ­ГЁЕЎ ГЄ ГЇГҐГ°Г±Г®Г­Г Г¦Гі
+;Г«ГЁГ­ГҐГ©Г­Г® Г ГЇГ°Г®ГЄГ±ГЁГ¬ГЁГ°ГіВіГІГ±ЕЎ Г¬ГҐГ¦Г¤Гі Г§Г­Г Г·ГҐГ­ГЁЕЎ
+buy_price_factor_hostile  = 1   ;ГЄГ®ГЅГґГґГЁГ¶ГЁГҐГ­ГІ ГЇГ®ГЄГіГЇГЄГЁ ГЇГ°ГЁ goodwill = -100
+buy_price_factor_friendly = 1   ;ГЄГ®ГЅГґГґГЁГ¶ГЁГҐГ­ГІ ГЇГ®ГЄГіГЇГЄГЁ ГЇГ°ГЁ goodwill = 100
+sell_price_factor_hostile = 1   ;ГЄГ®ГЅГґГґГЁГ¶ГЁГҐГ­ГІ ГЇГ®ГЄГіГЇГЄГЁ ГЇГ°ГЁ goodwill = -100
+sell_price_factor_friendly  = 1   ;ГЄГ®ГЅГґГґГЁГ¶ГЁГҐГ­ГІ ГЇГ®ГЄГіГЇГЄГЁ ГЇГ°ГЁ goodwill = 100
 
 
 
@@ -408,7 +408,7 @@ script_binding  = xr_zones.bind
 object_damage_factor    = 1.2f
 
 ;*****************************************
-; ++=+іLT+і- Lі+=
+; ++=+ВіLT+Ві- LВі+=
 ;*****************************************
 [stalker_names_stalker]
 name_cnt    = 104
@@ -449,7 +449,7 @@ Human             = off                     ; option for ALife Simulator
 cform                       = skeleton                    ; collision class
 class                       = SCRPTOBJ                    ; AI class
 
-;параметрv показvваниљ входљих сообений PDA в главном мені
+;ГЇГ Г°Г Г¬ГҐГІГ°v ГЇГ®ГЄГ Г§vГўГ Г­ГЁЕЎ ГўГµГ®Г¤ЕЎГЁГµ Г±Г®Г®ГЎГҐГ­ГЁГ© PDA Гў ГЈГ«Г ГўГ­Г®Г¬ Г¬ГҐГ­Ві
 [maingame_ui]
 pda_msgs_max_show_time = 20000
 info_msgs_max_show_time = 10000
@@ -511,12 +511,12 @@ inv_grid_width      = 2
 inv_grid_height     = 1
 inv_grid_x        = 16
 inv_grid_y        = 12
-attach_angle_offset   = -1.5708,0.1919,3.1416    ;устанавливаетсљ в радианах Angle*PI/180
+attach_angle_offset   = -1.5708,0.1919,3.1416    ;ГіГ±ГІГ Г­Г ГўГ«ГЁГўГ ГҐГІГ±ЕЎ Гў Г°Г Г¤ГЁГ Г­Г Гµ Angle*PI/180
 attach_position_offset  = 0.075, 0.066, 0.023
 attach_bone_name    = bip01_l_hand
 auto_attach       = false
 
-; рация для правой руки
+; Г°Г Г¶ГЁГї Г¤Г«Гї ГЇГ°Г ГўГ®Г© Г°ГіГЄГЁ
 [hand_radio_r]:identity_immunities
 GroupControlSection   = spawn_group
 discovery_dependency  =
@@ -532,7 +532,7 @@ inv_grid_width      = 2
 inv_grid_height     = 1
 inv_grid_x        = 16
 inv_grid_y        = 12
-attach_angle_offset   = 1.571,0.75,0.0    ;устанавливаетсљ в радианах Angle*PI/180
+attach_angle_offset   = 1.571,0.75,0.0    ;ГіГ±ГІГ Г­Г ГўГ«ГЁГўГ ГҐГІГ±ЕЎ Гў Г°Г Г¤ГЁГ Г­Г Гµ Angle*PI/180
 attach_position_offset  = 0.015, -0.084, 0.023
 attach_bone_name    = bip01_r_hand
 auto_attach       = false
@@ -659,14 +659,14 @@ shape_edge_color    = 32, 32, 32, 255
 bonce_damage_factor_for_objects = 1.
 
 [pkm_visual_memory]
-min_view_distance       = 1 ;0.4        ; коэффициент, которvй множитсљ на eye_range, в зависимости от угла
-max_view_distance       = 1 ;0.8        ; коэффициент, которvй множитсљ на eye_range, в зависимости от угла
-visibility_threshold    = 50 ;150.0       ; значение, при достижении суммой которого объект считаетсљ видимvм
+min_view_distance       = 1 ;0.4        ; ГЄГ®ГЅГґГґГЁГ¶ГЁГҐГ­ГІ, ГЄГ®ГІГ®Г°vГ© Г¬Г­Г®Г¦ГЁГІГ±ЕЎ Г­Г  eye_range, Гў Г§Г ГўГЁГ±ГЁГ¬Г®Г±ГІГЁ Г®ГІ ГіГЈГ«Г 
+max_view_distance       = 1 ;0.8        ; ГЄГ®ГЅГґГґГЁГ¶ГЁГҐГ­ГІ, ГЄГ®ГІГ®Г°vГ© Г¬Г­Г®Г¦ГЁГІГ±ЕЎ Г­Г  eye_range, Гў Г§Г ГўГЁГ±ГЁГ¬Г®Г±ГІГЁ Г®ГІ ГіГЈГ«Г 
+visibility_threshold    = 50 ;150.0       ; Г§Г­Г Г·ГҐГ­ГЁГҐ, ГЇГ°ГЁ Г¤Г®Г±ГІГЁГ¦ГҐГ­ГЁГЁ Г±ГіГ¬Г¬Г®Г© ГЄГ®ГІГ®Г°Г®ГЈГ® Г®ГЎГєГҐГЄГІ Г±Г·ГЁГІГ ГҐГІГ±ЕЎ ГўГЁГ¤ГЁГ¬vГ¬
 always_visible_distance   = 1 ;0.1
 time_quant          = 0.00001
-decrease_value        = 0.1       ; значение, на которое уменьшаетсљ вес, если объект попал в фрустум, но отсЈксљ по каким-то причинам
+decrease_value        = 0.1       ; Г§Г­Г Г·ГҐГ­ГЁГҐ, Г­Г  ГЄГ®ГІГ®Г°Г®ГҐ ГіГ¬ГҐГ­ГјГёГ ГҐГІГ±ЕЎ ГўГҐГ±, ГҐГ±Г«ГЁ Г®ГЎГєГҐГЄГІ ГЇГ®ГЇГ Г« Гў ГґГ°ГіГ±ГІГіГ¬, Г­Г® Г®ГІГ±ВЈГЄГ±ЕЎ ГЇГ® ГЄГ ГЄГЁГ¬-ГІГ® ГЇГ°ГЁГ·ГЁГ­Г Г¬
 velocity_factor         = 0.5
-luminocity_factor     = 0.5       ; фактор освеениљ (только длљ LктЈра)
+luminocity_factor     = 0.5       ; ГґГ ГЄГІГ®Г° Г®Г±ГўГҐГҐГ­ГЁЕЎ (ГІГ®Г«ГјГЄГ® Г¤Г«ЕЎ LГЄГІВЈГ°Г )
 transparency_threshold    = 0.4       ;
 view_fov_deg        = 90
 view_aspect         = 1
@@ -687,7 +687,7 @@ swing_fast_speed  = 0.5;1
 
 [ph_capture_visuals]
 
-;Список объектов которvе можно таскать.
+;Г‘ГЇГЁГ±Г®ГЄ Г®ГЎГєГҐГЄГІГ®Гў ГЄГ®ГІГ®Г°vГҐ Г¬Г®Г¦Г­Г® ГІГ Г±ГЄГ ГІГј.
 
 ;NPC
 ;actors\stalker_bandit\stalker_bandit_1

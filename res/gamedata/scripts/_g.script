@@ -844,6 +844,9 @@ end
 function get_object_squad(object)
 	if object == nil then abort("You are trying to get squad_object from NIL object!!!") end
 	local obj_id = nil
+	if not IsGameTypeSingle() then
+		return nil
+	end
 	if type(object.id) == "function" then
 		obj_id = object:id()
 	else
