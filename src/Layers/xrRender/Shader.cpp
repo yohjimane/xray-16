@@ -19,6 +19,10 @@ ShaderElement::~ShaderElement() { RImplementation.Resources->_DeleteElement(this
 SGeometry::~SGeometry() { RImplementation.Resources->DeleteGeom(this); }
 Shader::~Shader() { RImplementation.Resources->Delete(this); }
 //////////////////////////////////////////////////////////////////////////
+void resptrcode_shader::createDedicatedServerShader(LPCSTR s_shader, LPCSTR s_textures, LPCSTR s_constants, LPCSTR s_matrices)
+{
+    _set(RImplementation.Resources->CreateDedicatedServerShader(s_shader, s_textures, s_constants, s_matrices));
+}
 void resptrcode_shader::create(LPCSTR s_shader, LPCSTR s_textures, LPCSTR s_constants, LPCSTR s_matrices)
 {
     _set(RImplementation.Resources->Create(s_shader, s_textures, s_constants, s_matrices));

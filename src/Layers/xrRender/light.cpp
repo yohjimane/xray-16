@@ -62,6 +62,9 @@ light::~light()
 #if (RENDER == R_R2) || (RENDER == R_R3) || (RENDER == R_R4) || (RENDER == R_GL)
 void light::set_texture(LPCSTR name)
 {
+    if (GEnv.isDedicatedServer)
+        return;
+
     if ((nullptr == name) || (0 == name[0]))
     {
         // default shaders

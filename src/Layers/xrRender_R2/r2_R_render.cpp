@@ -21,6 +21,48 @@ void CRender::RenderMenu()
     RCache.set_Stencil(FALSE);
     RCache.set_ColorWriteEnable();
 
+    if (GEnv.isDedicatedServer)
+    {
+        Target->u_setrt(RCache, Device.dwWidth, Device.dwHeight, Target->get_base_rt(), 0, 0, Target->get_base_zb());
+        Fvector2 p0, p1;
+        u32 Offset;
+        u32 C = color_rgba(255, 255, 255, 255);
+        float _w = float(Device.dwWidth);
+        float _h = float(Device.dwHeight);
+        float d_Z = EPS_S;
+        float d_W = 1.f;
+        p0.set(.5f / _w, .5f / _h);
+        p1.set((_w + .5f) / _w, (_h + .5f) / _h);
+
+        RCache.set_Shader(Target->s_menu);
+        RCache.set_Geometry(Target->g_menu);
+        FVF::TL* pv = (FVF::TL*)RImplementation.Vertex.Lock(4, Target->g_menu->vb_stride, Offset);
+#if defined(USE_DX11)
+        pv->set(EPS, float(_h + EPS), d_Z, d_W, C, p0.x, p1.y);
+        pv++;
+        pv->set(EPS, EPS, d_Z, d_W, C, p0.x, p0.y);
+        pv++;
+        pv->set(float(_w + EPS), float(_h + EPS), d_Z, d_W, C, p1.x, p1.y);
+        pv++;
+        pv->set(float(_w + EPS), EPS, d_Z, d_W, C, p1.x, p0.y);
+        pv++;
+#elif defined(USE_OGL)
+        pv->set(EPS, EPS, d_Z, d_W, C, p0.x, p0.y);
+        pv++;
+        pv->set(EPS, float(_h + EPS), d_Z, d_W, C, p0.x, p1.y);
+        pv++;
+        pv->set(float(_w + EPS), EPS, d_Z, d_W, C, p1.x, p0.y);
+        pv++;
+        pv->set(float(_w + EPS), float(_h + EPS), d_Z, d_W, C, p1.x, p1.y);
+        pv++;
+#else
+#   error No graphics API selected or enabled!
+#endif
+        RImplementation.Vertex.Unlock(4, Target->g_menu->vb_stride);
+        RCache.Render(D3DPT_TRIANGLELIST, Offset, 0, 4, 0, 2);
+        return;
+    }
+
     // Main Render
     {
         Target->u_setrt(RCache, Target->rt_Generic_0, nullptr, nullptr, Target->rt_Base_Depth); // LDR RT

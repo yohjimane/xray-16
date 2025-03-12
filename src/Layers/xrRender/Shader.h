@@ -145,6 +145,7 @@ struct ECORE_API Shader : public xr_resource_flagged
 
 struct ECORE_API resptrcode_shader : public resptr_base<Shader>
 {
+    void createDedicatedServerShader(LPCSTR s_shader = nullptr, LPCSTR s_textures = nullptr, LPCSTR s_constants = nullptr, LPCSTR s_matrices = nullptr);
     void create(LPCSTR s_shader = nullptr, LPCSTR s_textures = nullptr, LPCSTR s_constants = nullptr, LPCSTR s_matrices = nullptr);
     void create(IBlender* B, LPCSTR s_shader = nullptr, LPCSTR s_textures = nullptr, LPCSTR s_constants = nullptr, LPCSTR s_matrices = nullptr);
     void destroy() { _set(nullptr); }

@@ -726,7 +726,11 @@ CRenderTarget::CRenderTarget()
     }
 
     // Menu
-    s_menu.create("distort");
+    if (GEnv.isDedicatedServer)
+        s_menu.createDedicatedServerShader("distort");
+    else
+        s_menu.create("distort");
+
     g_menu.create(FVF::F_TL, RImplementation.Vertex.Buffer(), RImplementation.QuadIB);
 
 #if 0 // OpenGL: kept for historical reasons
