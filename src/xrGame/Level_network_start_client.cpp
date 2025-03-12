@@ -268,9 +268,7 @@ bool CLevel::net_start_client6()
             {
                 game->OnConnected();
             }
-            typedef IGame_Persistent::params params;
-            params& p = g_pGamePersistent->m_game_params;
-            if (game->Type() != eGameIDSingle || p.coopEnabled)
+            if (!IsGameTypeSingle() || CoopEnabled())
             {
                 m_file_transfer = xr_new<file_transfer::client_site>();
             }

@@ -63,9 +63,7 @@ xrServer::EConnect xrServer::Connect(shared_str& session_name, GameDescriptionDa
         return ErrConnect;
     //	game->type				= type_id;
 
-    typedef IGame_Persistent::params params;
-    params& p = g_pGamePersistent->m_game_params;
-    if (game->Type() != eGameIDSingle && !p.coopEnabled)
+    if (!IsGameTypeSingle() || CoopEnabled())
     {
         m_file_transfers = xr_new<file_transfer::server_site>();
         initialize_screenshot_proxies();
@@ -83,7 +81,7 @@ xrServer::EConnect xrServer::Connect(shared_str& session_name, GameDescriptionDa
     xr_strcpy(game_descr.map_name, game->level_name(session_name.c_str()).c_str());
     xr_strcpy(game_descr.map_version, game_sv_GameState::parse_level_version(session_name.c_str()).c_str());
     xr_strcpy(game_descr.download_url, get_map_download_url(game_descr.map_name, game_descr.map_version));
-    game_descr.coop_enabled = p.coopEnabled;
+    game_descr.coop_enabled = CoopEnabled();
     game->Create(session_name);
 
     return IPureServer::Connect(*session_name, game_descr);
