@@ -111,12 +111,10 @@ function add_actor( obj )
 end
 
 function del_actor()
-	if actor ~= nil then
-		Msg("Yohji debug - Remove db.actor")
-		del_obj( actor )
-		actor_proxy:net_destroy()
-		actor = nil
-	end
+	Msg("Yohji debug - Remove db.actor")
+	del_obj( actor )
+	actor_proxy:net_destroy()
+	actor = nil
 end
 
 function add_mp_actor(obj)

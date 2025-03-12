@@ -15,6 +15,7 @@ const float CActorMP::cam_inert_value = 0.7f;
 
 CActorMP::CActorMP()
 {
+    Msg("Init CActorMP");
     // m_i_am_dead				= false;
 }
 

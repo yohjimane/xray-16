@@ -77,8 +77,8 @@ void xrGameSpyServer::OnCDKey_Validation(int LocalID, int res, char* errormsg)
     }
     else
     {
-        Msg("CDKey: Validation failed - <%s>", errormsg);
-        SendConnectResult(CL, u8(res), ecr_cdkey_validation_failed, errormsg);
+        Msg("CDKey: Validation failed, but it shouldn't matter anymore <%s>", errormsg);
+        Check_GameSpy_CDKey_Success(CL);
     }
 };
 

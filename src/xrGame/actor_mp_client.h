@@ -33,6 +33,9 @@ public:
     virtual void On_SetEntity();
     virtual void On_LostEntity();
 
+    virtual CActor* cast_actor() { return this; }
+    virtual CActorMP* cast_actor_mp() { return this; }
+
 protected:
     virtual void cam_Set(EActorCameras style);
     void use_booster(NET_Packet& packet);

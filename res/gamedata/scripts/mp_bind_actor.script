@@ -20,6 +20,7 @@ function mp_actor_binder:net_spawn(data)
 	if object_binder.net_spawn(self,data) == false then
 		return false	
 	end
+	db.add_actor(self.object)
 	db.del_mp_actor()
 	db.add_mp_actor(self.object)
 	db.add_player(self.object)
@@ -40,6 +41,7 @@ function mp_actor_binder:net_destroy()
 	end
 	db.del_player(self.object)
 	object_binder.net_destroy(self)
+	db.del_actor(self.object)
 end
 ----------------------------------------------------------------------------------------------------------------------
 

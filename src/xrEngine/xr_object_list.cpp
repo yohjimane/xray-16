@@ -115,9 +115,9 @@ void CObjectList::SingleUpdate(IGameObject* O)
     if (Device.dwFrame == O->GetUpdateFrame())
     {
 #ifdef DEBUG
-// if (O->getDestroy())
-// Msg ("- !!!processing_enabled ->destroy_queue.push_back %s[%d] frame [%d]",O->cName().c_str(), O->ID(),
-// Device.dwFrame);
+if (O->getDestroy())
+Msg ("- !!!processing_enabled ->destroy_queue.push_back %s[%d] frame [%d]",O->cName().c_str(), O->ID(),
+Device.dwFrame);
 #endif // #ifdef DEBUG
 
         return;
@@ -126,9 +126,9 @@ void CObjectList::SingleUpdate(IGameObject* O)
     if (!O->processing_enabled())
     {
 #ifdef DEBUG
-// if (O->getDestroy())
-// Msg ("- !!!processing_enabled ->destroy_queue.push_back %s[%d] frame [%d]",O->cName().c_str(), O->ID(),
-// Device.dwFrame);
+if (O->getDestroy())
+Msg ("- !!!processing_enabled ->destroy_queue.push_back %s[%d] frame [%d]",O->cName().c_str(), O->ID(),
+Device.dwFrame);
 #endif // #ifdef DEBUG
 
         return;
@@ -195,9 +195,9 @@ void CObjectList::SingleUpdate(IGameObject* O)
 #endif
 
 #ifdef DEBUG
-// if (O->getDestroy())
-// Msg ("- !!!processing_enabled ->destroy_queue.push_back %s[%d] frame [%d]",O->cName().c_str(), O->ID(),
-// Device.dwFrame);
+if (O->getDestroy())
+Msg ("- !!!processing_enabled ->destroy_queue.push_back %s[%d] frame [%d]",O->cName().c_str(), O->ID(),
+Device.dwFrame);
 #endif // #ifdef DEBUG
 }
 
@@ -588,6 +588,16 @@ void CObjectList::register_object_to_destroy(IGameObject* object_to_destroy)
     VERIFY(!registered_object_to_destroy(object_to_destroy));
     // Msg("CObjectList::register_object_to_destroy [%x]", object_to_destroy);
     destroy_queue.push_back(object_to_destroy);
+
+    if (object_to_destroy->cast_actor())
+    {
+        Msg("Yohji debug - destroy actor");
+    }
+
+    if (object_to_destroy->cast_actor_mp())
+    {
+        Msg("Yohji debug - destroy mp actor");
+    }
 
     for (auto& it : objects_active)
     {

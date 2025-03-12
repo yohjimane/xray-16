@@ -34,6 +34,7 @@ class CInventoryItem;
 class CEntity;
 class CEntityAlive;
 class CActor;
+class CActorMP;
 class CGameObject; // XXX: remove
 class CCustomZone;
 class CPhysicsShellHolder;
@@ -246,6 +247,7 @@ public:
     virtual CEntity* cast_entity() = 0;
     virtual CEntityAlive* cast_entity_alive() = 0;
     virtual CActor* cast_actor() = 0;
+    virtual CActorMP* cast_actor_mp() = 0;
     virtual CGameObject* cast_game_object() = 0;
     virtual CCustomZone* cast_custom_zone() = 0;
     virtual CPhysicsShellHolder* cast_physics_shell_holder() = 0;

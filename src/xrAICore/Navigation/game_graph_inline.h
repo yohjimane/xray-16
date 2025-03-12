@@ -144,6 +144,9 @@ IC const GameGraph::SLevel& GameGraph::CHeader::level(LPCSTR level_name) const
     Msg("! There is no specified level %s in the game graph!", level_name);
     return (levels().begin()->second);
 #else
+
+    return (levels().begin()->second);
+
     R_ASSERT3(false, "There is no specified level in the game graph!", level_name);
     NODEFAULT;
 #endif

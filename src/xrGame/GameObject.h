@@ -43,6 +43,7 @@ class CAttachableItem;
 class animation_movement_controller;
 class CBlend;
 class ai_obstacle;
+class CActorMP;
 
 class IKinematics;
 
@@ -197,6 +198,7 @@ public:
     virtual CEntity* cast_entity() override { return NULL; }
     virtual CEntityAlive* cast_entity_alive() override { return NULL; }
     virtual CActor* cast_actor() override { return NULL; }
+    virtual CActorMP* cast_actor_mp() override { return NULL; }
     virtual CGameObject* cast_game_object() override { return this; }
     virtual CCustomZone* cast_custom_zone() override { return NULL; }
     virtual CPhysicsShellHolder* cast_physics_shell_holder() override { return NULL; }

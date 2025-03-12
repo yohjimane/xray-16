@@ -53,7 +53,7 @@ TEMPLATE_SPECIALIZATION
 ObjectFactory::ClientObjectBaseClass* CSObjectItemClientServerSingleMp::client_object() const
 {
     ObjectFactory::ClientObjectBaseClass* result =
-        IsGameTypeSingle() ? xr_new<_client_type_single>() : xr_new<_client_type_mp>();
+        IsGameTypeSingle() && !CoopEnabled() ? xr_new<_client_type_single>() : xr_new<_client_type_mp>();
 
     return (result->_construct());
 }
@@ -62,7 +62,7 @@ TEMPLATE_SPECIALIZATION
 ObjectFactory::ServerObjectBaseClass* CSObjectItemClientServerSingleMp::server_object(LPCSTR section) const
 {
     ObjectFactory::ServerObjectBaseClass* result =
-        IsGameTypeSingle() ? xr_new<_server_type_single>(section) : xr_new<_server_type_mp>(section);
+        IsGameTypeSingle() && !CoopEnabled() ? xr_new<_server_type_single>(section) : xr_new<_server_type_mp>(section);
 
     result = result->init();
     R_ASSERT(result);

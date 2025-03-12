@@ -389,7 +389,7 @@ void game_sv_Single::RespawnPlayer(ClientID id_who, bool NoSpectator)
             Level().Send(P, net_flags(TRUE, TRUE));
         };
         //------------------------------------------------------------
-        SpawnPlayer(id_who, "actor");
+        SpawnPlayer(id_who, "coop_actor");
         //------------------------------------------------------------
         //		SpawnWeaponsForActor(xrCData->owner, ps);
         //------------------------------------------------------------
