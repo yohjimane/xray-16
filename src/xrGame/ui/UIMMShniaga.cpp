@@ -121,7 +121,7 @@ void CUIMMShniaga::InitShniaga(CUIXml& xml_doc, LPCSTR path)
     }
     else
     {
-        if (GameID() == eGameIDSingle)
+        if (IsGameTypeSingle())
         {
             VERIFY(Actor());
             if (Actor() && !Actor()->g_Alive())

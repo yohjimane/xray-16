@@ -282,7 +282,7 @@ void CBulletManager::DynamicObjectHit(CBulletManager::_event& E)
 
     if (g_clear)
         E.Repeated = false;
-    if (GameID() == eGameIDSingle)
+    if (IsGameTypeSingle())
         E.Repeated = false;
     bool NeedShootmark = true; //! E.Repeated;
 

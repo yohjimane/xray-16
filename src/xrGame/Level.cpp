@@ -955,7 +955,7 @@ void CLevel::PhisStepsCallback(u32 Time0, u32 Time1)
 {
     if (!Level().game)
         return;
-    if (GameID() == eGameIDSingle)
+    if (IsGameTypeSingle())
         return;
     //#pragma todo("Oles to all: highly inefficient and slow!!!")
     // fixed (Andy)

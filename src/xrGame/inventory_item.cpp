@@ -285,7 +285,7 @@ bool CInventoryItem::Detach(const char* item_section_name, bool b_spawn_item)
         //.		D->s_gameid			=	u8(GameID());
         D->s_RP = 0xff;
         D->ID = 0xffff;
-        if (GameID() == eGameIDSingle)
+        if (IsGameTypeSingle())
         {
             D->ID_Parent = u16(object().H_Parent()->ID());
         }
@@ -1376,7 +1376,7 @@ void CInventoryItem::modify_holder_params(float& range, float& fov) const
 
 bool CInventoryItem::NeedToDestroyObject() const
 {
-    if (GameID() == eGameIDSingle)
+    if (IsGameTypeSingle())
         return false;
 
     if (GameID() == eGameIDCaptureTheArtefact)

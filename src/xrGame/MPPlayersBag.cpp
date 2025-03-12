@@ -50,7 +50,7 @@ void CMPPlayersBag::OnEvent(NET_Packet& P, u16 type)
 extern int g_iWeaponRemove;
 bool CMPPlayersBag::NeedToDestroyObject() const
 {
-    if (GameID() == eGameIDSingle)
+    if (IsGameTypeSingle())
         return false;
     if (Remote())
         return false;

@@ -345,7 +345,7 @@ public:
     CCC_ALifeSwitchDistance(LPCSTR N) : IConsole_Command(N){};
     virtual void Execute(LPCSTR args)
     {
-        if ((GameID() == eGameIDSingle) && ai().get_alife())
+        if (IsGameTypeSingle() && ai().get_alife())
         {
             float id1 = 0.0f;
             sscanf(args, "%f", &id1);
@@ -370,7 +370,7 @@ public:
     CCC_ALifeProcessTime(LPCSTR N) : IConsole_Command(N){};
     virtual void Execute(LPCSTR args)
     {
-        if ((GameID() == eGameIDSingle) && ai().get_alife())
+        if (IsGameTypeSingle() && ai().get_alife())
         {
             game_sv_Single* tpGame = smart_cast<game_sv_Single*>(Level().Server->GetGameState());
             VERIFY(tpGame);
@@ -392,7 +392,7 @@ public:
     CCC_ALifeObjectsPerUpdate(LPCSTR N) : IConsole_Command(N){};
     virtual void Execute(LPCSTR args)
     {
-        if ((GameID() == eGameIDSingle) && ai().get_alife())
+        if (IsGameTypeSingle() && ai().get_alife())
         {
             game_sv_Single* tpGame = smart_cast<game_sv_Single*>(Level().Server->GetGameState());
             VERIFY(tpGame);
@@ -411,7 +411,7 @@ public:
     CCC_ALifeSwitchFactor(LPCSTR N) : IConsole_Command(N){};
     virtual void Execute(LPCSTR args)
     {
-        if ((GameID() == eGameIDSingle) && ai().get_alife())
+        if (IsGameTypeSingle() && ai().get_alife())
         {
             game_sv_Single* tpGame = smart_cast<game_sv_Single*>(Level().Server->GetGameState());
             VERIFY(tpGame);
@@ -886,7 +886,7 @@ public:
 #ifdef _DEBUG
         CCC_Float::Execute(args);
 #else
-        if (!g_pGameLevel || GameID() == eGameIDSingle)
+        if (!g_pGameLevel || IsGameTypeSingle())
             CCC_Float::Execute(args);
         else
         {

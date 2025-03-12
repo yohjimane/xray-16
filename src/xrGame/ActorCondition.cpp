@@ -28,7 +28,7 @@
 
 BOOL GodMode()
 {
-    if (GameID() == eGameIDSingle)
+    if (IsGameTypeSingle())
         return psActorFlags.test(AF_GODMODE | AF_GODMODE_RT);
     return FALSE;
 }

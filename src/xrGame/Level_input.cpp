@@ -41,7 +41,7 @@ extern void restore_actor();
 bool g_bDisableAllInput = false;
 extern float g_fTimeFactor;
 
-#define CURRENT_ENTITY() (game ? ((GameID() == eGameIDSingle) ? CurrentEntity() : CurrentControlEntity()) : NULL)
+#define CURRENT_ENTITY() (game ? (IsGameTypeSingle() ? CurrentEntity() : CurrentControlEntity()) : NULL)
 
 void CLevel::IR_OnMouseWheel(float x, float y)
 {
@@ -313,7 +313,7 @@ void CLevel::IR_OnKeyboardPress(int key)
         return;
     }
     case SDL_SCANCODE_BACKSPACE:
-        if (GameID() == eGameIDSingle)
+        if (IsGameTypeSingle())
             GEnv.DRender->NextSceneMode();
         // HW.Caps.SceneMode			= (HW.Caps.SceneMode+1)%3;
         return;

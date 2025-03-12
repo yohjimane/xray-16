@@ -243,7 +243,7 @@ void xrServer::Process_event(NET_Packet& P, ClientID sender)
 
         //////////////////////////////////////////////////////////////////////////
         //
-        if (game->Type() == eGameIDSingle)
+        if (IsGameTypeSingle())
         {
             P.w_begin(M_EVENT);
             P.w_u32(timestamp);

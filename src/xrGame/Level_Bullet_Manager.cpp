@@ -570,8 +570,7 @@ bool CBulletManager::firetrace_callback(collide::rq_result& result, LPVOID param
     Fvector& collide_position = data.collide_position;
     collide_position = Fvector().mad(bullet.bullet_pos, bullet.dir, result.range);
 
-    float const air_resistance =
-        (GameID() == eGameIDSingle) ? Level().BulletManager().m_fAirResistanceK : bullet.air_resistance;
+    float const air_resistance = IsGameTypeSingle() ? Level().BulletManager().m_fAirResistanceK : bullet.air_resistance;
 
     CBulletManager& bullet_manager = Level().BulletManager();
     Fvector const gravity = {0.f, -bullet_manager.m_fGravityConst, 0.f};
@@ -683,7 +682,7 @@ bool CBulletManager::process_bullet(collide::rq_results& storage, SBullet& bulle
     float const time_delta = delta_time / 1000.f;
     Fvector const gravity = Fvector().set(0.f, -m_fGravityConst, 0.f);
 
-    float const air_resistance = (GameID() == eGameIDSingle) ? m_fAirResistanceK : bullet.air_resistance;
+    float const air_resistance = IsGameTypeSingle() ? m_fAirResistanceK : bullet.air_resistance;
     bullet.tracer_start_position = bullet.bullet_pos;
 
 #if 0 // def DEBUG
@@ -977,7 +976,7 @@ void CBulletManager::RegisterEvent(
             //	bullet->targetID = R.O->ID();
 
             E.Repeated = (R.O->ID() == E.bullet.targetID);
-            if (GameID() == eGameIDSingle)
+            if (IsGameTypeSingle())
             {
                 bullet->targetID = R.O->ID();
             }

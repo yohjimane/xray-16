@@ -137,7 +137,7 @@ void CActor::net_Export(NET_Packet& P) // export to server
     /////////////////////////////////////////////////
     u16 NumItems = PHGetSyncItemsNumber();
 
-    if (H_Parent() || (GameID() == eGameIDSingle) || ((NumItems > 1) && OnClient()))
+    if (H_Parent() || IsGameTypeSingle() || ((NumItems > 1) && OnClient()))
         NumItems = 0;
 
     if (!g_Alive())
@@ -1942,7 +1942,7 @@ void CActor::OnHitHealthLoss(float NewHealth)
 {
     if (!m_bWasHitted)
         return;
-    if (GameID() == eGameIDSingle || !OnServer())
+    if (IsGameTypeSingle() || !OnServer())
         return;
     float fNewHealth = NewHealth;
     m_bWasHitted = false;
@@ -1964,7 +1964,7 @@ void CActor::OnHitHealthLoss(float NewHealth)
 
 void CActor::OnCriticalHitHealthLoss()
 {
-    if (GameID() == eGameIDSingle || !OnServer())
+    if (IsGameTypeSingle() || !OnServer())
         return;
 
     IGameObject* pLastHittingWeapon = Level().Objects.net_Find(m_iLastHittingWeaponID);
@@ -2075,7 +2075,7 @@ void CActor::OnPlayHeadShotParticle(NET_Packet P)
 
 void CActor::OnCriticalWoundHealthLoss()
 {
-    if (GameID() == eGameIDSingle || !OnServer())
+    if (IsGameTypeSingle() || !OnServer())
         return;
 #ifdef DEBUG
     Msg("--- %s is bleed out", *cName());
@@ -2096,7 +2096,7 @@ void CActor::OnCriticalWoundHealthLoss()
 
 void CActor::OnCriticalRadiationHealthLoss()
 {
-    if (GameID() == eGameIDSingle || !OnServer())
+    if (IsGameTypeSingle() || !OnServer())
         return;
     //-------------------------------
     Msg("%s killed by radiation", *cName());
@@ -2145,7 +2145,7 @@ bool CActor::InventoryAllowSprint()
 
 bool CActor::BonePassBullet(int boneID)
 {
-    if (GameID() == eGameIDSingle)
+    if (IsGameTypeSingle())
         return inherited::BonePassBullet(boneID);
 
     CCustomOutfit* pOutfit = GetOutfit();

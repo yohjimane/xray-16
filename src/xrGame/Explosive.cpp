@@ -759,7 +759,7 @@ void CExplosive::ActivateExplosionBox(const Fvector& size, Fvector& in_out_pos)
 }
 void CExplosive::net_Relcase(IGameObject* O)
 {
-    if (GameID() == eGameIDSingle)
+    if (IsGameTypeSingle())
     {
         if (O->ID() == m_iCurrentParentID)
             m_iCurrentParentID = u16(-1);

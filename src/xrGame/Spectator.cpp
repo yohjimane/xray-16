@@ -546,7 +546,7 @@ void CSpectator::net_Destroy()
 
 bool CSpectator::SelectNextPlayerToLook(bool const search_next)
 {
-    if (GameID() == eGameIDSingle)
+    if (IsGameTypeSingle())
         return false;
 
     game_PlayerState* PS = Game().local_player;
@@ -638,7 +638,7 @@ void CSpectator::GetSpectatorString(string1024& pStr)
 //    if (!pStr)
 //        return;
 
-    if (GameID() == eGameIDSingle)
+    if (IsGameTypeSingle())
         return;
 
     xr_string SpectatorMsg;
