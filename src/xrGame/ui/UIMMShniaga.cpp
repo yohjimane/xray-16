@@ -121,7 +121,7 @@ void CUIMMShniaga::InitShniaga(CUIXml& xml_doc, LPCSTR path)
     }
     else
     {
-        if (IsGameTypeSingle())
+        if (IsGameTypeSingle() && !CoopEnabled())
         {
             VERIFY(Actor());
             if (Actor() && !Actor()->g_Alive())
