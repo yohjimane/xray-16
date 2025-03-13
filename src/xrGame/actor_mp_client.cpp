@@ -10,10 +10,7 @@
 #include "UIGameCustom.h"
 #include "eatable_item.h"
 
-#include "script_engine.h"
-#include "game_object_space.h"
-#include "script_callback_ex.h"
-#include "script_game_object.h"
+#include "xrScriptEngine/script_engine.hpp"
 
 //if we are not current control entity we use this value
 const float	CActorMP::cam_inert_value = 0.7f;
