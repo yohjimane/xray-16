@@ -98,7 +98,7 @@ void CSpectator::UpdateCL()
         }
     }
 
-    if (GameID() != eGameIDSingle)
+    if (!IsGameTypeSingle())
     {
         if (Game().local_player && ((Game().local_player->GameID == ID()) || Level().IsDemoPlay()))
         {

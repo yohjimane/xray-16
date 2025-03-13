@@ -358,7 +358,7 @@ void CLevel::ProcessGameEvents()
             }
             case M_STATISTIC_UPDATE:
             {
-                if (GameID() != eGameIDSingle)
+                if (!IsGameTypeSingle())
                     Game().m_WeaponUsageStatistic->OnUpdateRequest(&P);
                 break;
             }
@@ -381,7 +381,7 @@ void CLevel::ProcessGameEvents()
             }
         }
     }
-    if (OnServer() && GameID() != eGameIDSingle)
+    if (OnServer() && !IsGameTypeSingle())
         Game().m_WeaponUsageStatistic->Send_Check_Respond();
 }
 
@@ -421,7 +421,7 @@ void CLevel::OnFrame()
 #endif
     Fvector temp_vector;
     m_feel_deny.feel_touch_update(temp_vector, 0.f);
-    if (GameID() != eGameIDSingle)
+    if (!IsGameTypeSingle())
         psDeviceFlags.set(rsDisableObjectsAsCrows, true);
     else
         psDeviceFlags.set(rsDisableObjectsAsCrows, false);
@@ -432,7 +432,7 @@ void CLevel::OnFrame()
     // Client receive
     if (net_isDisconnected())
     {
-        if (OnClient() && GameID() != eGameIDSingle)
+        if (OnClient() && !IsGameTypeSingle())
         {
 #ifdef DEBUG
             Msg("--- I'm disconnected, so clear all objects...");
@@ -690,7 +690,7 @@ void CLevel::OnRender()
             CTeamBaseZone* team_base_zone = smart_cast<CTeamBaseZone*>(_O);
             if (team_base_zone)
                 team_base_zone->OnRender();
-            if (GameID() != eGameIDSingle)
+            if (!IsGameTypeSingle())
             {
                 CInventoryItem* pIItem = smart_cast<CInventoryItem*>(_O);
                 if (pIItem)

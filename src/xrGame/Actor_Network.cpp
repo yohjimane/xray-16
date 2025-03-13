@@ -696,7 +696,7 @@ bool CActor::net_Spawn(CSE_Abstract* DC)
     m_bInInterpolation = false;
     m_bInterpolate = false;
 
-    //	if (GameID() != eGameIDSingle)
+    //	if (!IsGameTypeSingle())
     {
         processing_activate();
     }
@@ -2049,7 +2049,7 @@ void CActor::OnCriticalHitHealthLoss()
     P.w_u8(u8(SpecialHit));
     u_EventSend(P);
     //-------------------------------------------
-    if (GameID() != eGameIDSingle)
+    if (!IsGameTypeSingle())
         Game().m_WeaponUsageStatistic->OnBullet_Check_Result(true);
 };
 

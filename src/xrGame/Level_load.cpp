@@ -19,7 +19,7 @@ bool CLevel::Load_GameSpecific_Before()
     g_pGamePersistent->LoadTitle();
     string_path fn_game;
 
-    bool gameTypeValid = (GamePersistent().GameType() != eGameIDSingle || g_pGamePersistent->m_game_params.coopEnabled);
+    bool gameTypeValid = (!IsGameTypeSingle() || CoopEnabled());
     bool spawnValid = g_pGamePersistent->m_game_params.coopEnabled ? FS.exist(fn_game, "$game_spawn$", "all", ".spawn") : FS.exist(fn_game, "$level$", "alife.spawn");
 
     if (gameTypeValid && spawnValid && OnClient()) {
@@ -283,7 +283,7 @@ void CLevel::Load_GameSpecific_CFORM(CDB::TRI* tris, u32 count)
 void CLevel::BlockCheatLoad()
 {
 #ifndef DEBUG
-    if (game && (GameID() != eGameIDSingle))
+    if (game && (!IsGameTypeSingle()))
         phTimefactor = 1.f;
 #endif
 }

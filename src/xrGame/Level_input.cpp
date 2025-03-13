@@ -250,7 +250,7 @@ void CLevel::IR_OnKeyboardPress(int key)
     {
     case SDL_SCANCODE_F7:
     {
-        if (GameID() != eGameIDSingle)
+        if (!IsGameTypeSingle())
             return;
         FS.get_path("$game_config$")->m_Flags.set(FS_Path::flNeedRescan, TRUE);
         FS.get_path("$game_scripts$")->m_Flags.set(FS_Path::flNeedRescan, TRUE);
@@ -262,7 +262,7 @@ void CLevel::IR_OnKeyboardPress(int key)
     }
     case SDL_SCANCODE_KP_5:
     {
-        if (GameID() != eGameIDSingle)
+        if (!IsGameTypeSingle())
         {
             Msg("For this game type Demo Record is disabled.");
             ///				return;
@@ -403,7 +403,7 @@ void CLevel::IR_OnKeyboardPress(int key)
 
     case MOUSE_1:
     {
-        if (GameID() != eGameIDSingle)
+        if (!IsGameTypeSingle())
             break;
 
         if (pInput->iGetAsyncKeyState(SDL_SCANCODE_LALT))

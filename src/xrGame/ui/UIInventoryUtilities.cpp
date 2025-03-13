@@ -510,7 +510,7 @@ LPCSTR InventoryUtilities::GetGoodwillAsText(CHARACTER_GOODWILL goodwill)
 // (для tutorial)
 void InventoryUtilities::SendInfoToActor(LPCSTR info_id)
 {
-    if (GameID() != eGameIDSingle)
+    if (!IsGameTypeSingle())
         return;
 
     CActor* actor = smart_cast<CActor*>(Level().CurrentEntity());
@@ -522,7 +522,7 @@ void InventoryUtilities::SendInfoToActor(LPCSTR info_id)
 
 void InventoryUtilities::SendInfoToLuaScripts(shared_str info)
 {
-    if (GameID() != eGameIDSingle)
+    if (!IsGameTypeSingle())
         return;
     if (info == shared_str("ui_talk_show"))
     {

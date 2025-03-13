@@ -325,8 +325,7 @@ void CTorch::UpdateCL()
         if (actor)
             smart_cast<IKinematics*>(H_Parent()->Visual())->CalculateBones_Invalidate();
 
-        if (H_Parent()->XFORM().c.distance_to_sqr(Device.vCameraPosition) < _sqr(OPTIMIZATION_DISTANCE) ||
-            GameID() != eGameIDSingle)
+        if (H_Parent()->XFORM().c.distance_to_sqr(Device.vCameraPosition) < _sqr(OPTIMIZATION_DISTANCE) || !IsGameTypeSingle())
         {
             // near camera
             smart_cast<IKinematics*>(H_Parent()->Visual())->CalculateBones();

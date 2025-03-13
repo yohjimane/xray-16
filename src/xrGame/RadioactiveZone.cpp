@@ -65,7 +65,7 @@ void CRadioactiveZone::Affect(SZoneObjectInfo* O)
 void CRadioactiveZone::feel_touch_new(IGameObject* O)
 {
     inherited::feel_touch_new(O);
-    if (GameID() != eGameIDSingle)
+    if (!IsGameTypeSingle())
     {
         if (smart_cast<CActor*>(O))
         {
@@ -91,7 +91,7 @@ bool CRadioactiveZone::feel_touch_contact(IGameObject* O)
 
 void CRadioactiveZone::UpdateWorkload(u32 dt)
 {
-    if (IsEnabled() && GameID() != eGameIDSingle)
+    if (IsEnabled() && !IsGameTypeSingle())
     {
         Fvector pos;
         XFORM().transform_tiny(pos, GetCForm()->getSphere().P);

@@ -935,7 +935,7 @@ void CBulletManager::CommitEvents() // @ the start of frame
         }
         case EVENT_REMOVE:
         {
-            if (E.bullet.flags.allow_sendhit && GameID() != eGameIDSingle)
+            if (E.bullet.flags.allow_sendhit && !IsGameTypeSingle())
                 Game().m_WeaponUsageStatistic->OnBullet_Remove(&E.bullet);
             m_Bullets[E.tgt_material] = m_Bullets.back();
             m_Bullets.pop_back();

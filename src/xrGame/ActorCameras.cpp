@@ -291,7 +291,7 @@ void CActor::cam_Update(float dt, float fFOV)
     on_weapon_shot_update();
     float y_shift = 0;
 
-    if (GamePersistent().GameType() != eGameIDSingle && ik_cam_shift && character_physics_support() &&
+    if (!IsGameTypeSingle() && ik_cam_shift && character_physics_support() &&
         character_physics_support()->ik_controller())
     {
         y_shift = character_physics_support()->ik_controller()->Shift();

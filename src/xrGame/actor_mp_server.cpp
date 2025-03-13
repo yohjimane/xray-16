@@ -42,7 +42,7 @@ void CSE_ActorMP::on_death(CSE_Abstract* killer)
 
 shared_str CSE_ActorMP::specific_character()
 {
-	if (g_pGameLevel && Level().game && (GameID() != eGameIDSingle || g_pGamePersistent->m_game_params.coopEnabled))
+	if (g_pGameLevel && Level().game && (!IsGameTypeSingle() || g_pGamePersistent->m_game_params.coopEnabled))
 		return m_SpecificCharacter;
 
 	return inherited::specific_character();

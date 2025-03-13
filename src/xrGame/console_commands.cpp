@@ -199,7 +199,7 @@ public:
         if (g_pGameLevel && Level().game)
         {
             //#ifndef	DEBUG
-            if (GameID() != eGameIDSingle)
+            if (!IsGameTypeSingle())
             {
                 Msg("For this game type difficulty level is disabled.");
                 return;
@@ -463,7 +463,7 @@ public:
     virtual void Execute(LPCSTR args)
     {
 #ifndef DEBUG
-// if (GameID() != eGameIDSingle)
+// if (!IsGameTypeSingle())
 //{
 //	Msg("For this game type Demo Record is disabled.");
 //	return;
@@ -484,7 +484,7 @@ public:
     virtual void Execute(LPCSTR args)
     {
 #ifndef DEBUG
-// if (GameID() != eGameIDSingle)
+// if (!IsGameTypeSingle())
 //{
 //	Msg("For this game type Demo Play is disabled.");
 //	return;
@@ -1218,7 +1218,7 @@ public:
         if (!physics_world())
             return;
 #ifndef DEBUG
-        if (g_pGameLevel && Level().game && GameID() != eGameIDSingle)
+        if (g_pGameLevel && Level().game && !IsGameTypeSingle())
         {
             Msg("Command is not available in Multiplayer");
             return;

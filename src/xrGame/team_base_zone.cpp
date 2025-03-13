@@ -68,7 +68,7 @@ bool CTeamBaseZone::net_Spawn(CSE_Abstract* DC)
         setEnabled(TRUE);
     }
 
-    if (GameID() != eGameIDSingle && !GEnv.isDedicatedServer)
+    if (!IsGameTypeSingle() && !GEnv.isDedicatedServer)
     {
         char BaseMapLocation[1024];
         xr_sprintf(BaseMapLocation, "mp_team_base_%d_location", m_Team);

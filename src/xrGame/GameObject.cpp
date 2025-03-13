@@ -383,7 +383,7 @@ void CGameObject::OnEvent(NET_Packet& P, u16 type)
         {
         case GE_HIT_STATISTIC:
         {
-            if (GameID() != eGameIDSingle)
+            if (!IsGameTypeSingle())
                 Game().m_WeaponUsageStatistic->OnBullet_Check_Request(&HDS);
         }
         break;
@@ -391,7 +391,7 @@ void CGameObject::OnEvent(NET_Packet& P, u16 type)
         SetHitInfo(Hitter, Weapon, HDS.bone(), HDS.p_in_bone_space, HDS.dir);
         Hit(&HDS);
         //---------------------------------------------------------------------------
-        if (GameID() != eGameIDSingle)
+        if (!IsGameTypeSingle())
         {
             Game().m_WeaponUsageStatistic->OnBullet_Check_Result(false);
         }
@@ -470,7 +470,7 @@ bool CGameObject::net_Spawn(CSE_Abstract* DC)
     }
 
     setID(E->ID);
-    //	if (GameID() != eGameIDSingle)
+    //	if (!IsGameTypeSingle())
     //		Msg ("CGameObject::net_Spawn -- object %s[%x] setID [%d]", *(E->s_name), this, E->ID);
 
     // XForm

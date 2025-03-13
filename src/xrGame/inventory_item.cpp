@@ -335,7 +335,7 @@ bool CInventoryItem::net_Spawn(CSE_Abstract* DC)
     //!!!
     m_fCondition = pSE_InventoryItem->m_fCondition;
 
-    if (GameID() != eGameIDSingle)
+    if (!IsGameTypeSingle())
         object().processing_activate();
 
     m_dwItemIndependencyTime = 0;

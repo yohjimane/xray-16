@@ -443,7 +443,7 @@ void CLevel::ClientReceive()
         {
             if (!game)
                 break;
-            if (GameID() != eGameIDSingle)
+            if (!IsGameTypeSingle())
                 Game().m_WeaponUsageStatistic->On_Check_Respond(P);
         }
         break;
@@ -461,7 +461,7 @@ void CLevel::ClientReceive()
         {
             /*Msg("--- CL: On Update Respond");
             if (!game) break;
-            if (GameID() != eGameIDSingle)
+            if (!IsGameTypeSingle())
                 Game().m_WeaponUsageStatistic->OnUpdateRespond(P);*/
         }
         break;
