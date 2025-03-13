@@ -720,21 +720,6 @@ bool check_params(LPCSTR p)
     return strstr(Core.Params, p);
 }
 
-bool OnServerExport()
-{
-    return g_pGameLevel != nullptr ? Level().IsServer() : false;
-}
-
-bool OnClientExport()
-{
-    return g_pGameLevel != nullptr ? Level().IsClient() : false;
-}
-
-bool IsGameTypeSingleExport()
-{
-    return g_pGamePersistent->GameType() == eGameIDSingle;
-}
-
 CScriptGameObject* get_object_by_client(u32 clientID)
 {
     xrClientData* xrCData = Level().Server->ID_to_client(clientID);
