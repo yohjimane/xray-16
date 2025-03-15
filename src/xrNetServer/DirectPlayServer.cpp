@@ -3,11 +3,9 @@
 #include "xrCore/Debug/dxerr.h"
 #include "dp_ids.h"
 
-#define NET_BANNED_STR                "Player banned by server!"
-#define NET_PROTECTED_SERVER_STR      "Access denied by protected server for this player!"
-#define NET_NOTFOR_SUBNET_STR         "Your IP does not present in server's subnet"
-
-// -----------------------------------------------------------------------------
+#define NET_BANNED_STR "Player banned by server!"
+#define NET_PROTECTED_SERVER_STR "Access denied by protected server for this player!"
+#define NET_NOTFOR_SUBNET_STR "Your IP does not present in server's subnet"
 
 HRESULT WINAPI server_net_handler(PVOID pvUserContext, DWORD dwMessageType, PVOID pMessage)
 {
@@ -15,10 +13,7 @@ HRESULT WINAPI server_net_handler(PVOID pvUserContext, DWORD dwMessageType, PVOI
 	return C->net_Handler(dwMessageType, pMessage);
 }
 
-// -----------------------------------------------------------------------------
-
-DirectPlayServer::DirectPlayServer(CTimer* timer, BOOL	Dedicated)
-	: inherited(timer, Dedicated)
+DirectPlayServer::DirectPlayServer(CTimer* timer, BOOL	Dedicated) : inherited(timer, Dedicated)
 {
 	NET = NULL;
 	net_Address_device = NULL;
@@ -26,37 +21,37 @@ DirectPlayServer::DirectPlayServer(CTimer* timer, BOOL	Dedicated)
 
 DirectPlayServer::~DirectPlayServer()
 {
-
 }
-
-// -----------------------------------------------------------------------------
 
 HRESULT	DirectPlayServer::net_Handler(u32 dwMessageType, PVOID pMessage)
 {
-	// HRESULT     hr = S_OK;
-
 	switch (dwMessageType)
 	{
 	case DPN_MSGID_ENUM_HOSTS_QUERY:
 	{
-		PDPNMSG_ENUM_HOSTS_QUERY	msg = PDPNMSG_ENUM_HOSTS_QUERY(pMessage);
-		if (0 == msg->dwReceivedDataSize) return S_FALSE;
-		if (!stricmp((const char*)msg->pvReceivedData, "ToConnect")) return S_OK;
-		if (*((const GUID*)msg->pvReceivedData) != NET_GUID) return S_FALSE;
-		if (!OnCL_QueryHost()) return S_FALSE;
+		PDPNMSG_ENUM_HOSTS_QUERY msg = PDPNMSG_ENUM_HOSTS_QUERY(pMessage);
+		if (0 == msg->dwReceivedDataSize)
+            return S_FALSE;
+		if (!stricmp((const char*)msg->pvReceivedData, "ToConnect"))
+            return S_OK;
+		if (*((const GUID*)msg->pvReceivedData) != NET_GUID)
+            return S_FALSE;
+		if (!OnCL_QueryHost())
+            return S_FALSE;
 		return S_OK;
-	}break;
+	}
+    break;
 	case DPN_MSGID_CREATE_PLAYER:
 	{
-		PDPNMSG_CREATE_PLAYER	msg = PDPNMSG_CREATE_PLAYER(pMessage);
-		const	u32				max_size = 1024;
-		char	bufferData[max_size];
-		DWORD	bufferSize = max_size;
+		PDPNMSG_CREATE_PLAYER msg = PDPNMSG_CREATE_PLAYER(pMessage);
+		const u32 max_size = 1024;
+		char bufferData[max_size];
+		DWORD bufferSize = max_size;
 		ZeroMemory(bufferData, bufferSize);
-		string512				res;
+		string512 res;
 
 		// retreive info
-		DPN_PLAYER_INFO*		Pinfo = (DPN_PLAYER_INFO*)bufferData;
+		DPN_PLAYER_INFO* Pinfo = (DPN_PLAYER_INFO*)bufferData;
 		Pinfo->dwSize = sizeof(DPN_PLAYER_INFO);
 		HRESULT _hr = NET->GetClientInfo(msg->dpnidPlayer, Pinfo, &bufferSize, 0);
 		if (_hr == DPNERR_INVALIDPLAYER)
@@ -67,12 +62,7 @@ HRESULT	DirectPlayServer::net_Handler(u32 dwMessageType, PVOID pMessage)
 
 		CHK_DX(_hr);
 
-		//string64			cname;
-		//CHK_DX( WideCharToMultiByte( CP_ACP, 0, Pinfo->pwszName, -1, cname, sizeof(cname) , 0, 0 ) );
-
-		SClientConnectData	cl_data;
-		//xr_strcpy( cl_data.name, cname );
-
+		SClientConnectData cl_data;
 		if (Pinfo->pvData && Pinfo->dwDataSize == sizeof(cl_data))
 		{
 			cl_data = *((SClientConnectData*)Pinfo->pvData);
@@ -102,13 +92,15 @@ HRESULT	DirectPlayServer::net_Handler(u32 dwMessageType, PVOID pMessage)
 	{
 
 		PDPNMSG_RECEIVE	pMsg = PDPNMSG_RECEIVE(pMessage);
-		void*	m_data = pMsg->pReceiveData;
-		u32		m_size = pMsg->dwReceiveDataSize;
-		DPNID   m_sender = pMsg->dpnidSender;
+		void* m_data = pMsg->pReceiveData;
+		u32 m_size = pMsg->dwReceiveDataSize;
+		DPNID m_sender = pMsg->dpnidSender;
 
 		MSYS_PING* m_ping = (MSYS_PING*)m_data;
 
-		if ((m_size > 2 * sizeof(u32)) && (m_ping->sign1 == 0x12071980) && (m_ping->sign2 == 0x26111975))
+        if ((m_size >= 2 * sizeof(u32))
+            && m_ping->sign1 == 0x12071980
+            && m_ping->sign2 == 0x26111975)
 		{
 			// this is system message
 			if (m_size == sizeof(MSYS_PING))
@@ -129,28 +121,26 @@ HRESULT	DirectPlayServer::net_Handler(u32 dwMessageType, PVOID pMessage)
 	{
 		PDPNMSG_INDICATE_CONNECT msg = (PDPNMSG_INDICATE_CONNECT)pMessage;
 
-		ip_address			HAddr;
+		ip_address HAddr;
 		GetClientAddress(msg->pAddressPlayer, HAddr);
 
 		if (GetBannedClient(HAddr))
 		{
 			msg->dwReplyDataSize = sizeof(NET_BANNED_STR);
-			msg->pvReplyData = NET_BANNED_STR;
-			return					S_FALSE;
+			msg->pvReplyData = (PVOID)NET_BANNED_STR;
+			return S_FALSE;
 		};
 		//first connected client is SV_Client so if it is NULL then this server client tries to connect ;)
 		if (SV_Client && !m_ip_filter.is_ip_present(HAddr.m_data.data))
 		{
 			msg->dwReplyDataSize = sizeof(NET_NOTFOR_SUBNET_STR);
-			msg->pvReplyData = NET_NOTFOR_SUBNET_STR;
-			return					S_FALSE;
+			msg->pvReplyData = (PVOID)NET_NOTFOR_SUBNET_STR;
+			return S_FALSE;
 		}
 	}break;
 	}
 	return S_OK;
 }
-
-// -----------------------------------------------------------------------------
 
 bool DirectPlayServer::CreateConnection(GameDescriptionData & game_descr, ServerConnectionOptions & opt)
 {
@@ -182,9 +172,9 @@ bool DirectPlayServer::CreateConnection(GameDescriptionData & game_descr, Server
 	}
 
 	// Set server-player info
-	DPN_APPLICATION_DESC		dpAppDesc;
-	DPN_PLAYER_INFO				dpPlayerInfo;
-	WCHAR						wszName[] = L"XRay Server";
+	DPN_APPLICATION_DESC dpAppDesc;
+	DPN_PLAYER_INFO dpPlayerInfo;
+	WCHAR wszName[] = L"XRay Server";
 
 	ZeroMemory(&dpPlayerInfo, sizeof(DPN_PLAYER_INFO));
 	dpPlayerInfo.dwSize = sizeof(DPN_PLAYER_INFO);
@@ -236,11 +226,12 @@ bool DirectPlayServer::CreateConnection(GameDescriptionData & game_descr, Server
 
 		HostSuccess = NET->Host
 		(
-			&dpAppDesc,				// AppDesc
+			&dpAppDesc, // AppDesc
 			&net_Address_device, 1, // Device Address
-			NULL, NULL,             // Reserved
-			NULL,                   // Player Context
-			0);						// dwFlags
+			NULL, NULL, // Reserved
+			NULL, // Player Context
+			0 // dwFlags
+        );
 		if (HostSuccess != S_OK)
 		{
 			if (opt.bPortWasSet)
@@ -256,7 +247,7 @@ bool DirectPlayServer::CreateConnection(GameDescriptionData & game_descr, Server
 			psNET_Port++;
 			if (psNET_Port > END_PORT_LAN)
 			{
-				return false; ErrConnect;
+				return false; // ErrConnect;
 			}
 		}
 		else
@@ -270,23 +261,20 @@ bool DirectPlayServer::CreateConnection(GameDescriptionData & game_descr, Server
 	return true;
 }
 
-// -----------------------------------------------------------------------------
-
 void DirectPlayServer::DestroyConnection()
 {
-	if (NET)	NET->Close(0);
+	if (NET)
+        NET->Close(0);
 
 	// Release interfaces
 	_RELEASE(net_Address_device);
 	_RELEASE(NET);
 }
 
-// -----------------------------------------------------------------------------
-
 void DirectPlayServer::_SendTo_LL(ClientID ID, void * data, u32 size, u32 dwFlags, u32 dwTimeout)
 {
 	// send it
-	DPN_BUFFER_DESC		desc;
+	DPN_BUFFER_DESC desc;
 	desc.dwBufferSize = size;
 	desc.pBufferData = LPBYTE(data);
 
@@ -294,8 +282,8 @@ void DirectPlayServer::_SendTo_LL(ClientID ID, void * data, u32 size, u32 dwFlag
 	VERIFY(desc.dwBufferSize);
 	VERIFY(desc.pBufferData);
 
-	DPNHANDLE	hAsync = 0;
-	HRESULT		_hr = NET->SendTo(
+	DPNHANDLE hAsync = 0;
+	HRESULT _hr = NET->SendTo(
 		ID.value(),
 		&desc, 1,
 		dwTimeout,
@@ -303,28 +291,26 @@ void DirectPlayServer::_SendTo_LL(ClientID ID, void * data, u32 size, u32 dwFlag
 		dwFlags | DPNSEND_COALESCE
 	);
 
-	if (SUCCEEDED(_hr) || (DPNERR_CONNECTIONLOST == _hr))	return;
+	if (SUCCEEDED(_hr) || DPNERR_CONNECTIONLOST == _hr)
+        return;
 
 	R_CHK(_hr);
 }
 
-// -----------------------------------------------------------------------------
-
 void DirectPlayServer::UpdateClientStatistic(IClient* C)
 {
 	// Query network statistic for this client
-	DPN_CONNECTION_INFO			CI;
+	DPN_CONNECTION_INFO CI;
 	ZeroMemory(&CI, sizeof(CI));
 	CI.dwSize = sizeof(CI);
 	if (!psNET_direct_connect)
 	{
 		HRESULT hr = NET->GetConnectionInfo(C->ID.value(), &CI, 0);
-		if (FAILED(hr))				return;
+		if (FAILED(hr))
+            return;
 	}
 	C->stats.Update(CI);
 }
-
-// -----------------------------------------------------------------------------
 
 
 bool DirectPlayServer::GetClientAddress(ClientID ID, ip_address& Address, DWORD* pPort)
@@ -338,12 +324,12 @@ bool DirectPlayServer::GetClientAddress(ClientID ID, ip_address& Address, DWORD*
 
 bool DirectPlayServer::GetClientAddress(IDirectPlay8Address* pClientAddress, ip_address& Address, DWORD* pPort)
 {
-	WCHAR				wstrHostname[256] = { 0 };
+	WCHAR wstrHostname[256] = { 0 };
 	DWORD dwSize = sizeof(wstrHostname);
 	DWORD dwDataType = 0;
 	CHK_DX(pClientAddress->GetComponentByName(DPNA_KEY_HOSTNAME, wstrHostname, &dwSize, &dwDataType));
 
-	string256				HostName;
+	string256 HostName;
 	CHK_DX(WideCharToMultiByte(CP_ACP, 0, wstrHostname, -1, HostName, sizeof(HostName), 0, 0));
 
 	Address.set(HostName);
@@ -359,23 +345,18 @@ bool DirectPlayServer::GetClientAddress(IDirectPlay8Address* pClientAddress, ip_
 	return true;
 };
 
-// -----------------------------------------------------------------------------
-
 bool DirectPlayServer::DisconnectClient(IClient* C, LPCSTR Reason)
 {
-	if (!C) return false;
+	if (!C)
+        return false;
 
 	HRESULT res = NET->DestroyClient(C->ID.value(), Reason, xr_strlen(Reason) + 1, 0);
 	CHK_DX(res);
 	return true;
 }
 
-// -----------------------------------------------------------------------------
-
 bool DirectPlayServer::GetClientPendingMessagesCount(ClientID ID, DWORD & dwPending)
 {
 	HRESULT hr = NET->GetSendQueueInfo(ID.value(), &dwPending, 0, 0);
 	return !FAILED(hr);
 }
-
-// -----------------------------------------------------------------------------

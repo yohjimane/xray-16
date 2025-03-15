@@ -1,8 +1,6 @@
 #include "stdafx.h"
 #include "SteamNetServer.h"
 
-// -----------------------------------------------------------------------------
-
 SteamNetServer* s_pCallbackInstance = nullptr;
 
 void SvSteamNetConnectionStatusChangedCallback(SteamNetConnectionStatusChangedCallback_t *pInfo)
@@ -13,8 +11,6 @@ void SvSteamNetConnectionStatusChangedCallback(SteamNetConnectionStatusChangedCa
 	}
 }
 
-// -----------------------------------------------------------------------------
-
 void steam_net_update_server(void* P)
 {
 	Msg("- [SteamNetServer] Thread for steam network server is started");
@@ -23,26 +19,19 @@ void steam_net_update_server(void* P)
 	C->Update();
 }
 
-// -----------------------------------------------------------------------------
-
-SteamNetServer::SteamNetServer(CTimer* timer, BOOL	dedicated)
-	: BaseServer(timer, dedicated)
+SteamNetServer::SteamNetServer(CTimer* timer, BOOL	dedicated) : BaseServer(timer, dedicated)
 #ifdef PROFILE_CRITICAL_SECTIONS
 	, csConnection(MUTEX_PROFILE_ID(SteamNetServer::csConnection))
-#endif // PROFILE_CRITICAL_SECTIONS
+#endif
 {
-	m_players.reserve((dedicated) ? GetMaxPlayers() + 1 : GetMaxPlayers()); // 
+	m_players.reserve((dedicated) ? GetMaxPlayers() + 1 : GetMaxPlayers());
 	m_server_password.reserve(64);
 	m_awaiting_clients.clear();
 }
 
-// -----------------------------------------------------------------------------
-
 SteamNetServer::~SteamNetServer()
 {
-
 }
-// -----------------------------------------------------------------------------
 
 void SteamNetServer::_SendTo_LL(ClientID ID, void * data, u32 size, u32 dwFlags, u32 dwTimeout)
 {
@@ -52,10 +41,6 @@ void SteamNetServer::_SendTo_LL(ClientID ID, void * data, u32 size, u32 dwFlags,
 		Msg("! [SteamNetClient] ERROR: Failed to send net-packet, reason: %d", result);
 	}
 }
-
-// -----------------------------------------------------------------------------
-
-#pragma region create / destroy listener
 
 bool SteamNetServer::CreateConnection(GameDescriptionData & game_descr, ServerConnectionOptions & connectOpt)
 {
@@ -112,15 +97,18 @@ bool SteamNetServer::CreateConnection(GameDescriptionData & game_descr, ServerCo
 	m_max_players = (m_bDedicated) ? (connectOpt.dwMaxPlayers + 1) : (connectOpt.dwMaxPlayers);
 
 	Msg("- [SteamNetServer] created on port %d", bindServerAddress.m_port);
-	thread_spawn(steam_net_update_server, "snetwork-update-server", 0, this);
+    Threading::SpawnThread("snetwork-update-server", [this]
+        {
+            steam_net_update_server(this);
+        });
 
 	return true;
 }
 
 void SteamNetServer::DestroyConnection()
 {
-	// Pavel: дисконнект не должен исполняться, во время обработки колбека
-	xrCriticalSection::raii lock(&csConnection);
+	// Pavel: Disconnect should not be executed during the callback processing
+    ScopeLock lock{ &csConnection };
 
 	m_server_password.clear();
 
@@ -149,10 +137,6 @@ void SteamNetServer::DestroyConnection()
 
 	GameNetworkingSockets_Kill();
 }
-
-#pragma endregion
-
-// -----------------------------------------------------------------------------
 
 void SteamNetServer::Update()
 {
@@ -197,9 +181,11 @@ void SteamNetServer::PollIncomingMessages()
 		u32	m_size = pIncomingMsg->m_cbSize;
 		HSteamNetConnection m_sender = pIncomingMsg->m_conn;
 
-		MSYS_PING*	m_ping = (MSYS_PING*)m_data;
+		MSYS_PING* m_ping = (MSYS_PING*)m_data;
 
-		if ((m_size > 2 * sizeof(u32)) && (m_ping->sign1 == 0x12071980) && (m_ping->sign2 == 0x26111975))
+        if ((m_size >= 2 * sizeof(u32))
+            && m_ping->sign1 == 0x12071980
+            && m_ping->sign2 == 0x26111975)
 		{
 			// this is system message
 			if (m_size == sizeof(MSYS_PING))
@@ -400,10 +386,6 @@ void SteamNetServer::OnSteamNetConnectionStatusChanged(SteamNetConnectionStatusC
 	}
 }
 
-// -----------------------------------------------------------------------------
-
-#pragma region client disconnect
-
 void SteamNetServer::DisconnectAll()
 {
 	for (auto &connection : m_players)
@@ -449,10 +431,6 @@ void SteamNetServer::DestroyCleint(ClientID clientId)
 	}
 }
 
-#pragma endregion
-
-// -----------------------------------------------------------------------------
-
 bool SteamNetServer::ParseClientConnectionData(SteamNetworkingIdentity& identity, SClientConnectData& out)
 {
 	NET_Packet P;
@@ -472,10 +450,6 @@ bool SteamNetServer::ParseClientConnectionData(SteamNetworkingIdentity& identity
 
 	return true;
 }
-
-// -----------------------------------------------------------------------------
-
-#pragma region ip address
 
 void SteamNetServer::GetIpAddress(SteamNetConnectionInfo_t & info, ip_address & out)
 {
@@ -502,16 +476,12 @@ bool SteamNetServer::GetClientAddress(ClientID ID, ip_address& address, DWORD* p
 	return true;
 }
 
-#pragma endregion
-
-// -----------------------------------------------------------------------------
-
 bool SteamNetServer::GetClientPendingMessagesCount(ClientID ID, DWORD & dwPending)
 {
 	R_ASSERT(m_pInterface);
 
-	SteamNetworkingQuickConnectionStatus status;
-	if (m_pInterface->GetQuickConnectionStatus(ID.value(), &status))
+    SteamNetConnectionRealTimeStatus_t status;
+	if (m_pInterface->GetConnectionRealTimeStatus(ID.value(), &status, 0, 0))
 	{
 		dwPending = status.m_cbPendingReliable + status.m_cbPendingUnreliable;
 		return true;
@@ -520,12 +490,10 @@ bool SteamNetServer::GetClientPendingMessagesCount(ClientID ID, DWORD & dwPendin
 	return false;
 }
 
-// -----------------------------------------------------------------------------
-
 void SteamNetServer::UpdateClientStatistic(IClient* C)
 {
-	SteamNetworkingQuickConnectionStatus status;
-	if (!m_pInterface->GetQuickConnectionStatus(C->ID.value(), &status))
+    SteamNetConnectionRealTimeStatus_t status;
+	if (!m_pInterface->GetConnectionRealTimeStatus(C->ID.value(), &status, 0, 0))
 	{
 		return;
 	}

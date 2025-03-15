@@ -1,9 +1,10 @@
 #pragma once
 #include "BaseServer.h"
+#include "NET_Messages.h"
 
 #pragma warning(push)
 #pragma warning(disable:4995)
-#include "GameNetworkingSockets/steam/steamnetworkingsockets.h"
+#include <GameNetworkingSockets/steamnetworkingsockets.h>
 #pragma warning(pop)
 
 enum enmDisconnectReason
@@ -28,7 +29,7 @@ private:
 
 	GameDescriptionData           m_game_description;
 
-	xrCriticalSection             csConnection;
+	Lock             csConnection;
 	xr_string                     m_server_password;
 	u32														m_max_players = 0;
 	bool													m_bServerClientConnected = false;

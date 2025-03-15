@@ -2,6 +2,7 @@
 #include "SteamNetClient.h"
 #include "SteamNetServer.h"
 #include "ip_address.h"
+#include <GameNetworkingSockets/isteamnetworkingutils.h>
 
 SteamNetClient* s_pCallbackInstance = nullptr;
 
@@ -13,8 +14,6 @@ void ClSteamNetConnectionStatusChangedCallback(SteamNetConnectionStatusChangedCa
 	}
 }
 
-// -----------------------------------------------------------------------------
-
 void steam_net_update_client(void* P)
 {
 	Msg("- [SteamNetClient] Thread for steam network client is started");
@@ -23,26 +22,16 @@ void steam_net_update_client(void* P)
 	C->Update();
 }
 
-// -----------------------------------------------------------------------------
-
-SteamNetClient::SteamNetClient(CTimer* tm)
-	: BaseClient(tm)
+SteamNetClient::SteamNetClient(CTimer* tm) : BaseClient(tm)
 #ifdef PROFILE_CRITICAL_SECTIONS
 	, csConnection(MUTEX_PROFILE_ID(SteamNetClient::csConnection))
 #endif // PROFILE_CRITICAL_SECTIONS
 {
 }
 
-// -----------------------------------------------------------------------------
-
 SteamNetClient::~SteamNetClient()
 {
-
 }
-
-// -----------------------------------------------------------------------------
-
-#pragma region connect / disconnect
 
 bool SteamNetClient::SetIdentity(SteamNetworkingIdentity& identity, ClientConnectionOptions& opt) const
 {
@@ -121,7 +110,10 @@ bool SteamNetClient::CreateConnection(ClientConnectionOptions & connectOpt)
 	}
 
 	Msg("- [SteamNetClient] connect created");
-	thread_spawn(steam_net_update_client, "snetwork-update-client", 0, this);
+    Threading::SpawnThread("snetwork-update-client", [this]
+        {
+            steam_net_update_client(this);
+        });
 
 	return true;
 }
@@ -130,7 +122,7 @@ void SteamNetClient::DestroyConnection()
 {
 	Msg("- [SteamNetClient] destroy connection");
 
-	xrCriticalSection::raii lock(&csConnection);
+    ScopeLock lock{ &csConnection };
 
 	net_Disconnected = TRUE;
 
@@ -152,12 +144,6 @@ void SteamNetClient::DestroyConnection()
 		GameNetworkingSockets_Kill();
 	}
 }
-
-#pragma endregion
-
-// -----------------------------------------------------------------------------
-
-#pragma region receive
 
 void SteamNetClient::Update()
 {
@@ -287,13 +273,6 @@ void SteamNetClient::OnSteamNetConnectionStatusChanged(SteamNetConnectionStatusC
 		break;
 	}
 }
-
-#pragma endregion
-
-// -----------------------------------------------------------------------------
-
-#pragma region send
-
 void SteamNetClient::SendTo_LL(void * data, u32 size, u32 dwFlags, u32 dwTimeout)
 {
 	net_Statistic.dwBytesSended += size;
@@ -320,35 +299,23 @@ bool SteamNetClient::SendPingMessage(MSYS_PING & clPing)
 	return result == k_EResultOK;
 }
 
-#pragma endregion
-
-// -----------------------------------------------------------------------------
-
-#pragma region statistic
-
 void SteamNetClient::UpdateStatistic()
 {
-	SteamNetworkingQuickConnectionStatus status;
-	if (!m_pInterface->GetQuickConnectionStatus(m_hConnection, &status))
+    SteamNetConnectionRealTimeStatus_t status;
+	if (!m_pInterface->GetConnectionRealTimeStatus(m_hConnection, &status, 0, 0))
 	{
 		return;
 	}
 	net_Statistic.Update(status);
 }
 
-#pragma endregion
-
-// -----------------------------------------------------------------------------
-
-#pragma region pending messages
-
 bool SteamNetClient::GetPendingMessagesCount(DWORD& dwPending)
 {
 	R_ASSERT(m_pInterface);
 	R_ASSERT(m_hConnection != k_HSteamNetConnection_Invalid);
 
-	SteamNetworkingQuickConnectionStatus pStatus;
-	if (m_pInterface->GetQuickConnectionStatus(m_hConnection, &pStatus))
+    SteamNetConnectionRealTimeStatus_t pStatus;
+	if (m_pInterface->GetConnectionRealTimeStatus(m_hConnection, &pStatus, 0, 0))
 	{
 		dwPending = pStatus.m_cbPendingReliable + pStatus.m_cbPendingUnreliable;
 		return true;
@@ -356,13 +323,6 @@ bool SteamNetClient::GetPendingMessagesCount(DWORD& dwPending)
 
 	return false;
 }
-
-#pragma endregion
-
-// -----------------------------------------------------------------------------
-
-#pragma region ip address
-
 
 void SteamNetClient::GetIpAddress(SteamNetConnectionInfo_t & info, ip_address & out)
 {
@@ -385,7 +345,3 @@ bool SteamNetClient::GetServerAddress(ip_address& pAddress, DWORD* pPort)
 
 	return false;
 };
-
-#pragma endregion
-
-// -----------------------------------------------------------------------------

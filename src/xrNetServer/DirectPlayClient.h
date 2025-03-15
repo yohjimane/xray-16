@@ -8,12 +8,10 @@ class XRNETSERVER_API DirectPlayClient : public BaseClient
     typedef BaseClient inherited;
 
 private:
-    xrCriticalSection net_csEnumeration;
+    Lock net_csEnumeration;
 
 protected:
-    // Direct play
-
-    struct HOST_NODE //deprecated...
+    struct HOST_NODE // deprecated...
     {
         DPN_APPLICATION_DESC dpAppDesc;
         IDirectPlay8Address* pHostAddress;

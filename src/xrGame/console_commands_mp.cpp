@@ -1796,7 +1796,7 @@ public:
     virtual void Execute(LPCSTR args)
     {
         ip_address Address;
-        u32 dwPort = 0;
+        DWORD dwPort = 0;
 
         Level().GetServerAddress(Address, &dwPort);
 

@@ -1,10 +1,6 @@
 #pragma once
 #include "BaseClient.h"
-
-#pragma warning(push)
-#pragma warning(disable:4995)
-#include "GameNetworkingSockets/steam/steamnetworkingsockets.h"
-#pragma warning(pop)
+#include <GameNetworkingSockets/steamnetworkingsockets.h>
 
 class XRNETSERVER_API SteamNetClient : public BaseClient
 {
@@ -12,47 +8,47 @@ class XRNETSERVER_API SteamNetClient : public BaseClient
 	friend void steam_net_update_client(void* P);
 
 private:
-	xrCriticalSection		      csConnection;
+    Lock csConnection;
 	ISteamNetworkingSockets*  m_pInterface = nullptr;
-	HSteamNetConnection		    m_hConnection = k_HSteamNetConnection_Invalid;
+	HSteamNetConnection m_hConnection = k_HSteamNetConnection_Invalid;
 
-	bool											m_bServerClient = false;
-	bool											m_bGameDescriptionRecieved = false;
+	bool m_bServerClient = false;
+	bool m_bGameDescriptionRecieved = false;
 
 public:
 	SteamNetClient(CTimer* tm);
 	virtual ~SteamNetClient();
 
 private:
-	IC bool                 IsConnectionCreated() const { return m_pInterface != nullptr; }
-	IC bool									GameDescriptionReceived() const { return m_bGameDescriptionRecieved; }
+	IC bool IsConnectionCreated() const { return m_pInterface != nullptr; }
+	IC bool GameDescriptionReceived() const { return m_bGameDescriptionRecieved; }
 
-	void                    Update();
-	void                    OnSteamNetConnectionStatusChanged(SteamNetConnectionStatusChangedCallback_t *pInfo);
+	void Update();
+	void OnSteamNetConnectionStatusChanged(SteamNetConnectionStatusChangedCallback_t *pInfo);
 
-	void					          GetIpAddress(SteamNetConnectionInfo_t& info, ip_address& out);
+	void GetIpAddress(SteamNetConnectionInfo_t& info, ip_address& out);
 
-	void					          PollConnectionStateChanges();
-	void					          PollIncomingMessages();
-	bool					          SetIdentity(SteamNetworkingIdentity& identity, ClientConnectionOptions& opt) const;
+	void PollConnectionStateChanges();
+	void PollIncomingMessages();
+	bool SetIdentity(SteamNetworkingIdentity& identity, ClientConnectionOptions& opt) const;
 
 protected:
-	virtual bool            IsConnectionInit() override { return m_pInterface != nullptr; }
+	virtual bool IsConnectionInit() override { return m_pInterface != nullptr; }
 
-	virtual bool			      CreateConnection(ClientConnectionOptions& opt) override;
-	virtual void			      DestroyConnection() override;
-	virtual	void			      SendTo_LL(void* data, u32 size, u32 dwFlags = DPNSEND_GUARANTEED, u32 dwTimeout = 0) override;
+	virtual bool CreateConnection(ClientConnectionOptions& opt) override;
+	virtual void DestroyConnection() override;
+	virtual	void SendTo_LL(void* data, u32 size, u32 dwFlags = DPNSEND_GUARANTEED, u32 dwTimeout = 0) override;
 
-	virtual bool            GetPendingMessagesCount(DWORD& dwPending) override;
-	virtual bool            SendPingMessage(MSYS_PING& clPing) override;
+	virtual bool GetPendingMessagesCount(DWORD& dwPending) override;
+	virtual bool SendPingMessage(MSYS_PING& clPing) override;
 
 public:
-	virtual	bool			      GetServerAddress(ip_address& pAddress, DWORD* pPort)  override;
+	virtual	bool GetServerAddress(ip_address& pAddress, DWORD* pPort)  override;
 
-	virtual bool			      HasSessionName() { return GameDescriptionReceived(); }
-	virtual LPCSTR			    net_SessionName() const override { return m_game_description.map_name; }
+	virtual bool HasSessionName() { return GameDescriptionReceived(); }
+	virtual LPCSTR net_SessionName() const override { return m_game_description.map_name; }
 
 	// statistic
-	virtual	void			      UpdateStatistic()  override;
+	virtual	void UpdateStatistic()  override;
 };
 
