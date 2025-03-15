@@ -1455,11 +1455,21 @@ void CActor::save(NET_Packet& output_packet)
     inherited::save(output_packet);
     CInventoryOwner::save(output_packet);
     output_packet.w_u8(u8(m_bOutBorder));
-    CUITaskWnd* task_wnd = HUD().GetGameUI()->GetPdaMenu().pUITaskWnd;
-    output_packet.w_u8(task_wnd && task_wnd->IsTreasuresEnabled() ? 1 : 0);
-    output_packet.w_u8(task_wnd && task_wnd->IsQuestNpcsEnabled() ? 1 : 0);
-    output_packet.w_u8(task_wnd && task_wnd->IsSecondaryTasksEnabled() ? 1 : 0);
-    output_packet.w_u8(task_wnd && task_wnd->IsPrimaryObjectsEnabled() ? 1 : 0);
+    if (HUD().GetGameUI())
+    {
+        CUITaskWnd* task_wnd = HUD().GetGameUI()->GetPdaMenu().pUITaskWnd;
+        output_packet.w_u8(task_wnd && task_wnd->IsTreasuresEnabled() ? 1 : 0);
+        output_packet.w_u8(task_wnd && task_wnd->IsQuestNpcsEnabled() ? 1 : 0);
+        output_packet.w_u8(task_wnd && task_wnd->IsSecondaryTasksEnabled() ? 1 : 0);
+        output_packet.w_u8(task_wnd && task_wnd->IsPrimaryObjectsEnabled() ? 1 : 0);
+    }
+    else
+    {
+        output_packet.w_u8(0);
+        output_packet.w_u8(0);
+        output_packet.w_u8(0);
+        output_packet.w_u8(0);
+    }
 
     output_packet.w_stringZ(g_quick_use_slots[0]);
     output_packet.w_stringZ(g_quick_use_slots[1]);
@@ -1473,18 +1483,28 @@ void CActor::load(IReader& input_packet)
     CInventoryOwner::load(input_packet);
     m_bOutBorder = !!(input_packet.r_u8());
 
-    const bool treasures = !!input_packet.r_u8();
-    const bool questNpcs = !!input_packet.r_u8();
-    const bool secondaryTasks = !!input_packet.r_u8();
-    const bool primaryObjects = !!input_packet.r_u8();
-
-    CUITaskWnd* task_wnd = HUD().GetGameUI()->GetPdaMenu().pUITaskWnd;
-    if (task_wnd)
+    if (HUD().GetGameUI())
     {
-        task_wnd->TreasuresEnabled(treasures);
-        task_wnd->QuestNpcsEnabled(questNpcs);
-        task_wnd->SecondaryTasksEnabled(secondaryTasks);
-        task_wnd->PrimaryObjectsEnabled(primaryObjects);
+        const bool treasures = !!input_packet.r_u8();
+        const bool questNpcs = !!input_packet.r_u8();
+        const bool secondaryTasks = !!input_packet.r_u8();
+        const bool primaryObjects = !!input_packet.r_u8();
+
+        CUITaskWnd* task_wnd = HUD().GetGameUI()->GetPdaMenu().pUITaskWnd;
+        if (task_wnd)
+        {
+            task_wnd->TreasuresEnabled(treasures);
+            task_wnd->QuestNpcsEnabled(questNpcs);
+            task_wnd->SecondaryTasksEnabled(secondaryTasks);
+            task_wnd->PrimaryObjectsEnabled(primaryObjects);
+        }
+    }
+    else
+    {
+        input_packet.r_u8();
+        input_packet.r_u8();
+        input_packet.r_u8();
+        input_packet.r_u8();
     }
     // need_quick_slot_reload = true;
 
