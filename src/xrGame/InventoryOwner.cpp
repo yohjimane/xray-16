@@ -106,7 +106,7 @@ bool CInventoryOwner::net_Spawn(CSE_Abstract* DC)
         return FALSE;
     CSE_Abstract* E = (CSE_Abstract*)(DC);
 
-    if (IsGameTypeSingle() || !smart_cast<CSE_ActorMP*>(E))
+    if ((IsGameTypeSingle() && !CoopEnabled()) || !smart_cast<CSE_ActorMP*>(E))
     {
         CSE_ALifeTraderAbstract* pTrader = NULL;
         if (E)
