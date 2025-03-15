@@ -3,7 +3,9 @@
 #include "SteamNetServer.h"
 #include "ip_address.h"
 #include <GameNetworkingSockets/isteamnetworkingutils.h>
+#if defined(XR_PLATFORM_WINDOWS)
 #include "WinsocksHelper.h"
+#endif
 
 SteamNetClient* s_pCallbackInstance = nullptr;
 
@@ -87,6 +89,7 @@ bool SteamNetClient::CreateConnection(ClientConnectionOptions & connectOpt)
 		serverAddr.m_port = (uint16)sv_port;
 
 		// TRY GET HOSTNAME
+#if defined(XR_PLATFORM_WINDOWS)
 		if (!serverAddr.IsIPv4())
 		{
 			uint32 ip = WinsocksHelper::GetIpAddress(connectOpt.server_name);
@@ -99,6 +102,7 @@ bool SteamNetClient::CreateConnection(ClientConnectionOptions & connectOpt)
 			serverAddr.Clear();
 			serverAddr.SetIPv4(ip, (uint16)sv_port);
 		}
+#endif
 	}
 
 	char szAddr[SteamNetworkingIPAddr::k_cchMaxString];
