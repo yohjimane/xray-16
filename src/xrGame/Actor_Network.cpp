@@ -65,7 +65,7 @@ CActor* g_single_actor = NULL;
 
 CActor* Actor()
 {
-    VERIFY(g_actor);
+    // VERIFY(g_actor);
     return (g_actor);
 };
 
