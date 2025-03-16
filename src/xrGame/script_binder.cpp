@@ -139,11 +139,14 @@ void CScriptBinder::net_Destroy()
 
 void CScriptBinder::set_object(CScriptBinderObject* object)
 {
-    VERIFY2(!m_object, "Cannot bind to the object twice!");
+    if (OnServer() || !IsGameTypeSingle())
+    {
+        VERIFY2(!m_object, "Cannot bind to the object twice!");
 #ifdef _DEBUG
-    Msg("* Core object %s is binded with the script object", owner->cName());
+        Msg("* Core object %s is binded with the script object", owner->cName());
 #endif // _DEBUG
-    m_object = object;
+        m_object = object;
+    }
 }
 
 void CScriptBinder::shedule_Update(u32 time_delta)
