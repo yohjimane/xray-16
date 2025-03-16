@@ -14,7 +14,12 @@ bool OnClient() noexcept
 
 bool IsGameTypeSingle() noexcept
 {
-    return g_pGamePersistent->GameType() == eGameIDSingle;
+    return g_pGamePersistent->GameType() == eGameIDSingle && !CoopEnabled();
+}
+
+bool IsGameTypeCoop() noexcept
+{
+    return g_pGamePersistent->GameType() == eGameIDSingle && CoopEnabled();
 }
 
 bool CoopEnabled() noexcept

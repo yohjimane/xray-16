@@ -970,6 +970,7 @@ IC static void CLevel_Export(lua_State* luaState)
         def("command_line", &command_line),
         def("CoopEnabled", (bool (*)())&CoopEnabled),
         def("IsGameTypeSingle", (bool (*)())&IsGameTypeSingle),
+        def("IsGameTypeCoop", (bool (*)())&IsGameTypeCoop),
         def("IsDynamicMusic", &IsDynamicMusic), def("render_get_dx_level", &render_get_dx_level),
         def("IsImportantSave", &IsImportantSave),
         def("print_msg", &print_msg),
