@@ -63,10 +63,17 @@ CALifeSimulator::CALifeSimulator(xrServer* server, shared_str* command_line)
     R_ASSERT2(GEnv.ScriptEngine->functor(start_game_callback, functor), "failed to get start game callback");
     functor(isNewGame);
 
-	if (is_single || p.coopEnabled) {
+	if (is_single) {
         R_ASSERT2(xr_strlen(p.m_game_or_spawn) && !xr_strcmp(p.m_alife, "alife") && is_single,
             "Invalid server options!");
-		load(p.m_game_or_spawn, !xr_strcmp(p.m_new_or_load, "load") ? false : true, !xr_strcmp(p.m_new_or_load, "new"));
+        if (p.coopEnabled)
+        {
+            load(p.m_game_or_spawn, false, true);
+        }
+        else
+        {
+            load(p.m_game_or_spawn, !xr_strcmp(p.m_new_or_load, "load") ? false : true, !xr_strcmp(p.m_new_or_load, "new"));
+        }
 	}
 	else
 	{
