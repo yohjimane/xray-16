@@ -772,7 +772,7 @@ void CGamePersistent::OnRenderPPUI_main()
 
 void CGamePersistent::OnRenderPPUI_PP() { MainMenu()->OnRenderPPUI_PP(); }
 
-bool CGamePersistent::CanBePaused() { return IsGameTypeSingle() || (g_pGameLevel && Level().IsDemoPlay()); }
+bool CGamePersistent::CanBePaused() { return GEnv.isDedicatedServer || (IsGameTypeSingle()) || (g_pGameLevel && Level().IsDemoPlay()); }
 void CGamePersistent::SetPickableEffectorDOF(bool bSet)
 {
     m_bPickableDOF = bSet;

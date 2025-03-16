@@ -137,7 +137,7 @@ void CActor::net_Export(NET_Packet& P) // export to server
     /////////////////////////////////////////////////
     u16 NumItems = PHGetSyncItemsNumber();
 
-    if (H_Parent() || IsGameTypeSingle() || ((NumItems > 1) && OnClient()))
+    if (H_Parent() || (IsGameTypeSingle()) || ((NumItems > 1) && OnClient()))
         NumItems = 0;
 
     if (!g_Alive())
@@ -550,7 +550,8 @@ bool CActor::net_Spawn(CSE_Abstract* DC)
     // force actor to be local on server client
     CSE_Abstract* e = (CSE_Abstract*)(DC);
     CSE_ALifeCreatureActor* E = smart_cast<CSE_ALifeCreatureActor*>(e);
-    if (!IsGameTypeSingle()) {
+    if (!IsGameTypeSingle())
+    {
         if (OnServer())
         {
             if (!smart_cast<CActorMP*>(this)) {
@@ -762,7 +763,7 @@ bool CActor::net_Spawn(CSE_Abstract* DC)
     m_bWasHitted = false;
     m_dwILastUpdateTime = 0;
 
-    if (IsGameTypeSingle())
+    if (IsGameTypeSingle() || CoopEnabled())
     {
         Level().MapManager().AddMapLocation("actor_location", ID());
         Level().MapManager().AddMapLocation("actor_location_p", ID());

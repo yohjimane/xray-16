@@ -63,7 +63,7 @@ xrServer::EConnect xrServer::Connect(shared_str& session_name, GameDescriptionDa
         return ErrConnect;
     //	game->type				= type_id;
 
-    if (!IsGameTypeSingle() || CoopEnabled())
+    if (!IsGameTypeSingle())
     {
         m_file_transfers = xr_new<file_transfer::server_site>();
         initialize_screenshot_proxies();
@@ -158,10 +158,11 @@ void xrServer::ProcessClientDigest(xrClientData* xrCL, NET_Packet* P)
 {
     R_ASSERT(xrCL);
     IClient* tmp_client = static_cast<IClient*>(xrCL);
-    game_sv_mp* server_game = smart_cast<game_sv_mp*>(game);
+    game_sv_mp* mp_game_server = smart_cast<game_sv_mp*>(game);
+    game_sv_Single* sp_game_server = smart_cast<game_sv_Single*>(game);
     P->r_stringZ(xrCL->m_cdkey_digest);
     shared_str admin_name;
-    if (server_game->IsPlayerBanned(xrCL->m_cdkey_digest.c_str(), admin_name))
+    if (mp_game_server && mp_game_server->IsPlayerBanned(xrCL->m_cdkey_digest.c_str(), admin_name))
     {
         R_ASSERT2(tmp_client != GetServerClient(), "can't disconnect server client");
         Msg("--- Client [%s] tried to connect - rejecting connection (he is banned by %s) ...",
@@ -177,6 +178,10 @@ void xrServer::ProcessClientDigest(xrClientData* xrCL, NET_Packet* P)
         }
         SendConnectResult(tmp_client, 0, ecr_have_been_banned, message_to_user);
         return;
+    }
+    else if (sp_game_server && sp_game_server->IsPlayerBanned(xrCL->m_cdkey_digest.c_str(), admin_name))
+    {
+
     }
     GetPooledState(xrCL);
     PerformSecretKeysSync(xrCL);

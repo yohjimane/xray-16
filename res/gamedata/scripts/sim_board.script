@@ -390,7 +390,7 @@ function sim_board:fill_start_position()
 	self.start_position_filled = true
 	
 	
-	if IsGameTypeSingle() then
+	if IsGameTypeSingle() or (IsGameTypeCoop() and OnServer()) then
 		for level in game_graph():levels() do
 			local section_name = "start_position_" .. alife():level_name(level.id)
 			

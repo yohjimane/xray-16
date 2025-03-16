@@ -22,6 +22,9 @@ void game_sv_Single::Create(shared_str& options)
     if (strstr(*options, "/alife"))
         m_alife_simulator = xr_new<CALifeSimulator>(&server(), &options);
     switch_Phase(GAME_PHASE_INPROGRESS);
+
+    if (IsGameTypeCoop() && OnServer())
+        m_cdkey_ban_list.load();
 }
 
 /**
@@ -480,7 +483,7 @@ void game_sv_Single::OnPlayerConnect(ClientID id_who)
 // player connect #2
 void game_sv_Single::OnPlayerConnectFinished(ClientID id_who)
 {
-    if (IsGameTypeSingle() && !CoopEnabled())
+    if (IsGameTypeSingle())
         return;
 
     xrClientData* xrCData = m_server->ID_to_client(id_who);
@@ -569,4 +572,11 @@ void game_sv_Single::OnEvent(NET_Packet& P, u16 type, u32 time, ClientID sender)
     default:
         inherited::OnEvent(P, type, time, sender);
     };
+}
+
+bool game_sv_Single::IsPlayerBanned(char const* hexstr_digest, shared_str& by_who)
+{
+    if (!hexstr_digest || !xr_strlen(hexstr_digest))
+        return false;
+    return m_cdkey_ban_list.is_player_banned(hexstr_digest, by_who);
 }

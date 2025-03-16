@@ -107,7 +107,7 @@ void xrServer::Process_event_destroy(NET_Packet& P, ClientID sender, u32 time, u
 
         if (ai().alife().objects().object(id_dest, true))
         {
-            if (IsGameTypeSingle())
+            if (IsGameTypeSingle() || (IsGameTypeCoop() && OnServer()))
             {
                 _gameS->alife().release(e_dest, false);
             }

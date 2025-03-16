@@ -268,7 +268,7 @@ bool CLevel::net_start_client6()
             {
                 game->OnConnected();
             }
-            if (!IsGameTypeSingle() || CoopEnabled())
+            if (!IsGameTypeSingle())
             {
                 m_file_transfer = xr_new<file_transfer::client_site>();
             }

@@ -215,7 +215,7 @@ void CActor::TryToTalk()
 void CActor::RunTalkDialog(CInventoryOwner* talk_partner, bool disable_break)
 {
     //предложить поговорить с нами
-    if (talk_partner->OfferTalk(this))
+    if (CurrentGameUI() && talk_partner->OfferTalk(this))
     {
         StartTalk(talk_partner);
 
@@ -242,6 +242,9 @@ void CActor::StartTalk(CInventoryOwner* talk_partner)
 void CActor::NewPdaContact(CInventoryOwner* pInvOwner)
 {
     if (!IsGameTypeSingle())
+        return;
+
+    if (!CurrentGameUI())
         return;
 
     auto entityAlive = smart_cast<CEntityAlive*>(pInvOwner);

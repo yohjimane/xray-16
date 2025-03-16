@@ -1,6 +1,7 @@
 #pragma once
 
 #include "game_sv_base.h"
+#include "cdkey_ban_list.h"
 
 class xrServer;
 class CALifeSimulator;
@@ -12,6 +13,7 @@ private:
 
 protected:
     CALifeSimulator* m_alife_simulator;
+    cdkey_ban_list m_cdkey_ban_list;
 
 public:
     game_sv_Single();
@@ -65,6 +67,7 @@ public:
     // virtual void OnPlayerKillPlayer(game_PlayerState* ps_killer, game_PlayerState* ps_killed, KILL_TYPE KillType, SPECIAL_KILL_TYPE SpecialKillType, CSE_Abstract* pWeaponA);
     virtual void OnEvent(NET_Packet& tNetPacket, u16 type, u32 time, ClientID sender);
 
+    bool IsPlayerBanned(char const* hexstr_digest, shared_str& by_who);
 
     IC xrServer& server() const
     {

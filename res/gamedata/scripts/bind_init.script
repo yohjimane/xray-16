@@ -8,7 +8,7 @@ function mp_actor_init (obj)
 	then
 		return
 	end
-	if not IsDedicated() then	
+	if not IsDedicated() then
 		if obj:id() == level.get_g_actor_id() then
 			obj:bind_object(mp_bind_actor.mp_actor_binder(obj))
 		else
@@ -21,13 +21,13 @@ end
 
 function actor_init(obj)
 	if IsGameTypeSingle() then
-		if CoopEnabled() then
+		bind_stalker.actor_init(obj)
+	else
+		if IsGameTypeCoop() then
 			coop_bind_actor.actor_init(obj)
 		else
-			bind_stalker.actor_init(obj)
+			mp_bind_single_actor.actor_init(obj)
 		end
-	else
-		mp_bind_single_actor.actor_init(obj)
 	end
 end
 

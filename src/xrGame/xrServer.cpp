@@ -336,7 +336,7 @@ void xrServer::SendUpdatesToAll()
 {
     ZoneScoped;
 
-    if (IsGameTypeSingle() && !CoopEnabled())
+    if (IsGameTypeSingle())
         return;
 
     KickCheaters();

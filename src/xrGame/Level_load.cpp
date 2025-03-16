@@ -19,7 +19,7 @@ bool CLevel::Load_GameSpecific_Before()
     g_pGamePersistent->LoadTitle();
     string_path fn_game;
 
-    bool gameTypeValid = (!IsGameTypeSingle() || CoopEnabled());
+    bool gameTypeValid = !IsGameTypeSingle();
     bool spawnValid = g_pGamePersistent->m_game_params.coopEnabled ? FS.exist(fn_game, "$game_spawn$", "all", ".spawn") : FS.exist(fn_game, "$level$", "alife.spawn");
 
     if (gameTypeValid && spawnValid && OnClient()) {

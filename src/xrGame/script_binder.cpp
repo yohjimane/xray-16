@@ -139,7 +139,7 @@ void CScriptBinder::net_Destroy()
 
 void CScriptBinder::set_object(CScriptBinderObject* object)
 {
-    if (OnServer() || !IsGameTypeSingle())
+    if (OnServer() || (!IsGameTypeSingle() && !IsGameTypeCoop()))
     {
         VERIFY2(!m_object, "Cannot bind to the object twice!");
 #ifdef _DEBUG

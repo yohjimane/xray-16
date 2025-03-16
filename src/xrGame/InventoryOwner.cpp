@@ -106,7 +106,7 @@ bool CInventoryOwner::net_Spawn(CSE_Abstract* DC)
         return FALSE;
     CSE_Abstract* E = (CSE_Abstract*)(DC);
 
-    if ((IsGameTypeSingle() && !CoopEnabled()) || (!smart_cast<CSE_ALifeCreatureActor*>(E) && !smart_cast<CSE_ActorMP*>(E)))
+    if ((IsGameTypeSingle()) || (!smart_cast<CSE_ALifeCreatureActor*>(E) && !smart_cast<CSE_ActorMP*>(E)))
     {
         CSE_ALifeTraderAbstract* pTrader = NULL;
         if (E)
@@ -382,7 +382,7 @@ void CInventoryOwner::SetCommunity(CHARACTER_COMMUNITY_INDEX new_community)
     }
 
     CSE_Abstract* e_entity;
-    if (IsGameTypeSingle() && !CoopEnabled())
+    if (IsGameTypeSingle())
         e_entity = ai().alife().objects().object(EA->ID(), false);
     else
         e_entity = smart_cast<CSE_Abstract*>(Level().Objects.net_Find(EA->ID()));
