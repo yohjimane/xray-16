@@ -480,6 +480,9 @@ void game_sv_Single::OnPlayerConnect(ClientID id_who)
 // player connect #2
 void game_sv_Single::OnPlayerConnectFinished(ClientID id_who)
 {
+    if (IsGameTypeSingle() && !CoopEnabled())
+        return;
+
     xrClientData* xrCData = m_server->ID_to_client(id_who);
     SpawnPlayer(id_who, "spectator");
 
