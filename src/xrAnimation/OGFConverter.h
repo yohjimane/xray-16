@@ -13,17 +13,19 @@
 #include "xrCommon/xr_vector.h"
 #include "xrCommon/xr_map.h"
 #include "xrCommon/xr_smart_pointers.h"
+#include "xrCore/Animation/Bone.hpp"  // For SBoneShape
 
 namespace XRay {
 namespace Animation {
 
-// OGF chunk types
-const u32 OGF_S_BONE_NAMES = 0x12;
-const u32 OGF_S_MOTIONS = 0x13;
-const u32 OGF_S_SMPARAMS = 0x14;
-const u32 OGF_S_IKDATA = 0x15;
-const u32 OGF_S_USERDATA = 0x16;
-const u32 OGF_S_DESC = 0x17;
+// OGF chunk types (from FMesh.hpp)
+const u32 OGF_HEADER = 1;
+const u32 OGF_S_BONE_NAMES = 13;
+const u32 OGF_S_MOTIONS = 14;
+const u32 OGF_S_SMPARAMS = 15;
+const u32 OGF_S_IKDATA = 16;
+const u32 OGF_S_USERDATA = 17;
+const u32 OGF_S_DESC = 18;
 
 // XRay format specifications
 struct XRayFormatSpec {
@@ -89,7 +91,16 @@ public:
     bool FindChunk(u32 chunk_type);
     xr_unique_ptr<IReader> ReadChunk(u32 chunk_type);
 
-    xr_vector<shared_str> ReadBoneNames();
+    struct BoneData {
+        shared_str name;
+        shared_str parent_name;
+        Fobb obb;
+        Fmatrix bind_transform;
+        float mass;
+        Fvector center_of_mass;
+    };
+
+    xr_vector<BoneData> ReadBoneData();
     xr_vector<XRayFormatSpec::BoneMotion> ReadMotionData();
     XRayFormatSpec::MotionParams ReadMotionParams();
     xr_vector<XRayMetadata::IKConstraints> ReadIKData();
@@ -159,6 +170,7 @@ public:
         XRayFormatSpec::MotionParams motion_params;
         xr_vector<XRayMetadata::IKConstraints> ik_data;
         xr_map<shared_str, shared_str> user_data;
+        u16 root_bone_index;
     };
 
     ParseResult Parse(OGFReader& reader);

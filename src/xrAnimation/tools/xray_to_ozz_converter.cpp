@@ -1,10 +1,14 @@
 #include "../stdafx.h"
 #include "../OGFConverter.h"
-#include "../AnimationConverter.h"
+#include "../OMFConverter.h"
 #include "xrCore/xrCore.h"
 #include "xrCore/FS.h"
 #include "ozz/base/io/archive.h"
 #include "ozz/base/io/stream.h"
+#include "ozz/animation/offline/raw_skeleton.h"
+#include "ozz/animation/offline/raw_animation.h"
+#include "ozz/animation/offline/skeleton_builder.h"
+#include "ozz/animation/offline/animation_builder.h"
 
 using namespace XRay::Animation;
 
@@ -31,16 +35,20 @@ bool ConvertSkeleton(const std::string& input_path, const std::string& output_pa
     // Create OGF converter
     OGFConverter converter;
     
-    // Load OGF file
-    if (!converter.LoadFromFile(input_path)) {
-        Msg("! Failed to load OGF file: %s", input_path.c_str());
+    // Convert OGF file
+    shared_str input_str(input_path.c_str());
+    auto result = converter.Convert(input_str);
+    
+    if (!result.success) {
+        Msg("! Failed to convert skeleton: %s", result.error_message.c_str());
         return false;
     }
     
-    // Convert to ozz skeleton
-    auto result = converter.Convert();
-    if (!result.skeleton) {
-        Msg("! Failed to convert skeleton");
+    // Build runtime skeleton from raw skeleton
+    ozz::animation::offline::SkeletonBuilder builder;
+    auto skeleton = builder(result.skeleton);
+    if (!skeleton) {
+        Msg("! Failed to build runtime skeleton");
         return false;
     }
     
@@ -52,10 +60,27 @@ bool ConvertSkeleton(const std::string& input_path, const std::string& output_pa
     }
     
     ozz::io::OArchive archive(&file);
-    archive << *result.skeleton;
+    archive << *skeleton;
     
     Msg("* Skeleton converted successfully");
-    Msg("  - Joints: %d", result.skeleton->num_joints());
+    Msg("  - Joints: %d", skeleton->num_joints());
+    Msg("  - Root bone: %d", result.skeleton.roots.size() > 0 ? 0 : -1);
+    
+    // Save metadata alongside skeleton (optional)
+    std::string metadata_path = output_path + ".meta";
+    IWriter* writer = FS.w_open(metadata_path.c_str());
+    if (writer) {
+        // Save X-Ray specific metadata
+        writer->w_u32(result.skeleton.roots.size());
+        for (const auto& motion_param : result.metadata.motion_params) {
+            writer->w_stringZ(motion_param.first.c_str());
+            writer->w_float(motion_param.second.speed);
+            writer->w_float(motion_param.second.power);
+            writer->w_float(motion_param.second.accrue);
+            writer->w_float(motion_param.second.falloff);
+        }
+        FS.w_close(writer);
+    }
     
     return true;
 }
@@ -66,8 +91,10 @@ bool ConvertAnimation(const std::string& input_path, const std::string& output_p
     Msg("Converting animation: %s -> %s", input_path.c_str(), output_path.c_str());
     
     // Load skeleton first
+    ozz::animation::offline::RawSkeleton raw_skeleton;
     ozz::animation::Skeleton skeleton;
     {
+        // First try to load as ozz skeleton
         ozz::io::File skel_file(skeleton_path.c_str(), "rb");
         if (!skel_file.opened()) {
             Msg("! Failed to open skeleton file: %s", skeleton_path.c_str());
@@ -75,128 +102,103 @@ bool ConvertAnimation(const std::string& input_path, const std::string& output_p
         }
         
         ozz::io::IArchive skel_archive(&skel_file);
+        if (!skel_archive.TestTag<ozz::animation::Skeleton>()) {
+            Msg("! Invalid skeleton file format");
+            return false;
+        }
         skel_archive >> skeleton;
-    }
-    
-    // Create animation converter
-    AnimationConverter converter;
-    
-    // Read OMF file
-    IReader* reader = FS.r_open(input_path.c_str());
-    if (!reader) {
-        Msg("! Failed to open OMF file: %s", input_path.c_str());
-        return false;
-    }
-    
-    // Parse OMF header
-    u32 version = reader->r_u32();
-    if (version != 0x10) {
-        Msg("! Unsupported OMF version: 0x%x", version);
-        FS.r_close(reader);
-        return false;
-    }
-    
-    u16 bone_count = reader->r_u16();
-    u32 frame_count = reader->r_u32();
-    float fps = static_cast<float>(reader->r_u32());
-    
-    Msg("* OMF info: bones=%d, frames=%d, fps=%.1f", bone_count, frame_count, fps);
-    
-    // Read motion data
-    xr_vector<xr_vector<Fvector>> positions(bone_count);
-    xr_vector<xr_vector<Fquaternion>> rotations(bone_count);
-    
-    for (u16 bone = 0; bone < bone_count; ++bone) {
-        positions[bone].resize(frame_count);
-        rotations[bone].resize(frame_count);
         
-        for (u32 frame = 0; frame < frame_count; ++frame) {
-            // Read position
-            positions[bone][frame].x = reader->r_float();
-            positions[bone][frame].y = reader->r_float();
-            positions[bone][frame].z = reader->r_float();
-            
-            // Read rotation (quaternion)
-            rotations[bone][frame].x = reader->r_float();
-            rotations[bone][frame].y = reader->r_float();
-            rotations[bone][frame].z = reader->r_float();
-            rotations[bone][frame].w = reader->r_float();
+        // Also need raw skeleton for converter
+        // For now, create a simple raw skeleton from runtime skeleton
+        // (In production, you'd load this from the OGF converter result)
+        raw_skeleton.roots.resize(1);
+        raw_skeleton.roots[0].name = "root";
+        for (int i = 0; i < skeleton.num_joints(); ++i) {
+            if (i > 0) {
+                ozz::animation::offline::RawSkeleton::Joint joint;
+                joint.name = skeleton.joint_names()[i];
+                raw_skeleton.roots[0].children.push_back(joint);
+            }
         }
     }
     
-    FS.r_close(reader);
+    // Create OMF converter
+    OMFConverter converter;
     
-    // Convert to ozz animation
-    ozz::animation::offline::RawAnimation raw_animation;
-    raw_animation.duration = frame_count / fps;
-    raw_animation.tracks.resize(bone_count);
+    // Convert with skeleton
+    shared_str input_str(input_path.c_str());
+    auto result = converter.ConvertWithSkeleton(input_str, raw_skeleton);
     
-    for (u16 bone = 0; bone < bone_count; ++bone) {
-        auto& track = raw_animation.tracks[bone];
-        
-        for (u32 frame = 0; frame < frame_count; ++frame) {
-            float time = frame / fps;
-            
-            // Add translation key
-            ozz::animation::offline::RawAnimation::TranslationKey trans_key;
-            trans_key.time = time;
-            trans_key.value = ozz::math::Float3(
-                positions[bone][frame].x,
-                positions[bone][frame].y,
-                positions[bone][frame].z
-            );
-            track.translations.push_back(trans_key);
-            
-            // Add rotation key
-            ozz::animation::offline::RawAnimation::RotationKey rot_key;
-            rot_key.time = time;
-            rot_key.value = ozz::math::Quaternion(
-                rotations[bone][frame].x,
-                rotations[bone][frame].y,
-                rotations[bone][frame].z,
-                rotations[bone][frame].w
-            );
-            track.rotations.push_back(rot_key);
-        }
-    }
-    
-    // Optimize if requested
-    if (optimize) {
-        Msg("* Optimizing animation...");
-        ozz::animation::offline::AnimationOptimizer optimizer;
-        ozz::animation::offline::RawAnimation optimized;
-        
-        if (optimizer(raw_animation, skeleton, &optimized)) {
-            raw_animation = std::move(optimized);
-            Msg("  - Optimization complete");
-        } else {
-            Msg("! Optimization failed");
-        }
-    }
-    
-    // Build runtime animation
-    ozz::animation::offline::AnimationBuilder builder;
-    auto animation = builder(raw_animation);
-    if (!animation) {
-        Msg("! Failed to build animation");
+    if (!result.success) {
+        Msg("! Failed to convert animation: %s", result.error_message.c_str());
         return false;
     }
     
-    // Save ozz animation
-    ozz::io::File file(output_path.c_str(), "wb");
-    if (!file.opened()) {
-        Msg("! Failed to create output file: %s", output_path.c_str());
+    if (result.animations.empty()) {
+        Msg("! No animations found in OMF file");
         return false;
     }
     
-    ozz::io::OArchive archive(&file);
-    archive << *animation;
+    // Process each animation
+    int anim_idx = 0;
+    for (auto& raw_animation : result.animations) {
+        // Validate animation
+        if (!raw_animation.Validate()) {
+            Msg("! Animation %d is invalid", anim_idx);
+            continue;
+        }
+        
+        // Optimize if requested
+        if (optimize) {
+            Msg("* Optimizing animation %d...", anim_idx);
+            ozz::animation::offline::AnimationOptimizer optimizer;
+            ozz::animation::offline::RawAnimation optimized;
+            
+            if (optimizer(raw_animation, skeleton, &optimized)) {
+                raw_animation = std::move(optimized);
+                Msg("  - Optimization complete");
+            } else {
+                Msg("! Optimization failed for animation %d", anim_idx);
+            }
+        }
+        
+        // Build runtime animation
+        ozz::animation::offline::AnimationBuilder builder;
+        auto animation = builder(raw_animation);
+        if (!animation) {
+            Msg("! Failed to build animation %d", anim_idx);
+            continue;
+        }
+        
+        // Create output filename for multiple animations
+        std::string anim_output_path = output_path;
+        if (result.animations.size() > 1) {
+            size_t dot_pos = output_path.find_last_of('.');
+            if (dot_pos != std::string::npos) {
+                anim_output_path = output_path.substr(0, dot_pos) + "_" + 
+                                  std::to_string(anim_idx) + output_path.substr(dot_pos);
+            }
+        }
+        
+        // Save ozz animation
+        ozz::io::File file(anim_output_path.c_str(), "wb");
+        if (!file.opened()) {
+            Msg("! Failed to create output file: %s", anim_output_path.c_str());
+            continue;
+        }
+        
+        ozz::io::OArchive archive(&file);
+        archive << *animation;
+        
+        Msg("* Animation %d converted successfully", anim_idx);
+        Msg("  - Name: %s", raw_animation.name.c_str());
+        Msg("  - Duration: %.2fs", animation->duration());
+        Msg("  - Tracks: %d", animation->num_tracks());
+        
+        anim_idx++;
+    }
     
-    Msg("* Animation converted successfully");
-    Msg("  - Duration: %.2fs", animation->duration());
-    Msg("  - Tracks: %d", animation->num_tracks());
-    
-    return true;
+    return anim_idx > 0;
 }
 
 bool ConvertBatch(const std::string& input_dir, const std::string& output_dir, 
@@ -231,12 +233,41 @@ bool ConvertBatch(const std::string& input_dir, const std::string& output_dir,
         
         std::string output_path = output_dir + "/" + output_name;
         
+        Msg("\n[%d/%d] %s", converted + 1, files.size(), file.name.c_str());
+        
         if (ConvertAnimation(input_path, output_path, skeleton_path, optimize)) {
             converted++;
         }
     }
     
-    Msg("\n* Batch conversion complete: %d/%d files converted", converted, files.size());
+    // Also look for OGF skeleton files if requested
+    FS_FileSet ogf_files;
+    FS.file_list(ogf_files, input_dir.c_str(), FS_ListFiles, "*.ogf");
+    
+    if (!ogf_files.empty()) {
+        Msg("\n* Found %d OGF skeleton files", ogf_files.size());
+        
+        for (const auto& file : ogf_files) {
+            std::string input_path = input_dir + "/" + file.name.c_str();
+            std::string output_name = file.name.c_str();
+            
+            // Change extension to .ozz
+            size_t dot_pos = output_name.find_last_of('.');
+            if (dot_pos != std::string::npos) {
+                output_name = output_name.substr(0, dot_pos) + "_skeleton.ozz";
+            }
+            
+            std::string output_path = output_dir + "/" + output_name;
+            
+            Msg("\n[Skeleton] %s", file.name.c_str());
+            
+            if (ConvertSkeleton(input_path, output_path)) {
+                Msg("  - Skeleton converted: %s", output_name.c_str());
+            }
+        }
+    }
+    
+    Msg("\n* Batch conversion complete: %d/%d animation files converted", converted, files.size());
     
     return converted > 0;
 }

@@ -91,24 +91,83 @@ xr_unique_ptr<IReader> OGFReader::ReadChunk(u32 chunk_type) {
     return xr_unique_ptr<IReader>(result);
 }
 
-xr_vector<shared_str> OGFReader::ReadBoneNames() {
-    xr_vector<shared_str> bone_names;
+xr_vector<OGFReader::BoneData> OGFReader::ReadBoneData() {
+    xr_vector<BoneData> bones;
 
     auto chunk_reader = ReadChunk(OGF_S_BONE_NAMES);
     if (!chunk_reader) {
-        return bone_names;
+        return bones;
     }
 
     u32 bone_count = chunk_reader->r_u32();
-    bone_names.reserve(bone_count);
+    bones.reserve(bone_count);
 
+    // Read bone names and parent names from OGF_S_BONE_NAMES chunk
     for (u32 i = 0; i < bone_count; ++i) {
-        shared_str bone_name;
-        chunk_reader->r_stringZ(bone_name);
-        bone_names.push_back(bone_name);
+        BoneData bone;
+        
+        // Read bone name
+        string256 buf;
+        chunk_reader->r_stringZ(buf, sizeof(buf));
+        xr_strlwr(buf);
+        bone.name = shared_str(buf);
+        
+        // Read parent name
+        chunk_reader->r_stringZ(buf, sizeof(buf));
+        xr_strlwr(buf);
+        bone.parent_name = shared_str(buf);
+        
+        // Read OBB (oriented bounding box)
+        chunk_reader->r(&bone.obb, sizeof(Fobb));
+        
+        // Initialize other fields (will be filled from IK data if available)
+        bone.bind_transform.identity();
+        bone.mass = 1.0f;
+        bone.center_of_mass.set(0, 0, 0);
+        
+        bones.push_back(bone);
     }
 
-    return bone_names;
+    // Read additional bone data from OGF_S_IKDATA chunk if available
+    auto ik_reader = ReadChunk(OGF_S_IKDATA);
+    if (ik_reader) {
+        for (u32 i = 0; i < bones.size() && !ik_reader->eof(); ++i) {
+            BoneData& bone = bones[i];
+            
+            u16 version = (u16)ik_reader->r_u32();
+            
+            // Skip game material name
+            shared_str game_mtl;
+            ik_reader->r_stringZ(game_mtl);
+            
+            // Skip shape data
+            ik_reader->advance(sizeof(SBoneShape));
+            
+            // Skip IK data based on version
+            if (version >= 0x0001) {
+                // Skip joint data
+                ik_reader->advance(sizeof(u32)); // type
+                for (int j = 0; j < 3; ++j) {
+                    ik_reader->advance(sizeof(float) * 2); // limits
+                    ik_reader->advance(sizeof(float) * 2); // spring/damping
+                }
+                ik_reader->advance(sizeof(float) * 4); // break force/torque, friction, spring
+            }
+            
+            // Read bind transform
+            Fvector vXYZ, vT;
+            ik_reader->r_fvector3(vXYZ);
+            ik_reader->r_fvector3(vT);
+            bone.bind_transform.setXYZi(vXYZ);
+            bone.bind_transform.translate_over(vT);
+            
+            // Read mass and center of mass
+            bone.mass = ik_reader->r_float();
+            ik_reader->r_fvector3(bone.center_of_mass);
+        }
+    }
+
+    return bones;
 }
 
 xr_vector<XRayFormatSpec::BoneMotion> OGFReader::ReadMotionData() {
@@ -254,8 +313,55 @@ xr_map<shared_str, shared_str> OGFReader::ReadUserData() {
 OGFSkeletonParser::ParseResult OGFSkeletonParser::Parse(OGFReader& reader) {
     ParseResult result;
 
-    // Parse bone names
-    result.bone_names = reader.ReadBoneNames();
+    // Parse bone data (includes names, parent relationships, and bind poses)
+    auto bone_data = reader.ReadBoneData();
+    
+    if (bone_data.empty()) {
+        return result;
+    }
+
+    // Extract bone names and build parent indices
+    result.bone_names.reserve(bone_data.size());
+    result.parent_indices.reserve(bone_data.size());
+    result.bind_poses.reserve(bone_data.size());
+    result.root_bone_index = u16(-1);
+
+    // First pass: collect bone names
+    for (const auto& bone : bone_data) {
+        result.bone_names.push_back(bone.name);
+        result.bind_poses.push_back(bone.bind_transform);
+    }
+
+    // Second pass: build parent indices by looking up parent names
+    for (size_t i = 0; i < bone_data.size(); ++i) {
+        const auto& bone = bone_data[i];
+        
+        if (!bone.parent_name || !bone.parent_name[0]) {
+            // No parent - this is a root bone
+            result.parent_indices.push_back(-1);
+            if (result.root_bone_index == u16(-1)) {
+                result.root_bone_index = static_cast<u16>(i);
+            } else {
+                Msg("! Warning: Multiple root bones found in skeleton");
+            }
+        } else {
+            // Find parent bone index by name
+            s16 parent_idx = -1;
+            for (size_t j = 0; j < result.bone_names.size(); ++j) {
+                if (result.bone_names[j] == bone.parent_name) {
+                    parent_idx = static_cast<s16>(j);
+                    break;
+                }
+            }
+            
+            if (parent_idx == -1) {
+                Msg("! Warning: Bone '%s' references unknown parent '%s'", 
+                    bone.name.c_str(), bone.parent_name.c_str());
+            }
+            
+            result.parent_indices.push_back(parent_idx);
+        }
+    }
 
     // Parse motion data
     result.motions = reader.ReadMotionData();
@@ -268,15 +374,6 @@ OGFSkeletonParser::ParseResult OGFSkeletonParser::Parse(OGFReader& reader) {
 
     // Parse user data
     result.user_data = reader.ReadUserData();
-
-    // Build parent indices (simplified - would need proper hierarchy parsing)
-    result.parent_indices.resize(result.bone_names.size());
-    result.bind_poses.resize(result.bone_names.size());
-
-    for (size_t i = 0; i < result.bone_names.size(); ++i) {
-        result.parent_indices[i] = (i == 0) ? -1 : static_cast<s16>(i - 1);
-        result.bind_poses[i].identity();
-    }
 
     return result;
 }
