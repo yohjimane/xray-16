@@ -69,3 +69,9 @@ install(TARGETS xrAnimation
     LIBRARY DESTINATION lib
     RUNTIME DESTINATION bin
 )
+
+# Add tests
+add_subdirectory(tests)
+
+# Add tools
+add_subdirectory(tools)
