@@ -2,16 +2,20 @@
 
 ## X-Ray to ozz-animation Integration Project
 
-### Current Status (Phase 1, Week 1)
+### Current Status (Phase 1, Week 2 - In Progress)
 - ✅ xrAnimation module created and building successfully
 - ✅ Dependencies resolved (ozz-animation, imgui, SDL2)
 - ✅ Basic project structure established
 - ✅ IKinematicsAnimated interface analyzed and documented
-- ✅ Usage patterns traced in game code
+- ✅ Usage patterns traced in game code (ActorAnimation.cpp patterns)
 - ✅ Critical paths identified
 - ✅ X-Ray to ozz method mapping completed
 - ✅ Basic ozz test harness created
-- 🔄 Next: Week 2 - CKinematicsAnimated implementation study
+- ✅ CKinematicsAnimated implementation analyzed
+- ✅ Motion/Blend system (CMotion, CBlend) documented
+- ✅ Integration points documented
+- 🔄 OzzAnimationSystem core implementation started
+- 🔄 Next: Complete OzzAnimationSystem and begin compatibility layer
 
 ### Project Overview
 Integrating ozz-animation (modern, SIMD-optimized animation library) into OpenXRay to replace the legacy X-Ray animation system.
@@ -79,6 +83,35 @@ Integrating ozz-animation (modern, SIMD-optimized animation library) into OpenXR
 - Fquaternion/Fvector use .set(), not constructors
 - Test continuously, maintain working build
 
+### Key Implementation Insights (Week 2)
+
+#### CKinematicsAnimated Architecture
+- **Blend Pool**: Fixed-size pool `svector<CBlend, MAX_BLENDED_POOL>`
+- **Motion Storage**: `MotionsSlotVec` with shared_motions and per-bone data
+- **Update Pipeline**: UpdateTracks → LL_UpdateTracks → Per-blend update → Bone calculation
+- **Partition System**: Allows independent animation of body parts (torso/legs)
+- **Channel System**: 4 channels with global weight factors
+
+#### Animation Usage Patterns (from ActorAnimation.cpp)
+```cpp
+// Common pattern for state-based animation
+IKinematicsAnimated* K = smart_cast<IKinematicsAnimated*>(Visual());
+if (mstate_rl & mcFwd)
+    M_legs = AS->legs_fwd;
+else if (mstate_rl & mcBack)
+    M_legs = AS->legs_back;
+
+// Torso override for weapons
+STorsoWpn* TW = &ST->m_torso[weapon_slot];
+M_torso = W->IsZoomed() ? TW->zoom : TW->moving[moving_idx];
+```
+
+#### Integration Requirements
+1. **Smart pointer casting**: Game code uses `smart_cast<IKinematicsAnimated*>(Visual())`
+2. **Motion IDs**: Stored in game state objects (SActorState, STorsoWpn)
+3. **Callbacks**: Critical for state transitions (legs_play_callback)
+4. **Bone callbacks**: Per-bone procedural animation (HeadCallback, SpinCallback)
+
 ### ozz-animation SIMD Access Patterns
 
 ozz-animation uses SIMD types (SSE/NEON) for performance. You cannot access members directly:
@@ -125,3 +158,42 @@ float tx3 = ozz::math::GetW(transforms.translation.x);
 - `SoaTransform` - 4 transforms in Structure-of-Arrays layout
 - `SoaFloat3` - 4 Float3 vectors in SoA layout
 - `SoaQuaternion` - 4 quaternions in SoA layout
+
+### OzzAnimationSystem Implementation Progress
+
+#### Core Features Implemented
+- Basic skeleton/animation loading using X-Ray FS
+- Animation handle system (replaces CBlend)
+- Multi-animation blending with ozz jobs
+- Transform conversion (ozz ↔ X-Ray matrices)
+- Callback support for X-Ray compatibility
+
+#### Extended Features Added (OzzAnimationSystem_Extensions.cpp)
+- **Channel System**: SetChannelFactor() for 4-channel weights
+- **Partition Support**: PlayAnimationOnPartition() with bone masks
+- **Additional Transforms**: Per-bone procedural overlays
+- **Root Motion**: Extraction for movement
+- **X-Ray Compatibility**: MotionID mapping, CBlend callbacks
+
+#### Key Implementation Patterns
+```cpp
+// Use X-Ray file system
+IReader* reader = FS.r_open(path.c_str());
+// ... read data
+FS.r_close(reader);
+
+// Animation handle replaces CBlend
+struct AnimationHandle {
+    size_t animation_index;
+    float current_time;
+    float weight;
+    u16 partition_id;
+    u8 channel;
+    PlayCallback callback;
+    void* callback_param;
+};
+
+// Partition masks for body part animation
+SetPartitionMask(TORSO_PARTITION, torso_bones);
+PlayAnimationOnPartition("reload", TORSO_PARTITION, 1.0f, false, channel);
+```

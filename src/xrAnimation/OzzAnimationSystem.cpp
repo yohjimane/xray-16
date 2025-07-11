@@ -101,6 +101,9 @@ bool OzzAnimationSystem::LoadAnimation(const std::string& animation_path, const 
         size_t animation_index = animations_.size();
         animations_.push_back(std::move(animation));
         animation_name_to_index_[name] = animation_index;
+        
+        // Also store in motion map for X-Ray compatibility
+        motion_map_[shared_str(name.c_str())] = static_cast<u16>(animation_index);
 
         Msg("* OzzAnimationSystem: Loaded animation '%s' with duration %.2fs from %s",
             name.c_str(), animations_[animation_index]->duration(), animation_path.c_str());
@@ -136,6 +139,7 @@ OzzAnimationSystem::AnimationHandle* OzzAnimationSystem::PlayAnimation(const std
     handle.weight = weight;
     handle.is_playing = true;
     handle.is_looping = loop;
+    handle.duration = animations_[it->second]->duration();
 
     // Apply metadata if available
     auto metadata_it = metadata_.motion_params.find(name);

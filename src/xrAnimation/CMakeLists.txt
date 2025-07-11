@@ -2,8 +2,7 @@ cmake_minimum_required(VERSION 3.8)
 
 project(xrAnimation)
 
-# Set up ozz-animation dependency
-find_package(ozz REQUIRED)
+# ozz-animation is included as subdirectory, no need to find_package
 
 # Include directories
 include_directories(
@@ -13,7 +12,9 @@ include_directories(
     ${CMAKE_CURRENT_SOURCE_DIR}/../xrCore
     ${CMAKE_CURRENT_SOURCE_DIR}/../xrEngine
     ${CMAKE_CURRENT_SOURCE_DIR}/../Common
-    ${CMAKE_CURRENT_SOURCE_DIR}/../../ozz-animation/include
+    ${CMAKE_CURRENT_SOURCE_DIR}/../../Externals/ozz-animation/include
+    ${CMAKE_CURRENT_SOURCE_DIR}/../../Externals/imgui
+    ${CMAKE_CURRENT_SOURCE_DIR}/../../Externals/imgui-proj
 )
 
 # Source files
@@ -24,6 +25,7 @@ set(SOURCES
     OGFConverter.h
     OzzAnimationSystem.cpp
     OzzAnimationSystem.h
+    OzzAnimationSystem_Extensions.cpp
     OzzKinematicsAnimated.cpp
     OzzKinematicsAnimated.h
     stdafx.cpp
@@ -37,9 +39,9 @@ add_library(xrAnimation STATIC ${SOURCES})
 target_link_libraries(xrAnimation
     PRIVATE
     xrCore
-    ozz::animation_offline
-    ozz::animation_runtime
-    ozz::base
+    ozz_animation_offline
+    ozz_animation
+    ozz_base
 )
 
 # Set target properties

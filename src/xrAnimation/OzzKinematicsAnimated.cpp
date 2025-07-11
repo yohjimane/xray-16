@@ -2,6 +2,7 @@
 #include "OzzKinematicsAnimated.h"
 #include "AnimationConverter.h"
 #include "xrCore/FS.h"
+#include "xrEngine/Device.h"
 
 namespace XRay {
 namespace Animation {
