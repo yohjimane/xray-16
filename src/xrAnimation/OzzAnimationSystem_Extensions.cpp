@@ -27,7 +27,7 @@ float OzzAnimationSystem::GetChannelFactor(u8 channel) const {
 }
 
 OzzAnimationSystem::AnimationHandle* OzzAnimationSystem::PlayAnimationOnPartition(
-    const std::string& name, 
+    const shared_str& name, 
     u16 partition_id, 
     float weight, 
     bool loop,

@@ -23,6 +23,8 @@ set(SOURCES
     AnimationConverter.h
     OGFConverter.cpp
     OGFConverter.h
+    OMFConverter.cpp
+    OMFConverter.h
     OzzAnimationSystem.cpp
     OzzAnimationSystem.h
     OzzAnimationSystem_Extensions.cpp

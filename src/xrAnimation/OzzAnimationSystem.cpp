@@ -9,12 +9,12 @@ namespace XRay {
 namespace Animation {
 
 OzzAnimationSystem::OzzAnimationSystem() {
-    sampling_context_ = std::make_unique<ozz::animation::SamplingJob::Context>();
+    sampling_context_ = xr_make_unique<ozz::animation::SamplingJob::Context>();
 }
 
 OzzAnimationSystem::~OzzAnimationSystem() = default;
 
-bool OzzAnimationSystem::LoadSkeleton(const std::string& skeleton_path) {
+bool OzzAnimationSystem::LoadSkeleton(const shared_str& skeleton_path) {
     if (!FS.exist(skeleton_path.c_str())) {
         Msg("! OzzAnimationSystem: Skeleton file not found: %s", skeleton_path.c_str());
         return false;
@@ -34,7 +34,7 @@ bool OzzAnimationSystem::LoadSkeleton(const std::string& skeleton_path) {
             return false;
         }
 
-        skeleton_ = std::make_unique<ozz::animation::Skeleton>();
+        skeleton_ = xr_make_unique<ozz::animation::Skeleton>();
         archive >> *skeleton_;
 
         if (!skeleton_->num_joints()) {
@@ -57,13 +57,13 @@ bool OzzAnimationSystem::LoadSkeleton(const std::string& skeleton_path) {
 
         return true;
 
-    } catch (const std::exception& e) {
-        Msg("! OzzAnimationSystem: Exception loading skeleton: %s", e.what());
+    } catch (...) {
+        Msg("! OzzAnimationSystem: Exception loading skeleton");
         return false;
     }
 }
 
-bool OzzAnimationSystem::LoadAnimation(const std::string& animation_path, const std::string& name) {
+bool OzzAnimationSystem::LoadAnimation(const shared_str& animation_path, const shared_str& name) {
     if (!FS.exist(animation_path.c_str())) {
         Msg("! OzzAnimationSystem: Animation file not found: %s", animation_path.c_str());
         return false;
@@ -88,7 +88,7 @@ bool OzzAnimationSystem::LoadAnimation(const std::string& animation_path, const 
             return false;
         }
 
-        auto animation = std::make_unique<ozz::animation::Animation>();
+        auto animation = xr_make_unique<ozz::animation::Animation>();
         archive >> *animation;
 
         if (animation->num_tracks() != skeleton_->num_joints()) {
@@ -101,7 +101,7 @@ bool OzzAnimationSystem::LoadAnimation(const std::string& animation_path, const 
         size_t animation_index = animations_.size();
         animations_.push_back(std::move(animation));
         animation_name_to_index_[name] = animation_index;
-        
+
         // Also store in motion map for X-Ray compatibility
         motion_map_[shared_str(name.c_str())] = static_cast<u16>(animation_index);
 
@@ -110,17 +110,17 @@ bool OzzAnimationSystem::LoadAnimation(const std::string& animation_path, const 
 
         return true;
 
-    } catch (const std::exception& e) {
-        Msg("! OzzAnimationSystem: Exception loading animation: %s", e.what());
+    } catch (...) {
+        Msg("! OzzAnimationSystem: Exception loading animation");
         return false;
     }
 }
 
-bool OzzAnimationSystem::LoadMetadata(const std::string& metadata_path) {
+bool OzzAnimationSystem::LoadMetadata(const shared_str& metadata_path) {
     return metadata_.Load(metadata_path);
 }
 
-OzzAnimationSystem::AnimationHandle* OzzAnimationSystem::PlayAnimation(const std::string& name, float weight, bool loop) {
+OzzAnimationSystem::AnimationHandle* OzzAnimationSystem::PlayAnimation(const shared_str& name, float weight, bool loop) {
     auto it = animation_name_to_index_.find(name);
     if (it == animation_name_to_index_.end()) {
         Msg("! OzzAnimationSystem: Animation '%s' not found", name.c_str());
@@ -328,7 +328,7 @@ void OzzAnimationSystem::InitializeBoneData() {
     parent_indices_.reserve(skeleton_->num_joints());
 
     for (int i = 0; i < skeleton_->num_joints(); ++i) {
-        bone_names_.push_back(skeleton_->joint_names()[i]);
+        bone_names_.push_back(shared_str(skeleton_->joint_names()[i]));
         parent_indices_.push_back(skeleton_->joint_parents()[i]);
     }
 }
@@ -337,8 +337,8 @@ size_t OzzAnimationSystem::GetBoneCount() const {
     return skeleton_ ? skeleton_->num_joints() : 0;
 }
 
-const std::string& OzzAnimationSystem::GetBoneName(size_t bone_index) const {
-    static const std::string empty_name;
+const shared_str& OzzAnimationSystem::GetBoneName(size_t bone_index) const {
+    static const shared_str empty_name;
 
     if (!IsValidBoneIndex(bone_index)) {
         return empty_name;
@@ -379,9 +379,9 @@ bool OzzAnimationSystem::IsValidBoneIndex(size_t bone_index) const {
     return skeleton_ && bone_index < static_cast<size_t>(skeleton_->num_joints());
 }
 
-size_t OzzAnimationSystem::FindBoneIndex(const std::string& bone_name) const {
+size_t OzzAnimationSystem::FindBoneIndex(const shared_str& bone_name) const {
     for (size_t i = 0; i < bone_names_.size(); ++i) {
-        if (bone_names_[i] == bone_name) {
+        if (bone_names_[i].equal(bone_name)) {
             return i;
         }
     }

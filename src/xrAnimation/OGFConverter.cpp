@@ -6,7 +6,12 @@
 namespace XRay {
 namespace Animation {
 
-bool OGFReader::LoadFromFile(const std::string& file_path) {
+// X-Ray OGF constants
+const u16 xrOGF_SMParamsVersion = 4;
+const u8 MT_SKELETON_ANIM = 3;
+const u8 MT_SKELETON_RIGID = 4;
+
+bool OGFReader::LoadFromFile(const shared_str& file_path) {
     if (!FS.exist(file_path.c_str())) {
         return false;
     }
@@ -79,15 +84,15 @@ xr_unique_ptr<IReader> OGFReader::ReadChunk(u32 chunk_type) {
         return nullptr;
     }
 
-    u32 chunk_size = reader_->r_u32();
+    /*u32 chunk_size = */reader_->r_u32();
     reader_->seek(reader_->tell() - sizeof(u32));
 
     auto result = reader_->open_chunk(chunk_type);
     return xr_unique_ptr<IReader>(result);
 }
 
-xr_vector<std::string> OGFReader::ReadBoneNames() {
-    xr_vector<std::string> bone_names;
+xr_vector<shared_str> OGFReader::ReadBoneNames() {
+    xr_vector<shared_str> bone_names;
 
     auto chunk_reader = ReadChunk(OGF_S_BONE_NAMES);
     if (!chunk_reader) {
@@ -100,7 +105,7 @@ xr_vector<std::string> OGFReader::ReadBoneNames() {
     for (u32 i = 0; i < bone_count; ++i) {
         shared_str bone_name;
         chunk_reader->r_stringZ(bone_name);
-        bone_names.push_back(bone_name.c_str());
+        bone_names.push_back(bone_name);
     }
 
     return bone_names;
@@ -222,8 +227,8 @@ xr_vector<XRayMetadata::IKConstraints> OGFReader::ReadIKData() {
     return ik_data;
 }
 
-xr_map<std::string, std::string> OGFReader::ReadUserData() {
-    xr_map<std::string, std::string> user_data;
+xr_map<shared_str, shared_str> OGFReader::ReadUserData() {
+    xr_map<shared_str, shared_str> user_data;
 
     auto chunk_reader = ReadChunk(OGF_S_USERDATA);
     if (!chunk_reader) {
@@ -238,9 +243,9 @@ xr_map<std::string, std::string> OGFReader::ReadUserData() {
         ini_data[data_size] = 0;
 
         // Parse INI data manually for simplicity
-        std::string ini_string(ini_data.data());
+        shared_str ini_string(ini_data.data());
         // TODO: Add proper INI parsing here
-        user_data["raw_ini"] = ini_string;
+        user_data[shared_str("raw_ini")] = ini_string;
     }
 
     return user_data;
@@ -297,7 +302,7 @@ ozz::animation::offline::RawSkeleton OGFToOzzSkeletonConverter::ConvertSkeleton(
 }
 
 void OGFToOzzSkeletonConverter::BuildBoneHierarchy(
-    const xr_vector<std::string>& bone_names,
+    const xr_vector<shared_str>& bone_names,
     const xr_vector<s16>& parent_indices,
     const xr_vector<Fmatrix>& bind_poses,
     ozz::animation::offline::RawSkeleton& skeleton
@@ -308,7 +313,7 @@ void OGFToOzzSkeletonConverter::BuildBoneHierarchy(
     // Create all joints first
     for (size_t i = 0; i < bone_names.size(); ++i) {
         auto* joint = new ozz::animation::offline::RawSkeleton::Joint();
-        joint->name = bone_names[i];
+        joint->name = bone_names[i].c_str();
         joint->transform = TransformConverter::XRayToOzz(bind_poses[i]);
         joints[i] = joint;
     }
@@ -338,7 +343,7 @@ ozz::math::Transform OGFToOzzSkeletonConverter::ConvertBindPose(const Fmatrix& x
 
 xr_vector<ozz::animation::offline::RawAnimation> OGFToOzzAnimationConverter::ConvertAnimations(
     const xr_vector<XRayFormatSpec::BoneMotion>& xray_motions,
-    const xr_vector<std::string>& bone_names,
+    const xr_vector<shared_str>& bone_names,
     const XRayFormatSpec::MotionParams& motion_params
 ) {
     xr_vector<ozz::animation::offline::RawAnimation> animations;
@@ -418,13 +423,15 @@ ozz::math::Quaternion OGFToOzzAnimationConverter::ConvertHPBToQuaternion(float h
     return TransformConverter::XRayQuatToOzz(xray_quat);
 }
 
-IFormatConverter::ConversionResult OGFConverter::Convert(const std::string& input_path) {
+IFormatConverter::ConversionResult OGFConverter::Convert(const shared_str& input_path) {
     ConversionResult result;
 
     try {
         // Load OGF file
         if (!reader_.LoadFromFile(input_path)) {
-            result.error_message = "Failed to load OGF file: " + input_path;
+            string256 error_buf;
+            xr_sprintf(error_buf, "Failed to load OGF file: %s", input_path.c_str());
+            result.error_message = error_buf;
             return result;
         }
 
@@ -461,8 +468,10 @@ IFormatConverter::ConversionResult OGFConverter::Convert(const std::string& inpu
 
         result.success = true;
 
-    } catch (const std::exception& e) {
-        result.error_message = "Exception during OGF conversion: " + std::string(e.what());
+    } catch (...) {
+        string512 error_buf;
+        xr_sprintf(error_buf, "Exception during OGF conversion");
+        result.error_message = error_buf;
     }
 
     return result;
@@ -485,7 +494,7 @@ XRayMetadata OGFConverter::ExtractMetadata(const OGFSkeletonParser::ParseResult&
 
     // Extract IK constraints
     for (size_t i = 0; i < parse_result.ik_data.size() && i < parse_result.bone_names.size(); ++i) {
-        metadata.ik_constraints[parse_result.bone_names[i]] = parse_result.ik_data[i];
+        metadata.ik_constraints[parse_result.bone_names[i].c_str()] = parse_result.ik_data[i];
     }
 
     return metadata;

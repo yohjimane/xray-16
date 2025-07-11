@@ -16,7 +16,7 @@ OzzKinematicsAnimated::OzzKinematicsAnimated()
 
 OzzKinematicsAnimated::~OzzKinematicsAnimated() = default;
 
-bool OzzKinematicsAnimated::Initialize(const std::string& skeleton_path, const std::string& animations_path) {
+bool OzzKinematicsAnimated::Initialize(const shared_str& skeleton_path, const shared_str& animations_path) {
     if (!animation_system_->LoadSkeleton(skeleton_path)) {
         Msg("! OzzKinematicsAnimated: Failed to load skeleton from %s", skeleton_path.c_str());
         return false;
@@ -27,23 +27,32 @@ bool OzzKinematicsAnimated::Initialize(const std::string& skeleton_path, const s
     FS.file_list(file_set, animations_path.c_str(), FS_ListFiles, "*.ozz");
 
     for (const auto& file : file_set) {
-        std::string full_path = animations_path + "/" + file.name.c_str();
-        std::string name = file.name.c_str();
+        // Build full path using string buffer
+        string_path full_path;
+        xr_sprintf(full_path, "%s/%s", animations_path.c_str(), file.name.c_str());
+
+        // Extract name without extension
+        string256 name_buffer;
+        xr_strcpy(name_buffer, file.name.c_str());
 
         // Remove extension
-        size_t dot_pos = name.find_last_of('.');
-        if (dot_pos != std::string::npos) {
-            name = name.substr(0, dot_pos);
+        char* dot_pos = strrchr(name_buffer, '.');
+        if (dot_pos) {
+            *dot_pos = '\0';  // Null terminate at the dot
         }
 
-        if (!animation_system_->LoadAnimation(full_path, name)) {
-            Msg("! OzzKinematicsAnimated: Failed to load animation %s", full_path.c_str());
+        shared_str animation_name(name_buffer);
+        shared_str animation_path(full_path);
+
+        if (!animation_system_->LoadAnimation(animation_path, animation_name)) {
+            Msg("! OzzKinematicsAnimated: Failed to load animation %s", full_path);
         }
     }
 
     // Load metadata
-    std::string metadata_path = animations_path + "/metadata.ini";
-    animation_system_->LoadMetadata(metadata_path);
+    string_path metadata_path;
+    xr_sprintf(metadata_path, "%s/metadata.ini", animations_path.c_str());
+    animation_system_->LoadMetadata(shared_str(metadata_path));
 
     InitializeBoneInstances();
 
@@ -63,7 +72,7 @@ void OzzKinematicsAnimated::OnCalculateBones() {
 
 #ifdef DEBUG
 std::pair<LPCSTR, LPCSTR> OzzKinematicsAnimated::LL_MotionDefName_dbg(MotionID ID) {
-    static std::string motion_name = GetMotionName(ID);
+    static shared_str motion_name = GetMotionName(ID);
     return std::make_pair(motion_name.c_str(), "ozz_motion");
 }
 
@@ -182,7 +191,7 @@ u16 OzzKinematicsAnimated::LL_PartID(LPCSTR B) {
 CBlend* OzzKinematicsAnimated::LL_PlayCycle(u16 partition, MotionID motion, BOOL bMixing, float blendAccrue,
     float blendFalloff, float Speed, BOOL noloop, PlayCallback Callback, LPVOID CallbackParam, u8 channel) {
 
-    std::string motion_name = GetMotionName(motion);
+    shared_str motion_name = GetMotionName(motion);
     if (motion_name.empty()) {
         Msg("! OzzKinematicsAnimated: Invalid motion ID");
         return nullptr;
@@ -340,7 +349,7 @@ IKinematics* OzzKinematicsAnimated::dcast_PKinematics() {
 }
 
 float OzzKinematicsAnimated::get_animation_length(MotionID motion_ID) {
-    std::string motion_name = GetMotionName(motion_ID);
+    shared_str motion_name = GetMotionName(motion_ID);
     if (motion_name.empty()) {
         return 0.0f;
     }
@@ -428,14 +437,14 @@ void OzzKinematicsAnimated::InitializeBoneInstances() {
     }
 }
 
-MotionID OzzKinematicsAnimated::CreateMotionID(const std::string& name) {
+MotionID OzzKinematicsAnimated::CreateMotionID(const shared_str& name) {
     MotionID id;
     id.slot = 0;
-    id.idx = static_cast<u16>(std::hash<std::string>{}(name) % 65535);
+    id.idx = static_cast<u16>(std::hash<shared_str>{}(name) % 65535);
     return id;
 }
 
-std::string OzzKinematicsAnimated::GetMotionName(MotionID id) {
+shared_str OzzKinematicsAnimated::GetMotionName(MotionID id) {
     // In a real implementation, we'd maintain a mapping
     // For now, return empty string for invalid IDs
     return "";

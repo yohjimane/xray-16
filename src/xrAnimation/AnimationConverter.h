@@ -7,8 +7,9 @@
 #include "ozz/animation/offline/raw_animation.h"
 #include "ozz/animation/runtime/skeleton.h"
 #include "ozz/animation/runtime/animation.h"
+#include "xrCommon/xr_unordered_map.h"
+#include "xrCommon/xr_smart_pointers.h"
 #include <memory>
-#include <unordered_map>
 
 namespace XRay {
 namespace Animation {
@@ -56,12 +57,12 @@ struct XRayMetadata {
         u16 flags = 0;
     };
     
-    std::unordered_map<std::string, MotionParams> motion_params;
-    std::unordered_map<std::string, IKConstraints> ik_constraints;
-    std::unordered_map<std::string, PhysicsShape> physics_shapes;
+    xr_unordered_map<shared_str, MotionParams> motion_params;
+    xr_unordered_map<shared_str, IKConstraints> ik_constraints;
+    xr_unordered_map<shared_str, PhysicsShape> physics_shapes;
     
-    void Save(const std::string& metadata_path) const;
-    bool Load(const std::string& metadata_path);
+    void Save(const shared_str& metadata_path) const;
+    bool Load(const shared_str& metadata_path);
 };
 
 class IFormatConverter {
@@ -70,22 +71,22 @@ public:
     
     struct ConversionResult {
         ozz::animation::offline::RawSkeleton skeleton;
-        std::vector<ozz::animation::offline::RawAnimation> animations;
+        xr_vector<ozz::animation::offline::RawAnimation> animations;
         XRayMetadata metadata;
-        std::string error_message;
+        shared_str error_message;
         bool success = false;
     };
     
-    virtual ConversionResult Convert(const std::string& input_path) = 0;
-    virtual bool CanHandle(const std::string& file_extension) = 0;
+    virtual ConversionResult Convert(const shared_str& input_path) = 0;
+    virtual bool CanHandle(const shared_str& file_extension) = 0;
 };
 
 class ConverterFactory {
-    std::vector<std::unique_ptr<IFormatConverter>> converters_;
+    xr_vector<xr_unique_ptr<IFormatConverter>> converters_;
     
 public:
-    void RegisterConverter(std::unique_ptr<IFormatConverter> converter);
-    std::unique_ptr<IFormatConverter> GetConverter(const std::string& file_path);
+    void RegisterConverter(xr_unique_ptr<IFormatConverter> converter);
+    xr_unique_ptr<IFormatConverter> GetConverter(const shared_str& file_path);
     
     void InitializeDefaultConverters();
 };
@@ -94,8 +95,8 @@ class ConversionValidator {
 public:
     struct ValidationResult {
         bool passed = true;
-        std::vector<std::string> errors;
-        std::vector<std::string> warnings;
+        xr_vector<shared_str> errors;
+        xr_vector<shared_str> warnings;
         
         struct Statistics {
             size_t joint_count = 0;
@@ -107,7 +108,7 @@ public:
     };
     
     ValidationResult ValidateConversion(
-        const std::string& original_path,
+        const shared_str& original_path,
         const IFormatConverter::ConversionResult& result
     );
     
@@ -130,26 +131,26 @@ public:
 class OzzAssetBuilder {
 public:
     struct BuildResult {
-        std::unique_ptr<ozz::animation::Skeleton> skeleton;
-        std::vector<std::unique_ptr<ozz::animation::Animation>> animations;
+        xr_unique_ptr<ozz::animation::Skeleton> skeleton;
+        xr_vector<xr_unique_ptr<ozz::animation::Animation>> animations;
         XRayMetadata preserved_metadata;
         bool success = false;
-        std::string error_message;
+        shared_str error_message;
     };
     
     BuildResult BuildAssets(
         const ozz::animation::offline::RawSkeleton& raw_skeleton,
-        const std::vector<ozz::animation::offline::RawAnimation>& raw_animations,
+        const xr_vector<ozz::animation::offline::RawAnimation>& raw_animations,
         const XRayMetadata& metadata
     );
     
 private:
-    std::unique_ptr<ozz::animation::Skeleton> BuildSkeleton(
+    xr_unique_ptr<ozz::animation::Skeleton> BuildSkeleton(
         const ozz::animation::offline::RawSkeleton& raw_skeleton
     );
     
-    std::vector<std::unique_ptr<ozz::animation::Animation>> BuildAnimations(
-        const std::vector<ozz::animation::offline::RawAnimation>& raw_animations,
+    xr_vector<xr_unique_ptr<ozz::animation::Animation>> BuildAnimations(
+        const xr_vector<ozz::animation::offline::RawAnimation>& raw_animations,
         const ozz::animation::Skeleton& skeleton
     );
     

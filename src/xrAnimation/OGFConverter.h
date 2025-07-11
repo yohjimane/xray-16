@@ -83,17 +83,17 @@ public:
         u32 size;
     };
 
-    bool LoadFromFile(const std::string& file_path);
+    bool LoadFromFile(const shared_str& file_path);
     bool LoadFromMemory(const void* data, size_t size);
 
     bool FindChunk(u32 chunk_type);
     xr_unique_ptr<IReader> ReadChunk(u32 chunk_type);
 
-    xr_vector<std::string> ReadBoneNames();
+    xr_vector<shared_str> ReadBoneNames();
     xr_vector<XRayFormatSpec::BoneMotion> ReadMotionData();
     XRayFormatSpec::MotionParams ReadMotionParams();
     xr_vector<XRayMetadata::IKConstraints> ReadIKData();
-    xr_map<std::string, std::string> ReadUserData();
+    xr_map<shared_str, shared_str> ReadUserData();
 
     const OGFHeader& GetHeader() const { return header_; }
 
@@ -152,13 +152,13 @@ public:
 class OGFSkeletonParser {
 public:
     struct ParseResult {
-        xr_vector<std::string> bone_names;
+        xr_vector<shared_str> bone_names;
         xr_vector<s16> parent_indices;
         xr_vector<Fmatrix> bind_poses;
         xr_vector<XRayFormatSpec::BoneMotion> motions;
         XRayFormatSpec::MotionParams motion_params;
         xr_vector<XRayMetadata::IKConstraints> ik_data;
-        xr_map<std::string, std::string> user_data;
+        xr_map<shared_str, shared_str> user_data;
     };
 
     ParseResult Parse(OGFReader& reader);
@@ -182,7 +182,7 @@ public:
 
 private:
     struct BoneInfo {
-        std::string name;
+        shared_str name;
         s16 parent_index;
         Fmatrix bind_pose;
         XRayMetadata::IKConstraints ik_constraints;
@@ -190,7 +190,7 @@ private:
     };
 
     void BuildBoneHierarchy(
-        const xr_vector<std::string>& bone_names,
+        const xr_vector<shared_str>& bone_names,
         const xr_vector<s16>& parent_indices,
         const xr_vector<Fmatrix>& bind_poses,
         ozz::animation::offline::RawSkeleton& skeleton
@@ -205,7 +205,7 @@ class OGFToOzzAnimationConverter {
 public:
     xr_vector<ozz::animation::offline::RawAnimation> ConvertAnimations(
         const xr_vector<XRayFormatSpec::BoneMotion>& xray_motions,
-        const xr_vector<std::string>& bone_names,
+        const xr_vector<shared_str>& bone_names,
         const XRayFormatSpec::MotionParams& motion_params
     );
 
@@ -250,8 +250,8 @@ private:
 
 class OGFConverter : public IFormatConverter {
 public:
-    ConversionResult Convert(const std::string& input_path) override;
-    bool CanHandle(const std::string& file_extension) override {
+    ConversionResult Convert(const shared_str& input_path) override;
+    bool CanHandle(const shared_str& file_extension) override {
         return file_extension == ".ogf";
     }
 

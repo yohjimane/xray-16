@@ -1,79 +1,87 @@
 #include "stdafx.h"
 #include "AnimationConverter.h"
+#include "OGFConverter.h"
+#include "OMFConverter.h"
 #include "xrCore/xrCore.h"
 #include "xrCore/xr_ini.h"
 #include "ozz/animation/offline/skeleton_builder.h"
 #include "ozz/animation/offline/animation_builder.h"
 #include "ozz/animation/offline/animation_optimizer.h"
-#include <fstream>
 
 namespace XRay {
 namespace Animation {
 
-void XRayMetadata::Save(const std::string& metadata_path) const {
+void XRayMetadata::Save(const shared_str& metadata_path) const {
     CInifile ini(metadata_path.c_str(), false, true, true);
 
     // Save motion parameters
     for (const auto& [name, params] : motion_params) {
-        std::string section = "motion_" + name;
-        ini.w_float(section.c_str(), "speed", params.speed);
-        ini.w_float(section.c_str(), "power", params.power);
-        ini.w_float(section.c_str(), "accrue", params.accrue);
-        ini.w_float(section.c_str(), "falloff", params.falloff);
-        ini.w_u16(section.c_str(), "bone_or_part", params.bone_or_part);
-        ini.w_u8(section.c_str(), "flags", params.flags);
+        string256 section;
+        xr_sprintf(section, "motion_%s", name.c_str());
+        ini.w_float(section, "speed", params.speed);
+        ini.w_float(section, "power", params.power);
+        ini.w_float(section, "accrue", params.accrue);
+        ini.w_float(section, "falloff", params.falloff);
+        ini.w_u16(section, "bone_or_part", params.bone_or_part);
+        ini.w_u8(section, "flags", params.flags);
 
         // Save event markers
-        std::string markers_str;
+        string512 markers_str;
+        xr_strcpy(markers_str, "");
         for (size_t i = 0; i < params.event_markers.size(); ++i) {
-            if (i > 0) markers_str += ",";
-            markers_str += std::to_string(params.event_markers[i]);
+            if (i > 0) xr_strcat(markers_str, ",");
+            string32 num_str;
+            xr_sprintf(num_str, "%.3f", params.event_markers[i]);
+            xr_strcat(markers_str, num_str);
         }
-        if (!markers_str.empty()) {
-            ini.w_string(section.c_str(), "event_markers", markers_str.c_str());
+        if (xr_strlen(markers_str) > 0) {
+            ini.w_string(section, "event_markers", markers_str);
         }
     }
 
     // Save IK constraints
     for (const auto& [bone_name, ik] : ik_constraints) {
-        std::string section = "ik_" + bone_name;
-        ini.w_u32(section.c_str(), "type", static_cast<u32>(ik.type));
+        string256 section;
+        xr_sprintf(section, "ik_%s", bone_name.c_str());
+        ini.w_u32(section, "type", static_cast<u32>(ik.type));
 
         for (int i = 0; i < 3; ++i) {
-            std::string limit_section = section + "_limit_" + std::to_string(i);
-            ini.w_fvector2(limit_section.c_str(), "limit", ik.limits[i].limit);
-            ini.w_float(limit_section.c_str(), "spring_factor", ik.limits[i].spring_factor);
-            ini.w_float(limit_section.c_str(), "damping_factor", ik.limits[i].damping_factor);
+            string256 limit_section;
+            xr_sprintf(limit_section, "%s_limit_%d", section, i);
+            ini.w_fvector2(limit_section, "limit", ik.limits[i].limit);
+            ini.w_float(limit_section, "spring_factor", ik.limits[i].spring_factor);
+            ini.w_float(limit_section, "damping_factor", ik.limits[i].damping_factor);
         }
 
-        ini.w_float(section.c_str(), "break_force", ik.break_force);
-        ini.w_float(section.c_str(), "break_torque", ik.break_torque);
-        ini.w_float(section.c_str(), "friction", ik.friction);
-        ini.w_u32(section.c_str(), "flags", ik.flags);
+        ini.w_float(section, "break_force", ik.break_force);
+        ini.w_float(section, "break_torque", ik.break_torque);
+        ini.w_float(section, "friction", ik.friction);
+        ini.w_u32(section, "flags", ik.flags);
     }
 
     // Save physics shapes
     for (const auto& [bone_name, shape] : physics_shapes) {
-        std::string section = "physics_" + bone_name;
-        ini.w_u32(section.c_str(), "type", static_cast<u32>(shape.type));
-        ini.w_float(section.c_str(), "mass", shape.mass);
-        ini.w_fvector3(section.c_str(), "center_of_mass", shape.center_of_mass);
-        ini.w_u16(section.c_str(), "flags", shape.flags);
+        string256 section;
+        xr_sprintf(section, "physics_%s", bone_name.c_str());
+        ini.w_u32(section, "type", static_cast<u32>(shape.type));
+        ini.w_float(section, "mass", shape.mass);
+        ini.w_fvector3(section, "center_of_mass", shape.center_of_mass);
+        ini.w_u16(section, "flags", shape.flags);
 
         switch (shape.type) {
             case PhysicsShape::stBox:
-                ini.w_fvector3(section.c_str(), "size", shape.box.size);
+                ini.w_fvector3(section, "size", shape.box.size);
                 // TODO: Implement matrix serialization
                 // ini.w_fmatrix(section.c_str(), "transform", shape.box.transform);
                 break;
             case PhysicsShape::stSphere:
-                ini.w_fvector3(section.c_str(), "center", shape.sphere.center);
-                ini.w_float(section.c_str(), "radius", shape.sphere.radius);
+                ini.w_fvector3(section, "center", shape.sphere.center);
+                ini.w_float(section, "radius", shape.sphere.radius);
                 break;
             case PhysicsShape::stCylinder:
-                ini.w_fvector3(section.c_str(), "center", shape.cylinder.center);
-                ini.w_float(section.c_str(), "radius", shape.cylinder.radius);
-                ini.w_float(section.c_str(), "height", shape.cylinder.height);
+                ini.w_fvector3(section, "center", shape.cylinder.center);
+                ini.w_float(section, "radius", shape.cylinder.radius);
+                ini.w_float(section, "height", shape.cylinder.height);
                 break;
         }
     }
@@ -81,7 +89,7 @@ void XRayMetadata::Save(const std::string& metadata_path) const {
     ini.save_as(metadata_path.c_str());
 }
 
-bool XRayMetadata::Load(const std::string& metadata_path) {
+bool XRayMetadata::Load(const shared_str& metadata_path) {
     if (!FS.exist(metadata_path.c_str())) {
         return false;
     }
@@ -94,10 +102,11 @@ bool XRayMetadata::Load(const std::string& metadata_path) {
 
     for (; root_it != root_end; ++root_it) {
         shared_str section_name = root_it->Name;
-        std::string section_str = section_name.c_str();
+        xr_string section_str = section_name.c_str();
 
         if (section_str.find("motion_") == 0) {
-            std::string motion_name = section_str.substr(7);
+            xr_string motion_name = section_str.substr(7);
+            shared_str motion_name_str(motion_name.c_str());
             MotionParams params;
 
             params.speed = ini.read_if_exists<float>(section_name, "speed", 1.0f);
@@ -109,42 +118,46 @@ bool XRayMetadata::Load(const std::string& metadata_path) {
 
             // Load event markers
             if (ini.line_exist(section_name, "event_markers")) {
-                std::string markers_str = ini.r_string(section_name, "event_markers");
+                string512 markers_str;
+                xr_strcpy(markers_str, ini.r_string(section_name, "event_markers"));
                 // Parse comma-separated float values
-                std::stringstream ss(markers_str);
-                std::string item;
-                while (std::getline(ss, item, ',')) {
-                    params.event_markers.push_back(std::stof(item));
+                char* token = strtok(markers_str, ",");
+                while (token != nullptr) {
+                    params.event_markers.push_back(static_cast<float>(atof(token)));
+                    token = strtok(nullptr, ",");
                 }
             }
 
-            motion_params[motion_name] = params;
+            motion_params[motion_name_str] = params;
         }
     }
 
     return true;
 }
 
-void ConverterFactory::RegisterConverter(std::unique_ptr<IFormatConverter> converter) {
+void ConverterFactory::RegisterConverter(xr_unique_ptr<IFormatConverter> converter) {
     converters_.push_back(std::move(converter));
 }
 
-std::unique_ptr<IFormatConverter> ConverterFactory::GetConverter(const std::string& file_path) {
+xr_unique_ptr<IFormatConverter> ConverterFactory::GetConverter(const shared_str& file_path) {
     // Extract file extension
-    size_t dot_pos = file_path.find_last_of('.');
-    if (dot_pos == std::string::npos) {
+    pcstr file_path_str = file_path.c_str();
+    pcstr dot_pos_ptr = strrchr(file_path_str, '.');
+    if (dot_pos_ptr == nullptr) {
         return nullptr;
     }
 
-    std::string extension = file_path.substr(dot_pos);
-    std::transform(extension.begin(), extension.end(), extension.begin(), ::tolower);
+    string64 extension;
+    xr_strcpy(extension, dot_pos_ptr);
+    xr_strlwr(extension);
+    shared_str ext_str(extension);
 
     // Find suitable converter
     for (const auto& converter : converters_) {
-        if (converter->CanHandle(extension)) {
+        if (converter->CanHandle(ext_str)) {
             // Note: In a real implementation, we'd clone the converter
             // For now, this is a simplified approach
-            return std::unique_ptr<IFormatConverter>(converter.get());
+            return xr_unique_ptr<IFormatConverter>(converter.get());
         }
     }
 
@@ -152,29 +165,31 @@ std::unique_ptr<IFormatConverter> ConverterFactory::GetConverter(const std::stri
 }
 
 void ConverterFactory::InitializeDefaultConverters() {
-    // Converters will be registered here when implemented
-    // RegisterConverter(std::make_unique<OGFConverter>());
-    // RegisterConverter(std::make_unique<OMFConverter>());
-    // RegisterConverter(std::make_unique<ANMConverter>());
-    // RegisterConverter(std::make_unique<SKLConverter>());
+    // Register converters
+    RegisterConverter(xr_unique_ptr<IFormatConverter>(xr_new<OGFConverter>()));
+    RegisterConverter(xr_unique_ptr<IFormatConverter>(xr_new<OMFConverter>()));
+    // RegisterConverter(xr_make_unique<ANMConverter>());
+    // RegisterConverter(xr_make_unique<SKLConverter>());
 }
 
 ConversionValidator::ValidationResult ConversionValidator::ValidateConversion(
-    const std::string& original_path,
+    const shared_str& original_path,
     const IFormatConverter::ConversionResult& result
 ) {
     ValidationResult validation_result;
 
     if (!result.success) {
         validation_result.passed = false;
-        validation_result.errors.push_back("Conversion failed: " + result.error_message);
+        string256 error_buf;
+        xr_sprintf(error_buf, "Conversion failed: %s", result.error_message.c_str());
+        validation_result.errors.push_back(shared_str(error_buf));
         return validation_result;
     }
 
     // Validate skeleton
     if (!ValidateSkeletonHierarchy(result.skeleton)) {
         validation_result.passed = false;
-        validation_result.errors.push_back("Invalid skeleton hierarchy");
+        validation_result.errors.push_back(shared_str("Invalid skeleton hierarchy"));
     }
 
     // Validate animations
@@ -184,7 +199,7 @@ ConversionValidator::ValidationResult ConversionValidator::ValidateConversion(
             // fix - need to use string buffers probably (e.g string128)
             string128 buf;
             xr_sprintf(buf, "Invalid animation data for '%s'", animation.name.c_str());
-            validation_result.errors.push_back(buf);
+            validation_result.errors.push_back(shared_str(buf));
         }
     }
 
@@ -302,7 +317,7 @@ Fvector TransformConverter::OzzVecToXRay(const ozz::math::Float3& ozz_vec) {
 
 OzzAssetBuilder::BuildResult OzzAssetBuilder::BuildAssets(
     const ozz::animation::offline::RawSkeleton& raw_skeleton,
-    const std::vector<ozz::animation::offline::RawAnimation>& raw_animations,
+    const xr_vector<ozz::animation::offline::RawAnimation>& raw_animations,
     const XRayMetadata& metadata
 ) {
     BuildResult result;
@@ -311,14 +326,14 @@ OzzAssetBuilder::BuildResult OzzAssetBuilder::BuildAssets(
         // Build skeleton
         result.skeleton = BuildSkeleton(raw_skeleton);
         if (!result.skeleton) {
-            result.error_message = "Failed to build skeleton";
+            result.error_message = shared_str("Failed to build skeleton");
             return result;
         }
 
         // Build animations
         result.animations = BuildAnimations(raw_animations, *result.skeleton);
         if (result.animations.size() != raw_animations.size()) {
-            result.error_message = "Failed to build all animations";
+            result.error_message = shared_str("Failed to build all animations");
             return result;
         }
 
@@ -327,20 +342,20 @@ OzzAssetBuilder::BuildResult OzzAssetBuilder::BuildAssets(
 
         // Validate built assets
         if (!ValidateBuiltAssets(result)) {
-            result.error_message = "Built assets validation failed";
+            result.error_message = shared_str("Built assets validation failed");
             return result;
         }
 
         result.success = true;
 
-    } catch (const std::exception& e) {
-        result.error_message = "Exception during asset building: " + std::string(e.what());
+    } catch (...) {
+        result.error_message = "Exception during asset building";
     }
 
     return result;
 }
 
-std::unique_ptr<ozz::animation::Skeleton> OzzAssetBuilder::BuildSkeleton(
+xr_unique_ptr<ozz::animation::Skeleton> OzzAssetBuilder::BuildSkeleton(
     const ozz::animation::offline::RawSkeleton& raw_skeleton
 ) {
     ozz::animation::offline::SkeletonBuilder builder;
@@ -350,14 +365,14 @@ std::unique_ptr<ozz::animation::Skeleton> OzzAssetBuilder::BuildSkeleton(
         return nullptr;
     }
 
-    return std::unique_ptr<ozz::animation::Skeleton>(skeleton.release());
+    return xr_unique_ptr<ozz::animation::Skeleton>(skeleton.release());
 }
 
-std::vector<std::unique_ptr<ozz::animation::Animation>> OzzAssetBuilder::BuildAnimations(
-    const std::vector<ozz::animation::offline::RawAnimation>& raw_animations,
+xr_vector<xr_unique_ptr<ozz::animation::Animation>> OzzAssetBuilder::BuildAnimations(
+    const xr_vector<ozz::animation::offline::RawAnimation>& raw_animations,
     const ozz::animation::Skeleton& skeleton
 ) {
-    std::vector<std::unique_ptr<ozz::animation::Animation>> animations;
+    xr_vector<xr_unique_ptr<ozz::animation::Animation>> animations;
 
     ozz::animation::offline::AnimationBuilder builder;
     ozz::animation::offline::AnimationOptimizer optimizer;
@@ -376,7 +391,7 @@ std::vector<std::unique_ptr<ozz::animation::Animation>> OzzAssetBuilder::BuildAn
         }
 
 
-        animations.push_back(std::unique_ptr<ozz::animation::Animation>(animation.release()));
+        animations.push_back(xr_unique_ptr<ozz::animation::Animation>(animation.release()));
     }
 
     return animations;
