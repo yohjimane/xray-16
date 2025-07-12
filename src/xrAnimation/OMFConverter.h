@@ -14,9 +14,12 @@ namespace XRay {
 namespace Animation {
 
 // OMF (Object Motion File) format constants
+// Standard OMF format chunks
 const u32 OMF_CHUNK_VERSION = 0x0900;
 const u32 OMF_CHUNK_PARAMS = 0x0901;
 const u32 OMF_CHUNK_MOTIONS = 0x0902;
+// OGF motion chunks (used in game OMF files)
+// Defined in OGFConverter.h
 const u32 OMF_VERSION = 4;
 
 // Motion flags from X-Ray
@@ -52,18 +55,31 @@ struct OMFMotionDef {
     xr_vector<float> marks;  // Event markers
 };
 
-struct OMFBoneMotion {
-    shared_str name;
-    u32 flags;
+// Per-bone motion data within a single motion
+struct OMFBoneData {
+    u8 bone_id;
+    u8 flags;
     
-    // Compressed motion data
+    // Compressed motion data for this bone
     xr_vector<u16> keys_translation_frames;  // Frame indices for translation keys
     xr_vector<Fvector> keys_translation;      // Translation values
     
     xr_vector<u16> keys_rotation_frames;     // Frame indices for rotation keys
     xr_vector<Fquaternion> keys_rotation;     // Rotation values (as quaternions)
     
-    // Envelope data for curves
+    // Initial transform data
+    Fvector initial_translation;
+    Fvector translation_size;  // For decompression
+};
+
+struct OMFBoneMotion {
+    shared_str name;
+    u32 motion_length;  // Number of frames
+    
+    // Per-bone motion data - indexed by bone order in file
+    xr_vector<OMFBoneData> bone_data;
+    
+    // Envelope data for curves (legacy)
     struct Envelope {
         u8 behavior[2];  // Pre/post behavior
         xr_vector<float> keys;
@@ -87,9 +103,15 @@ public:
     xr_vector<OMFMotionDef> ReadMotionDefs();
     xr_vector<OMFBoneMotion> ReadBoneMotions();
     
+    // OGF motion format support
+    xr_vector<OMFMotionDef> ReadOGFMotionDefs();
+    xr_vector<OMFBoneMotion> ReadOGFBoneMotions();
+    
 private:
     xr_unique_ptr<IReader> reader_;
     OMFHeader header_;
+    xr_vector<u8> file_data_;  // Store file data for memory reader
+    bool is_ogf_format_ = false;  // Flag for OGF motion format
     
     void ReadHeader();
     void ReadMotionParams(IReader& reader, OMFMotionDef& motion_def);
@@ -98,7 +120,7 @@ private:
     // Decompression helpers
     Fquaternion DecompressQuaternion(u64 packed) const;
     Fvector DecompressTranslation(u32 packed, const Fvector& init, const Fvector& size) const;
-    void DecompressMotionKeys(IReader& reader, u32 flags, OMFBoneMotion& motion);
+    void DecompressMotionKeys(IReader& reader, u32 flags, OMFBoneData& bone_data);
 };
 
 class OMFToOzzAnimationConverter {
@@ -139,6 +161,7 @@ private:
         xr_vector<ozz::math::Float3> scales;
     };
     
+    // Legacy functions (no longer used with new per-bone structure)
     KeyframeData ExtractKeyframes(
         const OMFBoneMotion& omf_motion,
         float fps

@@ -261,20 +261,37 @@ void ConversionValidator::ComputeCompressionMetrics(const IFormatConverter::Conv
 }
 
 ozz::math::Transform TransformConverter::XRayToOzz(const Fmatrix& xray_matrix) {
-    // Extract translation
-    ozz::math::Float3 translation = XRayVecToOzz(xray_matrix.c);
+    // Apply X-Ray to ozz coordinate system conversion
+    // X-Ray uses Y-up, ozz/OpenGL uses Z-up (based on blender-xray MATRIX_BONE)
+    // Transform: X→X, Y→Z, Z→-Y
+    
+    Fmatrix converted_matrix;
+    
+    // Apply coordinate conversion matrix similar to blender-xray MATRIX_BONE
+    // X-Ray: (X, Y, Z) → ozz: (X, Z, -Y)
+    converted_matrix.i.set(xray_matrix.i.x,  xray_matrix.i.z, -xray_matrix.i.y);  // X-axis
+    converted_matrix.j.set(xray_matrix.j.x,  xray_matrix.j.z, -xray_matrix.j.y);  // Y-axis  
+    converted_matrix.k.set(xray_matrix.k.x,  xray_matrix.k.z, -xray_matrix.k.y);  // Z-axis
+    converted_matrix.c.set(xray_matrix.c.x,  xray_matrix.c.z, -xray_matrix.c.y);  // Translation
+
+    // Extract translation from converted matrix
+    ozz::math::Float3 translation = ozz::math::Float3(
+        converted_matrix.c.x,
+        converted_matrix.c.y, 
+        converted_matrix.c.z
+    );
 
     // Extract rotation (convert to quaternion)
-    Fquaternion xray_quat;
-    xray_quat.set(xray_matrix);
-    ozz::math::Quaternion rotation = XRayQuatToOzz(xray_quat);
+    Fquaternion converted_quat;
+    converted_quat.set(converted_matrix);
+    ozz::math::Quaternion rotation = XRayQuatToOzz(converted_quat);
 
-    // Extract scale
+    // Extract scale from converted matrix
     Fvector scale_vec;
-    scale_vec.x = xray_matrix.i.magnitude();
-    scale_vec.y = xray_matrix.j.magnitude();
-    scale_vec.z = xray_matrix.k.magnitude();
-    ozz::math::Float3 scale = XRayVecToOzz(scale_vec);
+    scale_vec.x = converted_matrix.i.magnitude();
+    scale_vec.y = converted_matrix.j.magnitude();
+    scale_vec.z = converted_matrix.k.magnitude();
+    ozz::math::Float3 scale = ozz::math::Float3(scale_vec.x, scale_vec.y, scale_vec.z);
 
     return ozz::math::Transform{translation, rotation, scale};
 }

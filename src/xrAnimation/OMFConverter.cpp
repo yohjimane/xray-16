@@ -1,5 +1,6 @@
 #include "stdafx.h"
 #include "OMFConverter.h"
+#include <cstdio>
 #include "xrCore/file_stream_reader.h"
 #include "xrCore/FS.h"
 
@@ -7,19 +8,41 @@ namespace XRay {
 namespace Animation {
 
 bool OMFReader::LoadFromFile(const shared_str& file_path) {
-    if (!FS.exist(file_path.c_str())) {
-        Msg("! OMF file not found: %s", file_path.c_str());
-        return false;
+    // First try to open as regular file
+    FILE* file = fopen(file_path.c_str(), "rb");
+    if (file) {
+        // Get file size
+        fseek(file, 0, SEEK_END);
+        long file_size = ftell(file);
+        fseek(file, 0, SEEK_SET);
+        
+        // Read file data - need to store it persistently
+        file_data_.resize(file_size);
+        size_t read_size = fread(file_data_.data(), 1, file_size, file);
+        fclose(file);
+        
+        if (read_size == static_cast<size_t>(file_size)) {
+            reader_.reset(xr_new<IReader>(file_data_.data(), file_size));
+            if (reader_) {
+                ReadHeader();
+                return true;
+            }
+        }
     }
     
-    reader_.reset(FS.r_open(file_path.c_str()));
-    if (!reader_) {
-        Msg("! Failed to open OMF file: %s", file_path.c_str());
-        return false;
+    // Fall back to X-Ray FS if direct file access failed
+    if (FS.exist(file_path.c_str())) {
+        reader_.reset(FS.r_open(file_path.c_str()));
+        if (!reader_) {
+            Msg("! Failed to open OMF file: %s", file_path.c_str());
+            return false;
+        }
+        ReadHeader();
+        return true;
     }
     
-    ReadHeader();
-    return true;
+    Msg("! OMF file not found: %s", file_path.c_str());
+    return false;
 }
 
 bool OMFReader::LoadFromMemory(const void* data, size_t size) {
@@ -41,7 +64,53 @@ void OMFReader::ReadHeader() {
         return;
     }
     
-    // Find version chunk
+    // Debug: List all chunks
+    Msg("* OMF Chunks found:");
+    reader_->seek(0);
+    bool has_ogf_chunks = false;
+    while (!reader_->eof()) {
+        u32 chunk_id = reader_->r_u32();
+        u32 chunk_size = reader_->r_u32();
+        u32 pos = reader_->tell() - 8;
+        
+        if (reader_->eof() || chunk_size == 0 || chunk_size > reader_->elapsed()) {
+            break;
+        }
+        
+        Msg("  - Chunk 0x%04X at offset %d, size %d", chunk_id, pos, chunk_size);
+        
+        // Check if this is an OGF motion chunk
+        if (chunk_id == OGF_S_MOTIONS || chunk_id == OGF_S_SMPARAMS) {
+            has_ogf_chunks = true;
+        }
+        
+        reader_->advance(chunk_size);
+    }
+    reader_->seek(0);
+    
+    // Handle OGF motion format (game OMF files)
+    if (has_ogf_chunks) {
+        Msg("* OMF: Detected OGF motion format");
+        is_ogf_format_ = true;
+        header_.version = OMF_VERSION; // Assume version 4
+        
+        // Count motions from OGF_S_MOTIONS chunk
+        auto motions_chunk = reader_->open_chunk(OGF_S_MOTIONS);
+        if (motions_chunk) {
+            // First sub-chunk contains motion count
+            auto count_chunk = motions_chunk->open_chunk(0);
+            if (count_chunk) {
+                header_.motion_count = count_chunk->r_u32();
+                count_chunk->close();
+            }
+            motions_chunk->close();
+        }
+        
+        Msg("* OMF: OGF format, %d motions", header_.motion_count);
+        return;
+    }
+    
+    // Standard OMF format
     auto version_chunk = reader_->open_chunk(OMF_CHUNK_VERSION);
     if (!version_chunk) {
         Msg("! OMF: Version chunk not found");
@@ -70,6 +139,10 @@ void OMFReader::ReadHeader() {
 }
 
 xr_vector<OMFMotionDef> OMFReader::ReadMotionDefs() {
+    if (is_ogf_format_) {
+        return ReadOGFMotionDefs();
+    }
+    
     xr_vector<OMFMotionDef> motion_defs;
     
     if (!reader_) {
@@ -100,28 +173,65 @@ void OMFReader::ReadMotionParams(IReader& reader, OMFMotionDef& motion_def) {
     shared_str temp_name;
     reader.r_stringZ(temp_name);
     motion_def.name = temp_name;
+    Msg("  - Motion name: %s, pos: %d", temp_name.c_str(), reader.tell());
     
-    // Read motion parameters
+    // Read motion flags first (before other parameters)
     motion_def.flags = reader.r_u32();
+    Msg("  - Flags: 0x%X, pos: %d", motion_def.flags, reader.tell());
+    
+    // Read motion ID and bone/part reference
     motion_def.bone_or_part = reader.r_u16();
     motion_def.motion = reader.r_u16();
+    Msg("  - Bone/part: %d, motion: %d, pos: %d", motion_def.bone_or_part, motion_def.motion, reader.tell());
+    
+    // Read motion parameters
+    Msg("  - About to read speed at pos: %d, remaining: %d", reader.tell(), reader.elapsed());
     motion_def.speed = reader.r_float();
+    Msg("  - Speed: %f, pos: %d", motion_def.speed, reader.tell());
     motion_def.power = reader.r_float();
+    Msg("  - Power: %f, pos: %d", motion_def.power, reader.tell());
     motion_def.accrue = reader.r_float();
+    Msg("  - Accrue: %f, pos: %d", motion_def.accrue, reader.tell());
     motion_def.falloff = reader.r_float();
+    Msg("  - Falloff: %f, pos: %d", motion_def.falloff, reader.tell());
     
-    // Read motion marks (event markers)
+    // Read motion marks (event markers) for version 4+
     motion_def.marks_count = reader.r_u32();
-    motion_def.marks.resize(motion_def.marks_count);
+    Msg("  - Marks count: %d, pos: %d", motion_def.marks_count, reader.tell());
     
-    for (u32 j = 0; j < motion_def.marks_count; ++j) {
-        shared_str mark_name;
-        reader.r_stringZ(mark_name);
-        motion_def.marks[j] = reader.r_float();
+    if (motion_def.marks_count > 0) {
+        // Motion marks use special \r\n terminated strings in version 4
+        for (u32 j = 0; j < motion_def.marks_count; ++j) {
+            // Read string until \n, strip trailing \r
+            xr_string mark_name_str;
+            char ch;
+            while (!reader.eof()) {
+                ch = reader.r_u8();
+                if (ch == '\n') break;
+                mark_name_str += ch;
+            }
+            // Remove trailing \r if present
+            if (!mark_name_str.empty() && mark_name_str.back() == '\r') {
+                mark_name_str.pop_back();
+            }
+            shared_str mark_name(mark_name_str.c_str());
+            
+            u32 interval_count = reader.r_u32();
+            Msg("    - Mark %d: %s, intervals: %d", j, mark_name.c_str(), interval_count);
+            for (u32 k = 0; k < interval_count; ++k) {
+                float first = reader.r_float();
+                float second = reader.r_float();
+                Msg("      - Interval %d: [%f, %f]", k, first, second);
+            }
+        }
     }
 }
 
 xr_vector<OMFBoneMotion> OMFReader::ReadBoneMotions() {
+    if (is_ogf_format_) {
+        return ReadOGFBoneMotions();
+    }
+    
     xr_vector<OMFBoneMotion> bone_motions;
     
     if (!reader_) {
@@ -146,8 +256,8 @@ xr_vector<OMFBoneMotion> OMFReader::ReadBoneMotions() {
         bone_motion.name = temp_name;
         
         // Read motion data length and flags
-        u32 length = motion_reader->r_u32();
-        bone_motion.flags = motion_reader->r_u8();
+        bone_motion.motion_length = motion_reader->r_u32();
+        u8 motion_flags = motion_reader->r_u8();
         
         // Read compressed motion data
         ReadCompressedMotion(*motion_reader, bone_motion);
@@ -165,36 +275,39 @@ xr_vector<OMFBoneMotion> OMFReader::ReadBoneMotions() {
 void OMFReader::ReadCompressedMotion(IReader& reader, OMFBoneMotion& bone_motion) {
     // Read bone count for this motion
     u8 bone_count = reader.r_u8();
+    bone_motion.bone_data.reserve(bone_count);
     
     // Read bone data
     for (u8 bone_idx = 0; bone_idx < bone_count; ++bone_idx) {
+        OMFBoneData bone_data;
+        
         // Read bone ID
-        u8 bone_id = reader.r_u8();
+        bone_data.bone_id = reader.r_u8();
         
         // Read flags for this bone's motion
-        u8 flags = reader.r_u8();
+        bone_data.flags = reader.r_u8();
         
-        // Decompress motion keys based on flags
-        DecompressMotionKeys(reader, flags, bone_motion);
+        // Decompress motion keys for this specific bone
+        DecompressMotionKeys(reader, bone_data.flags, bone_data);
+        
+        bone_motion.bone_data.push_back(bone_data);
     }
 }
 
-void OMFReader::DecompressMotionKeys(IReader& reader, u32 flags, OMFBoneMotion& motion) {
+void OMFReader::DecompressMotionKeys(IReader& reader, u32 flags, OMFBoneData& bone_data) {
     // Check if translation keys are present
     if (flags & flTKeyPresent) {
         // Read compressed translation data
         u16 t_key_count = reader.r_u16();
         
-        motion.keys_translation_frames.reserve(t_key_count);
-        motion.keys_translation.reserve(t_key_count);
+        bone_data.keys_translation_frames.reserve(t_key_count);
+        bone_data.keys_translation.reserve(t_key_count);
         
         // Read initial translation
-        Fvector t_init;
-        reader.r_fvector3(t_init);
+        reader.r_fvector3(bone_data.initial_translation);
         
         // Read translation size (for decompression)
-        Fvector t_size;
-        reader.r_fvector3(t_size);
+        reader.r_fvector3(bone_data.translation_size);
         
         // Determine if using 16-bit or 8-bit compression
         bool use_16bit = (flags & flTKey16IsBit) != 0;
@@ -202,7 +315,7 @@ void OMFReader::DecompressMotionKeys(IReader& reader, u32 flags, OMFBoneMotion& 
         for (u16 i = 0; i < t_key_count; ++i) {
             // Read frame index
             u16 frame = reader.r_u16();
-            motion.keys_translation_frames.push_back(frame);
+            bone_data.keys_translation_frames.push_back(frame);
             
             // Read and decompress translation
             u32 packed_translation;
@@ -216,9 +329,12 @@ void OMFReader::DecompressMotionKeys(IReader& reader, u32 flags, OMFBoneMotion& 
                 packed_translation = reader.r_u32() & 0xFFFFFF;
             }
             
-            Fvector translation = DecompressTranslation(packed_translation, t_init, t_size);
-            motion.keys_translation.push_back(translation);
+            Fvector translation = DecompressTranslation(packed_translation, bone_data.initial_translation, bone_data.translation_size);
+            bone_data.keys_translation.push_back(translation);
         }
+    } else {
+        // No translation keys, just read initial position
+        reader.r_fvector3(bone_data.initial_translation);
     }
     
     // Check if rotation keys are present
@@ -226,21 +342,22 @@ void OMFReader::DecompressMotionKeys(IReader& reader, u32 flags, OMFBoneMotion& 
         // Read compressed rotation data
         u16 r_key_count = reader.r_u16();
         
-        motion.keys_rotation_frames.reserve(r_key_count);
-        motion.keys_rotation.reserve(r_key_count);
+        bone_data.keys_rotation_frames.reserve(r_key_count);
+        bone_data.keys_rotation.reserve(r_key_count);
         
         for (u16 i = 0; i < r_key_count; ++i) {
             // Read frame index
             u16 frame = reader.r_u16();
-            motion.keys_rotation_frames.push_back(frame);
+            bone_data.keys_rotation_frames.push_back(frame);
             
             // Read compressed quaternion (64-bit packed)
             u64 packed_quat = reader.r_u64();
             Fquaternion rotation = DecompressQuaternion(packed_quat);
-            motion.keys_rotation.push_back(rotation);
+            bone_data.keys_rotation.push_back(rotation);
         }
     }
 }
+
 
 Fquaternion OMFReader::DecompressQuaternion(u64 packed) const {
     // X-Ray uses 16-bit per component quaternion compression
@@ -312,21 +429,68 @@ ozz::animation::offline::RawAnimation OMFToOzzAnimationConverter::ConvertSingleM
 ) {
     ozz::animation::offline::RawAnimation animation;
     animation.name = omf_motion.name.c_str();
-    animation.duration = CalculateAnimationDuration(omf_motion, params.fps);
     
-    // Create tracks for each bone
+    // Create tracks for each bone in the skeleton
     animation.tracks.resize(bone_names.size());
     
-    // Extract keyframes from compressed data
-    KeyframeData keyframes = ExtractKeyframes(omf_motion, params.fps);
+    // Calculate duration based on all bone motion data
+    float max_duration = 0.0f;
+    for (const auto& bone_data : omf_motion.bone_data) {
+        // Find maximum frame from translation keys
+        for (u16 frame : bone_data.keys_translation_frames) {
+            float time = frame / params.fps;
+            max_duration = _max(max_duration, time);
+        }
+        // Find maximum frame from rotation keys  
+        for (u16 frame : bone_data.keys_rotation_frames) {
+            float time = frame / params.fps;
+            max_duration = _max(max_duration, time);
+        }
+    }
+    animation.duration = max_duration > 0.0f ? max_duration : 1.0f;
     
-    // For now, apply the same animation to the first bone (simplified)
-    // In a real implementation, we'd match bone names and apply per-bone data
-    if (!animation.tracks.empty() && !keyframes.times.empty()) {
-        BuildAnimationTrack(keyframes, animation.tracks[0]);
+    // Map bone motion data to skeleton tracks
+    // We need to match bone IDs from OMF to bone indices in the skeleton
+    for (const auto& bone_data : omf_motion.bone_data) {
+        // For now, use bone_id as the track index (this assumes they match)
+        // TODO: Implement proper bone name/ID mapping
+        size_t track_idx = bone_data.bone_id;
+        
+        if (track_idx < animation.tracks.size()) {
+            auto& track = animation.tracks[track_idx];
+            
+            // Convert translation keys
+            for (size_t i = 0; i < bone_data.keys_translation_frames.size(); ++i) {
+                ozz::animation::offline::RawAnimation::TranslationKey key;
+                key.time = bone_data.keys_translation_frames[i] / params.fps;
+                const Fvector& t = bone_data.keys_translation[i];
+                
+                // Apply coordinate system conversion (X-Ray Y-up to ozz Z-up)
+                key.value = ozz::math::Float3(t.x, t.z, -t.y);
+                track.translations.push_back(key);
+            }
+            
+            // Convert rotation keys
+            for (size_t i = 0; i < bone_data.keys_rotation_frames.size(); ++i) {
+                ozz::animation::offline::RawAnimation::RotationKey key;
+                key.time = bone_data.keys_rotation_frames[i] / params.fps;
+                const Fquaternion& q = bone_data.keys_rotation[i];
+                
+                // Apply coordinate system conversion for quaternions
+                // X-Ray Y-up to ozz Z-up: (x,y,z,w) -> (x,z,-y,w)
+                key.value = ozz::math::Quaternion(q.x, q.z, -q.y, q.w);
+                track.rotations.push_back(key);
+            }
+            
+            // Add default scale key
+            ozz::animation::offline::RawAnimation::ScaleKey scale_key;
+            scale_key.time = 0.0f;
+            scale_key.value = ozz::math::Float3::one();
+            track.scales.push_back(scale_key);
+        }
     }
     
-    // Ensure all tracks have at least one key
+    // Ensure all tracks have at least one key (fallback for bones without animation data)
     for (auto& track : animation.tracks) {
         if (track.translations.empty()) {
             ozz::animation::offline::RawAnimation::TranslationKey key;
@@ -357,34 +521,8 @@ OMFToOzzAnimationConverter::KeyframeData OMFToOzzAnimationConverter::ExtractKeyf
     const OMFBoneMotion& omf_motion,
     float fps
 ) {
+    // Legacy function - no longer used with new per-bone structure
     KeyframeData keyframes;
-    
-    // Convert translation keyframes
-    for (size_t i = 0; i < omf_motion.keys_translation_frames.size(); ++i) {
-        float time = omf_motion.keys_translation_frames[i] / fps;
-        keyframes.times.push_back(time);
-        
-        const Fvector& t = omf_motion.keys_translation[i];
-        keyframes.translations.push_back(ozz::math::Float3(t.x, t.y, t.z));
-    }
-    
-    // Convert rotation keyframes
-    for (size_t i = 0; i < omf_motion.keys_rotation_frames.size(); ++i) {
-        float time = omf_motion.keys_rotation_frames[i] / fps;
-        
-        // Only add time if not already present
-        auto it = std::find(keyframes.times.begin(), keyframes.times.end(), time);
-        if (it == keyframes.times.end()) {
-            keyframes.times.push_back(time);
-        }
-        
-        const Fquaternion& q = omf_motion.keys_rotation[i];
-        keyframes.rotations.push_back(ozz::math::Quaternion(q.x, q.y, q.z, q.w));
-    }
-    
-    // Add default scale keyframes
-    keyframes.scales.push_back(ozz::math::Float3::one());
-    
     return keyframes;
 }
 
@@ -419,22 +557,8 @@ float OMFToOzzAnimationConverter::CalculateAnimationDuration(
     const OMFBoneMotion& omf_motion,
     float fps
 ) {
-    float max_time = 0.0f;
-    
-    // Find maximum frame index from translation keys
-    for (u16 frame : omf_motion.keys_translation_frames) {
-        float time = frame / fps;
-        max_time = _max(max_time, time);
-    }
-    
-    // Find maximum frame index from rotation keys
-    for (u16 frame : omf_motion.keys_rotation_frames) {
-        float time = frame / fps;
-        max_time = _max(max_time, time);
-    }
-    
-    // Default to 1 second if no keys found
-    return max_time > 0.0f ? max_time : 1.0f;
+    // Legacy function - no longer used with new per-bone structure
+    return 1.0f;
 }
 
 IFormatConverter::ConversionResult OMFConverter::Convert(const shared_str& input_path) {
@@ -583,6 +707,109 @@ xr_vector<shared_str> OMFConverter::ExtractBoneNamesFromSkeleton(
     }
     
     return bone_names;
+}
+
+xr_vector<OMFMotionDef> OMFReader::ReadOGFMotionDefs() {
+    xr_vector<OMFMotionDef> motion_defs;
+    
+    if (!reader_) {
+        return motion_defs;
+    }
+    
+    // Read OGF_S_SMPARAMS chunk
+    auto params_chunk = reader_->open_chunk(OGF_S_SMPARAMS);
+    if (!params_chunk) {
+        Msg("! OMF: OGF_S_SMPARAMS chunk not found");
+        return motion_defs;
+    }
+    
+    Msg("* OGF_S_SMPARAMS chunk size: %d, position: %d", params_chunk->length(), params_chunk->tell());
+    
+    // Read version
+    u16 version = params_chunk->r_u16();
+    Msg("* OGF_S_SMPARAMS version: %d", version);
+    
+    // Skip bone parts for now
+    u16 part_count = params_chunk->r_u16();
+    Msg("* Part count: %d", part_count);
+    
+    for (u16 i = 0; i < part_count; ++i) {
+        shared_str part_name;
+        params_chunk->r_stringZ(part_name);
+        u16 bone_count = params_chunk->r_u16();
+        Msg("  - Part %d: %s, bones: %d", i, part_name.c_str(), bone_count);
+        for (u16 j = 0; j < bone_count; ++j) {
+            shared_str bone_name;
+            params_chunk->r_stringZ(bone_name);
+            u32 bone_id = params_chunk->r_u32();
+            Msg("    - Bone: %s (id: %d)", bone_name.c_str(), bone_id);
+        }
+    }
+    
+    Msg("* Position after parts: %d of %d", params_chunk->tell(), params_chunk->length());
+    
+    // Read motion definitions
+    u16 motion_count = params_chunk->r_u16();
+    motion_defs.reserve(motion_count);
+    Msg("* Motion count: %d", motion_count);
+    
+    for (u16 i = 0; i < motion_count; ++i) {
+        Msg("* Reading motion %d at position %d", i, params_chunk->tell());
+        OMFMotionDef def;
+        ReadMotionParams(*params_chunk, def);
+        motion_defs.push_back(def);
+    }
+    
+    params_chunk->close();
+    return motion_defs;
+}
+
+xr_vector<OMFBoneMotion> OMFReader::ReadOGFBoneMotions() {
+    xr_vector<OMFBoneMotion> bone_motions;
+    
+    if (!reader_) {
+        return bone_motions;
+    }
+    
+    auto motions_chunk = reader_->open_chunk(OGF_S_MOTIONS);
+    if (!motions_chunk) {
+        Msg("! OMF: OGF_S_MOTIONS chunk not found");
+        return bone_motions;
+    }
+    
+    // Skip chunk 0 (motion count)
+    auto count_chunk = motions_chunk->open_chunk(0);
+    if (count_chunk) {
+        count_chunk->close();
+    }
+    
+    // Read motion data starting from chunk 1
+    u32 motion_idx = 1;
+    IReader* motion_reader = nullptr;
+    
+    while ((motion_reader = motions_chunk->open_chunk(motion_idx)) != nullptr) {
+        OMFBoneMotion bone_motion;
+        
+        // Read motion name
+        shared_str temp_name;
+        motion_reader->r_stringZ(temp_name);
+        bone_motion.name = temp_name;
+        
+        // Read motion data length and flags
+        bone_motion.motion_length = motion_reader->r_u32();
+        u8 motion_flags = motion_reader->r_u8();
+        
+        // Read compressed motion data
+        ReadCompressedMotion(*motion_reader, bone_motion);
+        
+        bone_motions.push_back(bone_motion);
+        
+        motion_reader->close();
+        motion_idx++;
+    }
+    
+    motions_chunk->close();
+    return bone_motions;
 }
 
 } // namespace Animation

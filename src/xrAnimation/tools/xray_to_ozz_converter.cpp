@@ -10,7 +10,33 @@
 #include "ozz/animation/offline/skeleton_builder.h"
 #include "ozz/animation/offline/animation_builder.h"
 
+#ifdef _WIN32
+#include <direct.h>
+#else
+#include <sys/stat.h>
+#include <sys/types.h>
+#endif
+
+#include <functional>
+
 using namespace XRay::Animation;
+
+int CountJoints(const ozz::animation::offline::RawSkeleton& skeleton) {
+    int count = 0;
+    std::function<void(const ozz::animation::offline::RawSkeleton::Joint&)> CountJoint = 
+        [&](const ozz::animation::offline::RawSkeleton::Joint& joint) {
+            count++;
+            for (const auto& child : joint.children) {
+                CountJoint(child);
+            }
+        };
+    
+    for (const auto& root : skeleton.roots) {
+        CountJoint(root);
+    }
+    
+    return count;
+}
 
 void PrintUsage(const char* program_name)
 {
@@ -19,6 +45,7 @@ void PrintUsage(const char* program_name)
     Msg("  skeleton  - Convert OGF skeleton to ozz skeleton");
     Msg("  animation - Convert OMF animation to ozz animation");
     Msg("  batch     - Convert all animations in a directory");
+    Msg("  analyze   - Analyze OMF file structure (no conversion)");
     Msg("\nOptions:");
     Msg("  -optimize - Optimize animations (remove redundant keys)");
     Msg("  -compress - Use compression for ozz files");
@@ -26,6 +53,59 @@ void PrintUsage(const char* program_name)
     Msg("  %s skeleton actor.ogf actor_skeleton.ozz", program_name);
     Msg("  %s animation walk.omf walk.ozz -optimize", program_name);
     Msg("  %s batch animations/ ozz_animations/ -optimize", program_name);
+    Msg("  %s analyze stalker_animation.omf", program_name);
+}
+
+void AnalyzeOMF(const std::string& input_path)
+{
+    Msg("Analyzing OMF file: %s", input_path.c_str());
+    
+    FILE* file = fopen(input_path.c_str(), "rb");
+    if (!file) {
+        Msg("! Failed to open file");
+        return;
+    }
+    
+    fseek(file, 0, SEEK_END);
+    long file_size = ftell(file);
+    fseek(file, 0, SEEK_SET);
+    
+    Msg("* File size: %ld bytes", file_size);
+    
+    while (ftell(file) < file_size - 8) {
+        u32 chunk_id, chunk_size;
+        if (fread(&chunk_id, 4, 1, file) != 1) break;
+        if (fread(&chunk_size, 4, 1, file) != 1) break;
+        
+        long chunk_pos = ftell(file) - 8;
+        Msg("* Chunk 0x%04X at offset %ld, size %u", chunk_id, chunk_pos, chunk_size);
+        
+        if (chunk_id == XRay::Animation::OGF_S_SMPARAMS) {
+            u16 version;
+            fread(&version, 2, 1, file);
+            Msg("  - OGF_S_SMPARAMS version: %u", version);
+            fseek(file, chunk_pos + 8 + chunk_size, SEEK_SET);
+        } else if (chunk_id == XRay::Animation::OGF_S_MOTIONS) {
+            long motion_start = ftell(file);
+            u32 sub_chunk_id, sub_chunk_size;
+            
+            if (fread(&sub_chunk_id, 4, 1, file) == 1 &&
+                fread(&sub_chunk_size, 4, 1, file) == 1) {
+                if (sub_chunk_id == 0) {
+                    u32 motion_count;
+                    fread(&motion_count, 4, 1, file);
+                    Msg("  - Motion count: %u", motion_count);
+                }
+            }
+            fseek(file, motion_start + chunk_size, SEEK_SET);
+        } else {
+            fseek(file, chunk_size, SEEK_CUR);
+        }
+        
+        if (ftell(file) >= file_size) break;
+    }
+    
+    fclose(file);
 }
 
 bool ConvertSkeleton(const std::string& input_path, const std::string& output_path)
@@ -63,8 +143,9 @@ bool ConvertSkeleton(const std::string& input_path, const std::string& output_pa
     archive << *skeleton;
     
     Msg("* Skeleton converted successfully");
-    Msg("  - Joints: %d", skeleton->num_joints());
-    Msg("  - Root bone: %d", result.skeleton.roots.size() > 0 ? 0 : -1);
+    Msg("  - Raw skeleton joints before build: %d", CountJoints(result.skeleton));
+    Msg("  - Runtime skeleton joints: %d", skeleton->num_joints());
+    Msg("  - Root bones: %d", result.skeleton.roots.size());
     
     // Save metadata alongside skeleton (optional)
     std::string metadata_path = output_path + ".meta";
@@ -207,7 +288,13 @@ bool ConvertBatch(const std::string& input_dir, const std::string& output_dir,
     Msg("Batch converting animations from: %s", input_dir.c_str());
     
     // Create output directory
-    FS.dir_create(output_dir.c_str());
+    // Create output directory
+    // Use platform-specific directory creation
+#ifdef _WIN32
+    _mkdir(output_dir.c_str());
+#else
+    mkdir(output_dir.c_str(), 0755);
+#endif
     
     // Find all OMF files
     FS_FileSet files;
@@ -275,14 +362,14 @@ bool ConvertBatch(const std::string& input_dir, const std::string& output_dir,
 int main(int argc, char* argv[])
 {
     // Initialize core
-    Debug._initialize(false);
-    Core._initialize("xray_to_ozz", nullptr, TRUE, "fs.ltx");
+    xrDebug::Initialize(argv[0] ? argv[0] : "xray_to_ozz");
+    Core.Initialize("xray_to_ozz", nullptr, FALSE, nullptr);
     
     Msg("==================================================");
     Msg("     X-Ray to ozz-animation Converter");
     Msg("==================================================\n");
     
-    if (argc < 4) {
+    if (argc < 3) {
         PrintUsage(argv[0]);
         Core._destroy();
         return 1;
@@ -290,7 +377,7 @@ int main(int argc, char* argv[])
     
     std::string command = argv[1];
     std::string input = argv[2];
-    std::string output = argv[3];
+    std::string output = argc > 3 ? argv[3] : "";
     
     bool optimize = false;
     bool compress = false;
@@ -324,6 +411,9 @@ int main(int argc, char* argv[])
             std::string skeleton_path = argv[4];
             success = ConvertBatch(input, output, skeleton_path, optimize);
         }
+    } else if (command == "analyze") {
+        AnalyzeOMF(input);
+        success = true;
     } else {
         Msg("! Unknown command: %s", command.c_str());
         PrintUsage(argv[0]);

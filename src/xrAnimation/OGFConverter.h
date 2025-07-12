@@ -90,6 +90,7 @@ public:
 
     bool FindChunk(u32 chunk_type);
     xr_unique_ptr<IReader> ReadChunk(u32 chunk_type);
+    void DebugListChunks();
 
     struct BoneData {
         shared_str name;
@@ -111,6 +112,7 @@ public:
 private:
     xr_unique_ptr<IReader> reader_;
     OGFHeader header_;
+    xr_vector<u8> file_data_;  // Store file data for memory reader
 
     void ReadHeader();
     void ParseChunkData(u32 chunk_type, IReader& chunk_reader);

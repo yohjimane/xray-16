@@ -1,5 +1,6 @@
 #include "stdafx.h"
 #include "OGFConverter.h"
+#include <cstdio>
 #include "xrCore/file_stream_reader.h"
 #include "xrCore/FS.h"
 
@@ -8,21 +9,52 @@ namespace Animation {
 
 // X-Ray OGF constants
 const u16 xrOGF_SMParamsVersion = 4;
+const u8 MT_NORMAL = 0;
+const u8 MT_HIERRARHY = 1;
+const u8 MT_PROGRESSIVE = 2;
 const u8 MT_SKELETON_ANIM = 3;
-const u8 MT_SKELETON_RIGID = 4;
+const u8 MT_SKELETON_GEOMDEF_PM = 4;
+const u8 MT_SKELETON_GEOMDEF_ST = 5;
+const u8 MT_LOD = 6;
+const u8 MT_TREE_ST = 7;
+const u8 MT_PARTICLE_EFFECT = 8;
+const u8 MT_PARTICLE_GROUP = 9;
+const u8 MT_SKELETON_RIGID = 10;
+const u8 MT_TREE_PM = 11;
 
 bool OGFReader::LoadFromFile(const shared_str& file_path) {
-    if (!FS.exist(file_path.c_str())) {
-        return false;
+    // First try to open as regular file
+    FILE* file = fopen(file_path.c_str(), "rb");
+    if (file) {
+        // Get file size
+        fseek(file, 0, SEEK_END);
+        long file_size = ftell(file);
+        fseek(file, 0, SEEK_SET);
+        
+        // Read file data - need to store it persistently
+        file_data_.resize(file_size);
+        size_t read_size = fread(file_data_.data(), 1, file_size, file);
+        fclose(file);
+        
+        if (read_size == file_size) {
+            reader_.reset(xr_new<IReader>(file_data_.data(), file_size));
+            if (reader_) {
+                ReadHeader();
+                return true;
+            }
+        }
     }
-
-    reader_.reset(FS.r_open(file_path.c_str()));
-    if (!reader_) {
-        return false;
+    
+    // Fall back to X-Ray FS if direct file access failed
+    if (FS.exist(file_path.c_str())) {
+        reader_.reset(FS.r_open(file_path.c_str()));
+        if (reader_) {
+            ReadHeader();
+            return true;
+        }
     }
-
-    ReadHeader();
-    return true;
+    
+    return false;
 }
 
 bool OGFReader::LoadFromMemory(const void* data, size_t size) {
@@ -44,6 +76,14 @@ void OGFReader::ReadHeader() {
         return;
     }
 
+    // OGF files start with the OGF_HEADER chunk
+    u32 chunk_type = reader_->r_u32();
+    u32 chunk_size = reader_->r_u32();
+    
+    if (chunk_type != OGF_HEADER) {
+        Msg("! Warning: First chunk is not OGF_HEADER (found 0x%08X)", chunk_type);
+    }
+
     header_.format_version = reader_->r_u8();
     header_.type = reader_->r_u8();
     header_.shader_id = reader_->r_u16();
@@ -62,7 +102,16 @@ bool OGFReader::FindChunk(u32 chunk_type) {
         return false;
     }
 
-    reader_->seek(sizeof(OGFHeader));
+    // Skip the header chunk
+    reader_->seek(0);
+    u32 first_chunk_type = reader_->r_u32();
+    u32 first_chunk_size = reader_->r_u32();
+    if (first_chunk_type == OGF_HEADER) {
+        reader_->advance(first_chunk_size);
+    } else {
+        // No header chunk, go back
+        reader_->seek(0);
+    }
 
     while (!reader_->eof()) {
         ChunkHeader chunk_header;
@@ -77,6 +126,63 @@ bool OGFReader::FindChunk(u32 chunk_type) {
     }
 
     return false;
+}
+
+void OGFReader::DebugListChunks() {
+    if (!reader_) {
+        return;
+    }
+
+    Msg("* OGF Chunks found:");
+    reader_->seek(0);  // Start from beginning
+
+    while (!reader_->eof()) {
+        ChunkHeader chunk_header;
+        u32 pos = reader_->tell();
+        
+        if (reader_->elapsed() < sizeof(ChunkHeader)) {
+            break;
+        }
+        
+        chunk_header.type = reader_->r_u32();
+        chunk_header.size = reader_->r_u32();
+
+        const char* chunk_name = "UNKNOWN";
+        switch (chunk_header.type) {
+            case OGF_HEADER: chunk_name = "OGF_HEADER"; break;
+            case OGF_TEXTURE: chunk_name = "OGF_TEXTURE"; break;
+            case OGF_VERTICES: chunk_name = "OGF_VERTICES"; break;
+            case OGF_INDICES: chunk_name = "OGF_INDICES"; break;
+            case OGF_SWIDATA: chunk_name = "OGF_SWIDATA"; break;
+            case OGF_CHILDREN: chunk_name = "OGF_CHILDREN"; break;
+            case OGF_CHILDREN_L: chunk_name = "OGF_CHILDREN_L"; break;
+            case OGF_S_BONE_NAMES: chunk_name = "OGF_S_BONE_NAMES"; break;
+            case OGF_S_MOTIONS: chunk_name = "OGF_S_MOTIONS"; break;
+            case OGF_S_SMPARAMS: chunk_name = "OGF_S_SMPARAMS"; break;
+            case OGF_S_IKDATA: chunk_name = "OGF_S_IKDATA"; break;
+            case OGF_S_USERDATA: chunk_name = "OGF_S_USERDATA"; break;
+            case OGF_S_DESC: chunk_name = "OGF_S_DESC"; break;
+            case OGF_S_MOTION_REFS: chunk_name = "OGF_S_MOTION_REFS"; break;
+        }
+        
+        Msg("  - Chunk 0x%02X (%s) at offset %d, size %d", chunk_header.type, chunk_name, pos, chunk_header.size);
+
+        // Skip this chunk
+        reader_->advance(chunk_header.size);
+        if (reader_->eof()) {
+            break;
+        }
+    }
+    
+    // Reset to after header
+    reader_->seek(0);
+    u32 first_chunk_type = reader_->r_u32();
+    u32 first_chunk_size = reader_->r_u32();
+    if (first_chunk_type == OGF_HEADER) {
+        reader_->advance(first_chunk_size);
+    } else {
+        reader_->seek(0);
+    }
 }
 
 xr_unique_ptr<IReader> OGFReader::ReadChunk(u32 chunk_type) {
@@ -101,6 +207,8 @@ xr_vector<OGFReader::BoneData> OGFReader::ReadBoneData() {
 
     u32 bone_count = chunk_reader->r_u32();
     bones.reserve(bone_count);
+    
+    Msg("* Reading %d bones from OGF_S_BONE_NAMES chunk", bone_count);
 
     // Read bone names and parent names from OGF_S_BONE_NAMES chunk
     for (u32 i = 0; i < bone_count; ++i) {
@@ -120,10 +228,19 @@ xr_vector<OGFReader::BoneData> OGFReader::ReadBoneData() {
         // Read OBB (oriented bounding box)
         chunk_reader->r(&bone.obb, sizeof(Fobb));
         
-        // Initialize other fields (will be filled from IK data if available)
-        bone.bind_transform.identity();
+        // Use OBB transform as the bind pose transform
+        bone.obb.xform_get(bone.bind_transform);
         bone.mass = 1.0f;
         bone.center_of_mass.set(0, 0, 0);
+        
+        // DEBUG: Print OBB data
+        Msg("    OBB translate: (%.3f, %.3f, %.3f)", 
+            bone.obb.m_translate.x, bone.obb.m_translate.y, bone.obb.m_translate.z);
+        Msg("    OBB halfsize: (%.3f, %.3f, %.3f)", 
+            bone.obb.m_halfsize.x, bone.obb.m_halfsize.y, bone.obb.m_halfsize.z);
+        
+        Msg("  - Bone %d: '%s' (parent: '%s')", i, bone.name.c_str(), 
+            bone.parent_name.size() ? bone.parent_name.c_str() : "<root>");
         
         bones.push_back(bone);
     }
@@ -131,39 +248,110 @@ xr_vector<OGFReader::BoneData> OGFReader::ReadBoneData() {
     // Read additional bone data from OGF_S_IKDATA chunk if available
     auto ik_reader = ReadChunk(OGF_S_IKDATA);
     if (ik_reader) {
+        Msg("* Reading IK data for %d bones using xrSDK format with shape validity check", bones.size());
+        
         for (u32 i = 0; i < bones.size() && !ik_reader->eof(); ++i) {
             BoneData& bone = bones[i];
             
-            u16 version = (u16)ik_reader->r_u32();
+            u32 start_pos = ik_reader->tell();
             
-            // Skip game material name
+            // Read version (uint32) - OGF_IKDATA_VERSION = 0x0001
+            u32 version = ik_reader->r_u32();
+            
+            // Read game material string
             shared_str game_mtl;
             ik_reader->r_stringZ(game_mtl);
             
-            // Skip shape data
-            ik_reader->advance(sizeof(SBoneShape));
+            // Read SBoneShape structure to check validity
+            struct {
+                u16 type;     // EShapeType: stNone=0, stBox=1, stSphere=2, stCylinder=3
+                u16 flags;
+                Fobb box;     // 60 bytes (15 floats)
+                Fsphere sphere; // 16 bytes (4 floats)
+                Fcylinder cylinder; // 32 bytes (8 floats)
+            } shape;
             
-            // Skip IK data based on version
-            if (version >= 0x0001) {
-                // Skip joint data
-                ik_reader->advance(sizeof(u32)); // type
-                for (int j = 0; j < 3; ++j) {
-                    ik_reader->advance(sizeof(float) * 2); // limits
-                    ik_reader->advance(sizeof(float) * 2); // spring/damping
-                }
-                ik_reader->advance(sizeof(float) * 4); // break force/torque, friction, spring
+            shape.type = ik_reader->r_u16();
+            shape.flags = ik_reader->r_u16();
+            ik_reader->r(&shape.box, sizeof(Fobb));
+            ik_reader->r(&shape.sphere, sizeof(Fsphere));
+            ik_reader->r(&shape.cylinder, sizeof(Fcylinder));
+            
+            // Check shape validity using same logic as xrSDK SBoneShape::Valid()
+            bool shape_valid = true;
+            switch (shape.type) {
+                case 1: // stBox
+                    shape_valid = !fis_zero(shape.box.m_halfsize.x) && 
+                                 !fis_zero(shape.box.m_halfsize.y) && 
+                                 !fis_zero(shape.box.m_halfsize.z);
+                    break;
+                case 2: // stSphere
+                    shape_valid = !fis_zero(shape.sphere.R);
+                    break;
+                case 3: // stCylinder
+                    shape_valid = !fis_zero(shape.cylinder.m_height) && 
+                                 !fis_zero(shape.cylinder.m_radius) &&
+                                 !fis_zero(shape.cylinder.m_direction.square_magnitude());
+                    break;
+                default: // stNone or other
+                    shape_valid = true;
+                    break;
             }
             
-            // Read bind transform
-            Fvector vXYZ, vT;
-            ik_reader->r_fvector3(vXYZ);
-            ik_reader->r_fvector3(vT);
-            bone.bind_transform.setXYZi(vXYZ);
-            bone.bind_transform.translate_over(vT);
+            Msg("  Bone[%d] '%s': version=0x%08X, material='%s', shape_type=%d, valid=%s, pos=%d", 
+                i, bone.name.c_str(), version, game_mtl.c_str(), shape.type, 
+                shape_valid ? "YES" : "NO", start_pos);
             
-            // Read mass and center of mass
+            if (!shape_valid) {
+                // Bone has invalid shape, no IK data written - use OBB fallback
+                bone.obb.xform_get(bone.bind_transform);
+                Msg("    Shape invalid, using OBB: (%.3f, %.3f, %.3f)", 
+                    bone.obb.m_translate.x, bone.obb.m_translate.y, bone.obb.m_translate.z);
+                continue; // Skip to next bone - no IK data for this bone
+            }
+            
+            // Skip SJointIKData::Export data (76 bytes total)
+            // u32 type + 3×(2×float + 2×float) + 2×float + u32 + 2×float + float
+            // = 4 + 48 + 8 + 4 + 8 + 4 = 76 bytes
+            ik_reader->advance(76);
+            
+            // Read bind pose data (rest_rotate, rest_offset from CBone::ExportOGF)
+            Fvector bind_rotation, bind_translation;
+            ik_reader->r_fvector3(bind_rotation);
+            ik_reader->r_fvector3(bind_translation);
+            
+            Msg("    bind_rotation: (%.6f, %.6f, %.6f)", bind_rotation.x, bind_rotation.y, bind_rotation.z);
+            Msg("    bind_translation: (%.6f, %.6f, %.6f)", bind_translation.x, bind_translation.y, bind_translation.z);
+            
+            // Validate bind pose data
+            bool data_corrupted = false;
+            float max_reasonable = 1000.0f;
+            
+            if (!_finite(bind_translation.x) || !_finite(bind_translation.y) || !_finite(bind_translation.z) ||
+                _abs(bind_translation.x) > max_reasonable || _abs(bind_translation.y) > max_reasonable || 
+                _abs(bind_translation.z) > max_reasonable) {
+                data_corrupted = true;
+                Msg("    *** Bind pose data corrupted, using OBB transform");
+            }
+            
+            if (data_corrupted) {
+                // Use OBB transform as fallback
+                bone.obb.xform_get(bone.bind_transform);
+                Msg("    Using OBB: (%.3f, %.3f, %.3f)", 
+                    bone.obb.m_translate.x, bone.obb.m_translate.y, bone.obb.m_translate.z);
+            } else {
+                // Build transform from bind pose data
+                // NOTE: X-Ray uses XYZ rotation order
+                bone.bind_transform.setXYZi(bind_rotation);
+                bone.bind_transform.translate_over(bind_translation);
+            }
+            
+            // Read mass data (1 float + 3 floats)
             bone.mass = ik_reader->r_float();
             ik_reader->r_fvector3(bone.center_of_mass);
+            
+            Msg("    mass: %.3f, center_of_mass: (%.3f, %.3f, %.3f)", 
+                bone.mass, bone.center_of_mass.x, bone.center_of_mass.y, bone.center_of_mass.z);
         }
     }
 
@@ -404,34 +592,99 @@ void OGFToOzzSkeletonConverter::BuildBoneHierarchy(
     const xr_vector<Fmatrix>& bind_poses,
     ozz::animation::offline::RawSkeleton& skeleton
 ) {
-    // Create joint map for hierarchy building
-    xr_vector<ozz::animation::offline::RawSkeleton::Joint*> joints(bone_names.size());
-
-    // Create all joints first
-    for (size_t i = 0; i < bone_names.size(); ++i) {
-        auto* joint = new ozz::animation::offline::RawSkeleton::Joint();
-        joint->name = bone_names[i].c_str();
-        joint->transform = TransformConverter::XRayToOzz(bind_poses[i]);
-        joints[i] = joint;
-    }
-
-    // Build hierarchy
-    for (size_t i = 0; i < bone_names.size(); ++i) {
-        s16 parent_index = parent_indices[i];
-
-        if (parent_index == -1) {
-            // Root joint
-            skeleton.roots.push_back(*joints[i]);
-        } else if (parent_index < static_cast<s16>(joints.size())) {
-            // Child joint
-            joints[parent_index]->children.push_back(*joints[i]);
+    Msg("* Building bone hierarchy for %d bones", bone_names.size());
+    
+    // First, find all root bones and create them
+    xr_vector<int> root_indices;
+    for (size_t i = 0; i < parent_indices.size(); ++i) {
+        if (parent_indices[i] == -1) {
+            root_indices.push_back(static_cast<int>(i));
         }
     }
-
-    // Clean up temporary joint pointers
-    for (auto* joint : joints) {
-        delete joint;
+    
+    Msg("  - Found %d root bones", root_indices.size());
+    skeleton.roots.resize(root_indices.size());
+    
+    // Recursive lambda to build joint hierarchy
+    auto BuildJoint = [&](int bone_index, ozz::animation::offline::RawSkeleton::Joint& joint, auto& self) -> void {
+            // Set joint properties
+            joint.name = bone_names[bone_index].c_str();
+            joint.transform = TransformConverter::XRayToOzz(bind_poses[bone_index]);
+            
+            // DEBUG: Print bone transform data
+            const Fmatrix& orig_matrix = bind_poses[bone_index];
+            Msg("    Bone[%d] '%s': Original pos(%.3f, %.3f, %.3f)", 
+                bone_index, joint.name.c_str(), orig_matrix.c.x, orig_matrix.c.y, orig_matrix.c.z);
+            Msg("                     Converted pos(%.3f, %.3f, %.3f)", 
+                joint.transform.translation.x, joint.transform.translation.y, joint.transform.translation.z);
+            Msg("                     Scale(%.3f, %.3f, %.3f)", 
+                joint.transform.scale.x, joint.transform.scale.y, joint.transform.scale.z);
+            
+            // Find all children of this bone
+            xr_vector<int> child_indices;
+            for (size_t i = 0; i < parent_indices.size(); ++i) {
+                if (parent_indices[i] == bone_index) {
+                    child_indices.push_back(static_cast<int>(i));
+                }
+            }
+            
+            // Recursively build children
+            if (!child_indices.empty()) {
+                joint.children.resize(child_indices.size());
+                for (size_t i = 0; i < child_indices.size(); ++i) {
+                    self(child_indices[i], joint.children[i], self);
+                }
+            }
+        };
+    
+    // Build each root and its hierarchy
+    for (size_t i = 0; i < root_indices.size(); ++i) {
+        Msg("  - Building hierarchy from root: %s", bone_names[root_indices[i]].c_str());
+        BuildJoint(root_indices[i], skeleton.roots[i], BuildJoint);
     }
+    
+    // DEBUG: Calculate skeleton bounds
+    float min_x = 1e6, max_x = -1e6, min_y = 1e6, max_y = -1e6, min_z = 1e6, max_z = -1e6;
+    
+    auto CalculateBounds = [&](const ozz::animation::offline::RawSkeleton::Joint& joint, auto& self) -> void {
+            min_x = _min(min_x, joint.transform.translation.x);
+            max_x = _max(max_x, joint.transform.translation.x);
+            min_y = _min(min_y, joint.transform.translation.y);
+            max_y = _max(max_y, joint.transform.translation.y);
+            min_z = _min(min_z, joint.transform.translation.z);
+            max_z = _max(max_z, joint.transform.translation.z);
+            
+            for (const auto& child : joint.children) {
+                self(child, self);
+            }
+        };
+    
+    for (const auto& root : skeleton.roots) {
+        CalculateBounds(root, CalculateBounds);
+    }
+    
+    Msg("  - Skeleton bounds: X[%.3f, %.3f], Y[%.3f, %.3f], Z[%.3f, %.3f]", 
+        min_x, max_x, min_y, max_y, min_z, max_z);
+    float size_x = max_x - min_x;
+    float size_y = max_y - min_y; 
+    float size_z = max_z - min_z;
+    float size = _max(size_x, _max(size_y, size_z));
+    Msg("  - Skeleton size: %.3f units", size);
+    
+    // Count total joints
+    int total_joints = 0;
+    auto CountJoints = [&](const ozz::animation::offline::RawSkeleton::Joint& joint, auto& self) -> void {
+            total_joints++;
+            for (const auto& child : joint.children) {
+                self(child, self);
+            }
+        };
+    
+    for (const auto& root : skeleton.roots) {
+        CountJoints(root, CountJoints);
+    }
+    
+    Msg("* Skeleton hierarchy built - roots: %d, total joints: %d", skeleton.roots.size(), total_joints);
 }
 
 ozz::math::Transform OGFToOzzSkeletonConverter::ConvertBindPose(const Fmatrix& xray_matrix) {
@@ -533,15 +786,43 @@ IFormatConverter::ConversionResult OGFConverter::Convert(const shared_str& input
         }
 
         // Check if it's a skeleton type
-        if (reader_.GetHeader().type != MT_SKELETON_ANIM && reader_.GetHeader().type != MT_SKELETON_RIGID) {
-            result.error_message = "OGF file is not a skeleton type";
+        u8 ogf_type = reader_.GetHeader().type;
+        
+        // Log header info
+        Msg("* OGF Header Info:");
+        Msg("  - Format version: %d", reader_.GetHeader().format_version);
+        Msg("  - Type: %d", ogf_type);
+        Msg("  - Shader ID: %d", reader_.GetHeader().shader_id);
+        
+        // Check if it's a skeleton type or hierarchical mesh that might contain skeleton
+        if (ogf_type != MT_SKELETON_ANIM && ogf_type != MT_SKELETON_RIGID && 
+            ogf_type != MT_SKELETON_GEOMDEF_PM && ogf_type != MT_SKELETON_GEOMDEF_ST &&
+            ogf_type != MT_NORMAL && ogf_type != MT_HIERRARHY) {
+            string256 error_buf;
+            xr_sprintf(error_buf, "OGF file is not a supported type (type=%d)", ogf_type);
+            result.error_message = error_buf;
             return result;
+        }
+        
+        // Debug: List all chunks in the file
+        reader_.DebugListChunks();
+        
+        // For hierarchical meshes, we need to look into children chunks
+        if (ogf_type == MT_HIERRARHY) {
+            Msg("* This is a hierarchical mesh - checking for skeleton in children chunks...");
+            // TODO: Parse OGF_CHILDREN chunk and look for skeleton data
         }
 
         // Parse OGF data
         auto parse_result = parser_.Parse(reader_);
+        
+        // Check if we actually found skeleton data
         if (parse_result.bone_names.empty()) {
-            result.error_message = "No bones found in OGF file";
+            if (ogf_type == MT_NORMAL) {
+                result.error_message = "This is a regular mesh file (MT_NORMAL), not a skeleton. Please use a skeleton OGF file.";
+            } else {
+                result.error_message = "No bones found in OGF file";
+            }
             return result;
         }
 
