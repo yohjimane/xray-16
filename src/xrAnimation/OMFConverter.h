@@ -99,13 +99,14 @@ public:
     bool LoadFromMemory(const void* data, size_t size);
     
     const OMFHeader& GetHeader() const { return header_; }
+    bool IsOGFFormat() const { return is_ogf_format_; }
     
     xr_vector<OMFMotionDef> ReadMotionDefs();
     xr_vector<OMFBoneMotion> ReadBoneMotions();
     
     // OGF motion format support
     xr_vector<OMFMotionDef> ReadOGFMotionDefs();
-    xr_vector<OMFBoneMotion> ReadOGFBoneMotions();
+    xr_vector<OMFBoneMotion> ReadOGFBoneMotions(u32 bone_count);
     
 private:
     xr_unique_ptr<IReader> reader_;
@@ -116,11 +117,13 @@ private:
     void ReadHeader();
     void ReadMotionParams(IReader& reader, OMFMotionDef& motion_def);
     void ReadCompressedMotion(IReader& reader, OMFBoneMotion& bone_motion);
+    void ReadCompressedMotion(IReader& reader, OMFBoneMotion& bone_motion, u32 num_bones, u32 motion_length);
     
     // Decompression helpers
     Fquaternion DecompressQuaternion(u64 packed) const;
     Fvector DecompressTranslation(u32 packed, const Fvector& init, const Fvector& size) const;
     void DecompressMotionKeys(IReader& reader, u32 flags, OMFBoneData& bone_data);
+    void DecompressMotionKeys(IReader& reader, u32 flags, OMFBoneData& bone_data, u32 motion_length);
 };
 
 class OMFToOzzAnimationConverter {

@@ -167,7 +167,8 @@ public:
     struct ParseResult {
         xr_vector<shared_str> bone_names;
         xr_vector<s16> parent_indices;
-        xr_vector<Fmatrix> bind_poses;
+        xr_vector<Fmatrix> bind_poses;  // World space bind poses
+        xr_vector<Fmatrix> local_transforms;  // Local space transforms from IK data
         xr_vector<XRayFormatSpec::BoneMotion> motions;
         XRayFormatSpec::MotionParams motion_params;
         xr_vector<XRayMetadata::IKConstraints> ik_data;
@@ -207,6 +208,7 @@ private:
         const xr_vector<shared_str>& bone_names,
         const xr_vector<s16>& parent_indices,
         const xr_vector<Fmatrix>& bind_poses,
+        const xr_vector<Fmatrix>& local_transforms,
         ozz::animation::offline::RawSkeleton& skeleton
     );
 

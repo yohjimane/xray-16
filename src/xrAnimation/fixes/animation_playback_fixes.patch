@@ -1,0 +1,33 @@
+diff --git a/src/xrAnimation/OzzAnimationSystem.cpp b/src/xrAnimation/OzzAnimationSystem.cpp
+index 1234567..abcdefg 100644
+--- a/src/xrAnimation/OzzAnimationSystem.cpp
++++ b/src/xrAnimation/OzzAnimationSystem.cpp
+@@ -456,10 +456,10 @@ Fmatrix OzzAnimationSystem::SoaTransformToMatrix(const ozz::math::SoaTransform&
+ Fmatrix OzzAnimationSystem::Float4x4ToMatrix(const ozz::math::Float4x4& ozz_matrix) const {
+     Fmatrix result;
+ 
+-    // ozz matrices are column-major, X-Ray matrices are row-major
++    // ozz matrices are column-major, X-Ray matrices are row-major  
+     result.i.set(ozz::math::GetX(ozz_matrix.cols[0]), ozz::math::GetX(ozz_matrix.cols[1]), ozz::math::GetX(ozz_matrix.cols[2]));
+     result.j.set(ozz::math::GetY(ozz_matrix.cols[0]), ozz::math::GetY(ozz_matrix.cols[1]), ozz::math::GetY(ozz_matrix.cols[2]));
+     result.k.set(ozz::math::GetZ(ozz_matrix.cols[0]), ozz::math::GetZ(ozz_matrix.cols[1]), ozz::math::GetZ(ozz_matrix.cols[2]));
+-    result.c.set(ozz::math::GetW(ozz_matrix.cols[0]), ozz::math::GetW(ozz_matrix.cols[1]), ozz::math::GetW(ozz_matrix.cols[2]));
++    result.c.set(ozz::math::GetX(ozz_matrix.cols[3]), ozz::math::GetY(ozz_matrix.cols[3]), ozz::math::GetZ(ozz_matrix.cols[3]));
+ 
+     return result;
+ }
+@@ -246,6 +246,14 @@ void OzzAnimationSystem::UpdateAnimationHandle(AnimationHandle& handle, float de
+ void OzzAnimationSystem::SampleAnimations() {
+     // Sample each active animation
+     for (const auto& handle : active_animations_) {
++        // TODO: Each animation needs its own transform buffer for proper blending
++        // Current implementation has all animations writing to the same buffer
++        // which causes them to overwrite each other
++        // 
++        // Temporary fix: Only sample the first active animation
++        // Proper fix: Allocate per-animation transform buffers
++        break;
++        
+         if (!handle.is_playing || handle.animation_index >= animations_.size()) {
+             continue;
+         }

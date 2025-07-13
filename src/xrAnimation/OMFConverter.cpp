@@ -229,7 +229,10 @@ void OMFReader::ReadMotionParams(IReader& reader, OMFMotionDef& motion_def) {
 
 xr_vector<OMFBoneMotion> OMFReader::ReadBoneMotions() {
     if (is_ogf_format_) {
-        return ReadOGFBoneMotions();
+        // For OGF format, we need the bone count which should be provided externally
+        // This function shouldn't be called for OGF format without bone count
+        Msg("! Warning: ReadBoneMotions called for OGF format without bone count");
+        return xr_vector<OMFBoneMotion>();
     }
     
     xr_vector<OMFBoneMotion> bone_motions;
@@ -273,8 +276,9 @@ xr_vector<OMFBoneMotion> OMFReader::ReadBoneMotions() {
 }
 
 void OMFReader::ReadCompressedMotion(IReader& reader, OMFBoneMotion& bone_motion) {
-    // Read bone count for this motion
+    // Standard OMF format - reads bone count from data
     u8 bone_count = reader.r_u8();
+    Msg("    - ReadCompressedMotion: motion '%s' has %d bones", bone_motion.name.c_str(), bone_count);
     bone_motion.bone_data.reserve(bone_count);
     
     // Read bone data
@@ -288,6 +292,7 @@ void OMFReader::ReadCompressedMotion(IReader& reader, OMFBoneMotion& bone_motion
         bone_data.flags = reader.r_u8();
         
         // Decompress motion keys for this specific bone
+        // Standard OMF has variable number of keys per bone
         DecompressMotionKeys(reader, bone_data.flags, bone_data);
         
         bone_motion.bone_data.push_back(bone_data);
@@ -358,6 +363,101 @@ void OMFReader::DecompressMotionKeys(IReader& reader, u32 flags, OMFBoneData& bo
     }
 }
 
+void OMFReader::ReadCompressedMotion(IReader& reader, OMFBoneMotion& bone_motion, u32 num_bones, u32 motion_length) {
+    // OGF format - bone count is provided externally (all skeleton bones)
+    bone_motion.bone_data.reserve(num_bones);
+    
+    // Read data for ALL bones in skeleton
+    for (u32 bone_idx = 0; bone_idx < num_bones; ++bone_idx) {
+        OMFBoneData bone_data;
+        bone_data.bone_id = bone_idx;  // Sequential bone IDs
+        
+        // Read flags for this bone
+        bone_data.flags = reader.r_u8();
+        
+        // Decompress motion keys based on flags
+        DecompressMotionKeys(reader, bone_data.flags, bone_data, motion_length);
+        
+        bone_motion.bone_data.push_back(bone_data);
+    }
+}
+
+void OMFReader::DecompressMotionKeys(IReader& reader, u32 flags, OMFBoneData& bone_data, u32 motion_length) {
+    // OGF format version - motion length is provided
+    // Order is important: rotation first, then translation
+    
+    // Rotation
+    if (flags & flRKeyAbsent) {
+        // Single rotation key
+        u64 packed_quat = reader.r_u64();
+        Fquaternion rotation = DecompressQuaternion(packed_quat);
+        bone_data.keys_rotation_frames.push_back(0);
+        bone_data.keys_rotation.push_back(rotation);
+    } else {
+        // Multiple rotation keys
+        reader.r_u32(); // Skip CRC
+        for (u32 i = 0; i < motion_length; ++i) {
+            u64 packed_quat = reader.r_u64();
+            Fquaternion rotation = DecompressQuaternion(packed_quat);
+            bone_data.keys_rotation_frames.push_back(i);
+            bone_data.keys_rotation.push_back(rotation);
+        }
+    }
+    
+    // Translation
+    if (flags & flTKeyPresent) {
+        reader.r_u32(); // Skip CRC
+        bool use_16bit = (flags & flTKey16IsBit) != 0;
+        
+        // First read all compressed values
+        xr_vector<Fvector> compressed_translations;
+        compressed_translations.reserve(motion_length);
+        
+        for (u32 i = 0; i < motion_length; ++i) {
+            Fvector compressed;
+            if (use_16bit) {
+                // 16-bit precision (3 x 16-bit values)
+                compressed.x = float(s16(reader.r_u16()));
+                compressed.y = float(s16(reader.r_u16()));
+                compressed.z = float(s16(reader.r_u16()));
+            } else {
+                // 8-bit precision (3 x 8-bit values)
+                compressed.x = float(s8(reader.r_u8()));
+                compressed.y = float(s8(reader.r_u8()));
+                compressed.z = float(s8(reader.r_u8()));
+            }
+            compressed_translations.push_back(compressed);
+        }
+        
+        // Then read translation size and init
+        Fvector t_size, t_init;
+        reader.r_fvector3(t_size);
+        reader.r_fvector3(t_init);
+        
+        // Store initial values for decompression
+        bone_data.translation_size = t_size;
+        bone_data.initial_translation = t_init;
+        
+        // Now decompress all values
+        for (u32 i = 0; i < motion_length; ++i) {
+            const Fvector& compressed = compressed_translations[i];
+            Fvector translation;
+            
+            translation.x = t_init.x + compressed.x * t_size.x;
+            translation.y = t_init.y + compressed.y * t_size.y;
+            translation.z = t_init.z + compressed.z * t_size.z;
+            
+            bone_data.keys_translation_frames.push_back(i);
+            bone_data.keys_translation.push_back(translation);
+        }
+    } else {
+        // Single translation key
+        Fvector translation;
+        reader.r_fvector3(translation);
+        bone_data.keys_translation_frames.push_back(0);
+        bone_data.keys_translation.push_back(translation);
+    }
+}
 
 Fquaternion OMFReader::DecompressQuaternion(u64 packed) const {
     // X-Ray uses 16-bit per component quaternion compression
@@ -451,10 +551,16 @@ ozz::animation::offline::RawAnimation OMFToOzzAnimationConverter::ConvertSingleM
     
     // Map bone motion data to skeleton tracks
     // We need to match bone IDs from OMF to bone indices in the skeleton
+    Msg("* Motion '%s' has %d bone data entries", omf_motion.name.c_str(), omf_motion.bone_data.size());
     for (const auto& bone_data : omf_motion.bone_data) {
         // For now, use bone_id as the track index (this assumes they match)
         // TODO: Implement proper bone name/ID mapping
         size_t track_idx = bone_data.bone_id;
+        
+        Msg("  - Bone ID %d: %d translation keys, %d rotation keys", 
+            bone_data.bone_id, 
+            bone_data.keys_translation_frames.size(),
+            bone_data.keys_rotation_frames.size());
         
         if (track_idx < animation.tracks.size()) {
             auto& track = animation.tracks[track_idx];
@@ -467,6 +573,13 @@ ozz::animation::offline::RawAnimation OMFToOzzAnimationConverter::ConvertSingleM
                 
                 // Apply coordinate system conversion (X-Ray Y-up to ozz Z-up)
                 key.value = ozz::math::Float3(t.x, t.z, -t.y);
+                
+                // Debug first few keys
+                if (i < 3 && track_idx < 5) {
+                    Msg("    Track %d, key %d: time=%.3f, pos=(%.3f, %.3f, %.3f) -> (%.3f, %.3f, %.3f)",
+                        track_idx, i, key.time, t.x, t.y, t.z, key.value.x, key.value.y, key.value.z);
+                }
+                
                 track.translations.push_back(key);
             }
             
@@ -491,8 +604,11 @@ ozz::animation::offline::RawAnimation OMFToOzzAnimationConverter::ConvertSingleM
     }
     
     // Ensure all tracks have at least one key (fallback for bones without animation data)
-    for (auto& track : animation.tracks) {
+    int tracks_without_data = 0;
+    for (size_t i = 0; i < animation.tracks.size(); ++i) {
+        auto& track = animation.tracks[i];
         if (track.translations.empty()) {
+            tracks_without_data++;
             ozz::animation::offline::RawAnimation::TranslationKey key;
             key.time = 0.0f;
             key.value = ozz::math::Float3::zero();
@@ -513,6 +629,9 @@ ozz::animation::offline::RawAnimation OMFToOzzAnimationConverter::ConvertSingleM
             track.scales.push_back(key);
         }
     }
+    
+    Msg("* %d tracks out of %d had no animation data and used fallback values", 
+        tracks_without_data, animation.tracks.size());
     
     return animation;
 }
@@ -627,8 +746,13 @@ IFormatConverter::ConversionResult OMFConverter::ConvertWithSkeleton(
         // Read motion definitions
         auto motion_defs = reader_.ReadMotionDefs();
         
-        // Read bone motions
-        auto bone_motions = reader_.ReadBoneMotions();
+        // Read bone motions - use bone count for OGF format
+        xr_vector<OMFBoneMotion> bone_motions;
+        if (reader_.IsOGFFormat()) {
+            bone_motions = reader_.ReadOGFBoneMotions(static_cast<u32>(bone_names.size()));
+        } else {
+            bone_motions = reader_.ReadBoneMotions();
+        }
         
         if (bone_motions.empty()) {
             result.error_message = "No motions found in OMF file";
@@ -764,7 +888,7 @@ xr_vector<OMFMotionDef> OMFReader::ReadOGFMotionDefs() {
     return motion_defs;
 }
 
-xr_vector<OMFBoneMotion> OMFReader::ReadOGFBoneMotions() {
+xr_vector<OMFBoneMotion> OMFReader::ReadOGFBoneMotions(u32 bone_count) {
     xr_vector<OMFBoneMotion> bone_motions;
     
     if (!reader_) {
@@ -777,11 +901,16 @@ xr_vector<OMFBoneMotion> OMFReader::ReadOGFBoneMotions() {
         return bone_motions;
     }
     
-    // Skip chunk 0 (motion count)
+    // Get motion count from chunk 0
+    u32 expected_motion_count = 0;
     auto count_chunk = motions_chunk->open_chunk(0);
     if (count_chunk) {
+        expected_motion_count = count_chunk->r_u32();
         count_chunk->close();
     }
+    
+    // Use provided bone count
+    u32 num_bones = bone_count;
     
     // Read motion data starting from chunk 1
     u32 motion_idx = 1;
@@ -795,12 +924,14 @@ xr_vector<OMFBoneMotion> OMFReader::ReadOGFBoneMotions() {
         motion_reader->r_stringZ(temp_name);
         bone_motion.name = temp_name;
         
-        // Read motion data length and flags
+        // Read motion length (number of frames)
         bone_motion.motion_length = motion_reader->r_u32();
-        u8 motion_flags = motion_reader->r_u8();
         
-        // Read compressed motion data
-        ReadCompressedMotion(*motion_reader, bone_motion);
+        Msg("    - Motion '%s': length=%d frames, reading data for %d bones", 
+            bone_motion.name.c_str(), bone_motion.motion_length, num_bones);
+        
+        // Read compressed motion data for ALL bones
+        ReadCompressedMotion(*motion_reader, bone_motion, num_bones, bone_motion.motion_length);
         
         bone_motions.push_back(bone_motion);
         

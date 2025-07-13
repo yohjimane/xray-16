@@ -261,39 +261,33 @@ void ConversionValidator::ComputeCompressionMetrics(const IFormatConverter::Conv
 }
 
 ozz::math::Transform TransformConverter::XRayToOzz(const Fmatrix& xray_matrix) {
-    // Apply X-Ray to ozz coordinate system conversion
-    // X-Ray uses Y-up, ozz/OpenGL uses Z-up (based on blender-xray MATRIX_BONE)
-    // Transform: X→X, Y→Z, Z→-Y
+    // Both X-Ray and ozz use Y-up coordinate systems
+    // Direct conversion for now to debug the issue
     
-    Fmatrix converted_matrix;
+    ozz::math::Transform result;
     
-    // Apply coordinate conversion matrix similar to blender-xray MATRIX_BONE
-    // X-Ray: (X, Y, Z) → ozz: (X, Z, -Y)
-    converted_matrix.i.set(xray_matrix.i.x,  xray_matrix.i.z, -xray_matrix.i.y);  // X-axis
-    converted_matrix.j.set(xray_matrix.j.x,  xray_matrix.j.z, -xray_matrix.j.y);  // Y-axis  
-    converted_matrix.k.set(xray_matrix.k.x,  xray_matrix.k.z, -xray_matrix.k.y);  // Z-axis
-    converted_matrix.c.set(xray_matrix.c.x,  xray_matrix.c.z, -xray_matrix.c.y);  // Translation
-
-    // Extract translation from converted matrix
-    ozz::math::Float3 translation = ozz::math::Float3(
-        converted_matrix.c.x,
-        converted_matrix.c.y, 
-        converted_matrix.c.z
+    // Extract translation - keep Y positive for correct positioning
+    result.translation = ozz::math::Float3(
+        xray_matrix.c.x,
+        xray_matrix.c.y,  // Keep Y as-is
+        xray_matrix.c.z
     );
-
-    // Extract rotation (convert to quaternion)
-    Fquaternion converted_quat;
-    converted_quat.set(converted_matrix);
-    ozz::math::Quaternion rotation = XRayQuatToOzz(converted_quat);
-
-    // Extract scale from converted matrix
-    Fvector scale_vec;
-    scale_vec.x = converted_matrix.i.magnitude();
-    scale_vec.y = converted_matrix.j.magnitude();
-    scale_vec.z = converted_matrix.k.magnitude();
-    ozz::math::Float3 scale = ozz::math::Float3(scale_vec.x, scale_vec.y, scale_vec.z);
-
-    return ozz::math::Transform{translation, rotation, scale};
+    
+    // Extract rotation as quaternion and conjugate for handedness conversion
+    // Left-handed to right-handed conversion requires conjugating the quaternion
+    Fquaternion quat;
+    quat.set(xray_matrix);
+    // Conjugate: negate x, y, z components, keep w the same
+    result.rotation = ozz::math::Quaternion(-quat.x, -quat.y, -quat.z, quat.w);
+    
+    // Extract scale
+    result.scale = ozz::math::Float3(
+        xray_matrix.i.magnitude(),
+        xray_matrix.j.magnitude(),
+        xray_matrix.k.magnitude()
+    );
+    
+    return result;
 }
 
 Fmatrix TransformConverter::OzzToXRay(const ozz::math::Transform& ozz_transform) {
@@ -325,11 +319,13 @@ Fquaternion TransformConverter::OzzQuatToXRay(const ozz::math::Quaternion& ozz_q
 }
 
 ozz::math::Float3 TransformConverter::XRayVecToOzz(const Fvector& xray_vec) {
-    return ozz::math::Float3(xray_vec.x, xray_vec.y, xray_vec.z);
+    // X-Ray: (X, Y, Z) → ozz: (X, Z, Y)
+    return ozz::math::Float3(xray_vec.x, xray_vec.z, xray_vec.y);
 }
 
 Fvector TransformConverter::OzzVecToXRay(const ozz::math::Float3& ozz_vec) {
-    return Fvector().set(ozz_vec.x, ozz_vec.y, ozz_vec.z);
+    // ozz: (X, Y, Z) → X-Ray: (X, Z, Y)
+    return Fvector().set(ozz_vec.x, ozz_vec.z, ozz_vec.y);
 }
 
 OzzAssetBuilder::BuildResult OzzAssetBuilder::BuildAssets(

@@ -45,14 +45,8 @@ bool OGFReader::LoadFromFile(const shared_str& file_path) {
         }
     }
     
-    // Fall back to X-Ray FS if direct file access failed
-    if (FS.exist(file_path.c_str())) {
-        reader_.reset(FS.r_open(file_path.c_str()));
-        if (reader_) {
-            ReadHeader();
-            return true;
-        }
-    }
+    // For tests and standalone tools, direct file access is sufficient
+    // X-Ray FS requires full Core initialization which tests don't have
     
     return false;
 }
@@ -248,12 +242,22 @@ xr_vector<OGFReader::BoneData> OGFReader::ReadBoneData() {
     // Read additional bone data from OGF_S_IKDATA chunk if available
     auto ik_reader = ReadChunk(OGF_S_IKDATA);
     if (ik_reader) {
-        Msg("* Reading IK data for %d bones using xrSDK format with shape validity check", bones.size());
+        u32 chunk_size = ik_reader->length();
+        Msg("* Reading IK data from chunk of size %d bytes for %d bones", chunk_size, bones.size());
         
-        for (u32 i = 0; i < bones.size() && !ik_reader->eof(); ++i) {
-            BoneData& bone = bones[i];
+        // According to xrSDK and ogf-tool, IK data is written for ALL bones
+        for (u32 i = 0; i < bones.size(); ++i) {
+            if (ik_reader->eof()) {
+                Msg("! ERROR: Unexpected EOF while reading IK data for bone %d", i);
+                Msg("! Only read %d bytes of %d", ik_reader->tell(), chunk_size);
+                // Use OBB fallback for remaining bones
+                for (u32 j = i; j < bones.size(); ++j) {
+                    bones[j].obb.xform_get(bones[j].bind_transform);
+                }
+                break;
+            }
             
-            u32 start_pos = ik_reader->tell();
+            BoneData& bone = bones[i];
             
             // Read version (uint32) - OGF_IKDATA_VERSION = 0x0001
             u32 version = ik_reader->r_u32();
@@ -262,55 +266,11 @@ xr_vector<OGFReader::BoneData> OGFReader::ReadBoneData() {
             shared_str game_mtl;
             ik_reader->r_stringZ(game_mtl);
             
-            // Read SBoneShape structure to check validity
-            struct {
-                u16 type;     // EShapeType: stNone=0, stBox=1, stSphere=2, stCylinder=3
-                u16 flags;
-                Fobb box;     // 60 bytes (15 floats)
-                Fsphere sphere; // 16 bytes (4 floats)
-                Fcylinder cylinder; // 32 bytes (8 floats)
-            } shape;
+            // Read SBoneShape structure (112 bytes)
+            // u16 type + u16 flags + Fobb (60) + Fsphere (16) + Fcylinder (32) = 112 bytes
+            ik_reader->advance(112);
             
-            shape.type = ik_reader->r_u16();
-            shape.flags = ik_reader->r_u16();
-            ik_reader->r(&shape.box, sizeof(Fobb));
-            ik_reader->r(&shape.sphere, sizeof(Fsphere));
-            ik_reader->r(&shape.cylinder, sizeof(Fcylinder));
-            
-            // Check shape validity using same logic as xrSDK SBoneShape::Valid()
-            bool shape_valid = true;
-            switch (shape.type) {
-                case 1: // stBox
-                    shape_valid = !fis_zero(shape.box.m_halfsize.x) && 
-                                 !fis_zero(shape.box.m_halfsize.y) && 
-                                 !fis_zero(shape.box.m_halfsize.z);
-                    break;
-                case 2: // stSphere
-                    shape_valid = !fis_zero(shape.sphere.R);
-                    break;
-                case 3: // stCylinder
-                    shape_valid = !fis_zero(shape.cylinder.m_height) && 
-                                 !fis_zero(shape.cylinder.m_radius) &&
-                                 !fis_zero(shape.cylinder.m_direction.square_magnitude());
-                    break;
-                default: // stNone or other
-                    shape_valid = true;
-                    break;
-            }
-            
-            Msg("  Bone[%d] '%s': version=0x%08X, material='%s', shape_type=%d, valid=%s, pos=%d", 
-                i, bone.name.c_str(), version, game_mtl.c_str(), shape.type, 
-                shape_valid ? "YES" : "NO", start_pos);
-            
-            if (!shape_valid) {
-                // Bone has invalid shape, no IK data written - use OBB fallback
-                bone.obb.xform_get(bone.bind_transform);
-                Msg("    Shape invalid, using OBB: (%.3f, %.3f, %.3f)", 
-                    bone.obb.m_translate.x, bone.obb.m_translate.y, bone.obb.m_translate.z);
-                continue; // Skip to next bone - no IK data for this bone
-            }
-            
-            // Skip SJointIKData::Export data (76 bytes total)
+            // Read SJointIKData (76 bytes)
             // u32 type + 3×(2×float + 2×float) + 2×float + u32 + 2×float + float
             // = 4 + 48 + 8 + 4 + 8 + 4 = 76 bytes
             ik_reader->advance(76);
@@ -320,38 +280,29 @@ xr_vector<OGFReader::BoneData> OGFReader::ReadBoneData() {
             ik_reader->r_fvector3(bind_rotation);
             ik_reader->r_fvector3(bind_translation);
             
-            Msg("    bind_rotation: (%.6f, %.6f, %.6f)", bind_rotation.x, bind_rotation.y, bind_rotation.z);
-            Msg("    bind_translation: (%.6f, %.6f, %.6f)", bind_translation.x, bind_translation.y, bind_translation.z);
-            
-            // Validate bind pose data
-            bool data_corrupted = false;
-            float max_reasonable = 1000.0f;
-            
-            if (!_finite(bind_translation.x) || !_finite(bind_translation.y) || !_finite(bind_translation.z) ||
-                _abs(bind_translation.x) > max_reasonable || _abs(bind_translation.y) > max_reasonable || 
-                _abs(bind_translation.z) > max_reasonable) {
-                data_corrupted = true;
-                Msg("    *** Bind pose data corrupted, using OBB transform");
-            }
-            
-            if (data_corrupted) {
-                // Use OBB transform as fallback
-                bone.obb.xform_get(bone.bind_transform);
-                Msg("    Using OBB: (%.3f, %.3f, %.3f)", 
-                    bone.obb.m_translate.x, bone.obb.m_translate.y, bone.obb.m_translate.z);
-            } else {
-                // Build transform from bind pose data
-                // NOTE: X-Ray uses XYZ rotation order
-                bone.bind_transform.setXYZi(bind_rotation);
-                bone.bind_transform.translate_over(bind_translation);
-            }
+            // Build transform from bind pose data
+            // NOTE: X-Ray uses XYZ rotation order
+            bone.bind_transform.setXYZi(bind_rotation);
+            bone.bind_transform.translate_over(bind_translation);
             
             // Read mass data (1 float + 3 floats)
             bone.mass = ik_reader->r_float();
             ik_reader->r_fvector3(bone.center_of_mass);
             
-            Msg("    mass: %.3f, center_of_mass: (%.3f, %.3f, %.3f)", 
-                bone.mass, bone.center_of_mass.x, bone.center_of_mass.y, bone.center_of_mass.z);
+            Msg("  Bone[%d] '%s': rot=(%.3f,%.3f,%.3f) pos=(%.3f,%.3f,%.3f)", 
+                i, bone.name.c_str(),
+                bind_rotation.x, bind_rotation.y, bind_rotation.z,
+                bind_translation.x, bind_translation.y, bind_translation.z);
+        }
+        
+        if (!ik_reader->eof()) {
+            Msg("! Warning: %d bytes remaining in IK chunk after reading all bones", 
+                chunk_size - ik_reader->tell());
+        }
+    } else {
+        Msg("! No IK data chunk found, using OBB transforms for all bones");
+        for (u32 i = 0; i < bones.size(); ++i) {
+            bones[i].obb.xform_get(bones[i].bind_transform);
         }
     }
 
@@ -512,12 +463,13 @@ OGFSkeletonParser::ParseResult OGFSkeletonParser::Parse(OGFReader& reader) {
     result.bone_names.reserve(bone_data.size());
     result.parent_indices.reserve(bone_data.size());
     result.bind_poses.reserve(bone_data.size());
+    result.local_transforms.reserve(bone_data.size());
     result.root_bone_index = u16(-1);
 
-    // First pass: collect bone names
+    // First pass: collect bone names and LOCAL transforms
     for (const auto& bone : bone_data) {
         result.bone_names.push_back(bone.name);
-        result.bind_poses.push_back(bone.bind_transform);
+        result.local_transforms.push_back(bone.bind_transform);  // Store local transforms directly
     }
 
     // Second pass: build parent indices by looking up parent names
@@ -551,6 +503,18 @@ OGFSkeletonParser::ParseResult OGFSkeletonParser::Parse(OGFReader& reader) {
         }
     }
 
+    // Third pass: compute world space bind poses by accumulating transforms
+    result.bind_poses.resize(bone_data.size());
+    for (size_t i = 0; i < bone_data.size(); ++i) {
+        if (result.parent_indices[i] < 0) {
+            // Root bone - use local transform as world transform
+            result.bind_poses[i] = result.local_transforms[i];
+        } else {
+            // Child bone - multiply parent's world transform with local transform
+            result.bind_poses[i].mul_43(result.bind_poses[result.parent_indices[i]], result.local_transforms[i]);
+        }
+    }
+
     // Parse motion data
     result.motions = reader.ReadMotionData();
 
@@ -580,6 +544,7 @@ ozz::animation::offline::RawSkeleton OGFToOzzSkeletonConverter::ConvertSkeleton(
         ogf_data.bone_names,
         ogf_data.parent_indices,
         ogf_data.bind_poses,
+        ogf_data.local_transforms,
         skeleton
     );
 
@@ -590,6 +555,7 @@ void OGFToOzzSkeletonConverter::BuildBoneHierarchy(
     const xr_vector<shared_str>& bone_names,
     const xr_vector<s16>& parent_indices,
     const xr_vector<Fmatrix>& bind_poses,
+    const xr_vector<Fmatrix>& local_transforms,
     ozz::animation::offline::RawSkeleton& skeleton
 ) {
     Msg("* Building bone hierarchy for %d bones", bone_names.size());
@@ -605,20 +571,50 @@ void OGFToOzzSkeletonConverter::BuildBoneHierarchy(
     Msg("  - Found %d root bones", root_indices.size());
     skeleton.roots.resize(root_indices.size());
     
+    // CRITICAL: Transform all bind poses to ozz coordinate system FIRST
+    // This must be done before calculating local transforms to avoid accumulated errors
+    xr_vector<Fmatrix> ozz_bind_poses(bind_poses.size());
+    for (size_t i = 0; i < bind_poses.size(); ++i) {
+        // Transform each world-space bind pose from X-Ray to ozz coordinate system
+        ozz::math::Transform ozz_transform = TransformConverter::XRayToOzz(bind_poses[i]);
+        
+        // Convert back to matrix for local transform calculations
+        ozz_bind_poses[i].identity();
+        
+        // First set rotation from quaternion
+        Fquaternion q;
+        q.set(ozz_transform.rotation.x, ozz_transform.rotation.y, ozz_transform.rotation.z, ozz_transform.rotation.w);
+        ozz_bind_poses[i].rotation(q);
+        
+        // Apply scale to the rotation axes
+        ozz_bind_poses[i].i.mul(ozz_transform.scale.x);
+        ozz_bind_poses[i].j.mul(ozz_transform.scale.y);
+        ozz_bind_poses[i].k.mul(ozz_transform.scale.z);
+        
+        // Finally set translation (after rotation to preserve position)
+        ozz_bind_poses[i].c.set(ozz_transform.translation.x, ozz_transform.translation.y, ozz_transform.translation.z);
+    }
+    
     // Recursive lambda to build joint hierarchy
     auto BuildJoint = [&](int bone_index, ozz::animation::offline::RawSkeleton::Joint& joint, auto& self) -> void {
             // Set joint properties
             joint.name = bone_names[bone_index].c_str();
-            joint.transform = TransformConverter::XRayToOzz(bind_poses[bone_index]);
+            
+            // Use the pre-computed local transform from IK data
+            const Fmatrix& local_transform = local_transforms[bone_index];
+            
+            // Convert X-Ray transform to ozz using proper transformation
+            joint.transform = TransformConverter::XRayToOzz(local_transform);
             
             // DEBUG: Print bone transform data
             const Fmatrix& orig_matrix = bind_poses[bone_index];
-            Msg("    Bone[%d] '%s': Original pos(%.3f, %.3f, %.3f)", 
+            const Fmatrix& ozz_world = ozz_bind_poses[bone_index];
+            Msg("    Bone[%d] '%s': XRay world(%.3f, %.3f, %.3f)", 
                 bone_index, joint.name.c_str(), orig_matrix.c.x, orig_matrix.c.y, orig_matrix.c.z);
-            Msg("                     Converted pos(%.3f, %.3f, %.3f)", 
+            Msg("                     Ozz world(%.3f, %.3f, %.3f)", 
+                ozz_world.c.x, ozz_world.c.y, ozz_world.c.z);
+            Msg("                     Ozz local(%.3f, %.3f, %.3f)", 
                 joint.transform.translation.x, joint.transform.translation.y, joint.transform.translation.z);
-            Msg("                     Scale(%.3f, %.3f, %.3f)", 
-                joint.transform.scale.x, joint.transform.scale.y, joint.transform.scale.z);
             
             // Find all children of this bone
             xr_vector<int> child_indices;

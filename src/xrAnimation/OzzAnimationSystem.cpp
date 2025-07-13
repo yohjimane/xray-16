@@ -15,7 +15,11 @@ OzzAnimationSystem::OzzAnimationSystem() {
 OzzAnimationSystem::~OzzAnimationSystem() = default;
 
 bool OzzAnimationSystem::LoadSkeleton(const shared_str& skeleton_path) {
-    if (!FS.exist(skeleton_path.c_str())) {
+    // For testing, check if file exists directly first
+    FILE* test = fopen(skeleton_path.c_str(), "rb");
+    if (test) {
+        fclose(test);
+    } else if (!FS.exist(skeleton_path.c_str())) {
         Msg("! OzzAnimationSystem: Skeleton file not found: %s", skeleton_path.c_str());
         return false;
     }
@@ -64,7 +68,11 @@ bool OzzAnimationSystem::LoadSkeleton(const shared_str& skeleton_path) {
 }
 
 bool OzzAnimationSystem::LoadAnimation(const shared_str& animation_path, const shared_str& name) {
-    if (!FS.exist(animation_path.c_str())) {
+    // For testing, check if file exists directly first
+    FILE* test = fopen(animation_path.c_str(), "rb");
+    if (test) {
+        fclose(test);
+    } else if (!FS.exist(animation_path.c_str())) {
         Msg("! OzzAnimationSystem: Animation file not found: %s", animation_path.c_str());
         return false;
     }
@@ -267,13 +275,26 @@ void OzzAnimationSystem::SampleAnimations() {
 }
 
 void OzzAnimationSystem::BlendAnimations() {
-    if (active_animations_.empty()) {
+    // Set up blending layers
+    blend_layers_.clear();
+    
+    // Count active animations
+    size_t active_count = 0;
+    for (const auto& handle : active_animations_) {
+        if (handle.is_playing) {
+            active_count++;
+        }
+    }
+    
+    if (active_count == 0) {
+        // No active animations - use bind pose
+        // Copy rest pose to local transforms
+        const auto& rest_poses = skeleton_->joint_rest_poses();
+        std::copy(rest_poses.begin(), rest_poses.end(), local_transforms_.begin());
         return;
     }
 
-    // Set up blending layers
-    blend_layers_.clear();
-    blend_layers_.reserve(active_animations_.size());
+    blend_layers_.reserve(active_count);
 
     for (const auto& handle : active_animations_) {
         if (!handle.is_playing) {
@@ -285,10 +306,6 @@ void OzzAnimationSystem::BlendAnimations() {
         layer.weight = handle.weight;
 
         blend_layers_.push_back(layer);
-    }
-
-    if (blend_layers_.empty()) {
-        return;
     }
 
     // Set up blending job
@@ -457,10 +474,12 @@ Fmatrix OzzAnimationSystem::Float4x4ToMatrix(const ozz::math::Float4x4& ozz_matr
     Fmatrix result;
 
     // ozz matrices are column-major, X-Ray matrices are row-major
+    // Rotation/scale is in the 3x3 upper-left portion
     result.i.set(ozz::math::GetX(ozz_matrix.cols[0]), ozz::math::GetX(ozz_matrix.cols[1]), ozz::math::GetX(ozz_matrix.cols[2]));
     result.j.set(ozz::math::GetY(ozz_matrix.cols[0]), ozz::math::GetY(ozz_matrix.cols[1]), ozz::math::GetY(ozz_matrix.cols[2]));
     result.k.set(ozz::math::GetZ(ozz_matrix.cols[0]), ozz::math::GetZ(ozz_matrix.cols[1]), ozz::math::GetZ(ozz_matrix.cols[2]));
-    result.c.set(ozz::math::GetW(ozz_matrix.cols[0]), ozz::math::GetW(ozz_matrix.cols[1]), ozz::math::GetW(ozz_matrix.cols[2]));
+    // Translation is in the 4th column
+    result.c.set(ozz::math::GetX(ozz_matrix.cols[3]), ozz::math::GetY(ozz_matrix.cols[3]), ozz::math::GetZ(ozz_matrix.cols[3]));
 
     return result;
 }
