@@ -515,6 +515,12 @@ OGFSkeletonParser::ParseResult OGFSkeletonParser::Parse(OGFReader& reader) {
         }
     }
 
+    // Calculate inverse local transforms for animation conversion
+    result.inverse_local_transforms.resize(result.local_transforms.size());
+    for (size_t i = 0; i < result.local_transforms.size(); ++i) {
+        result.inverse_local_transforms[i].invert_44(result.local_transforms[i]);
+    }
+
     // Parse motion data
     result.motions = reader.ReadMotionData();
 

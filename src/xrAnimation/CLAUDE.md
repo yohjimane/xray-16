@@ -351,15 +351,20 @@ struct SBoneShape {
 - flTKey16IsBit = (1 << 2)
 
 #### Converter Tool Usage
+
+**IMPORTANT:** The converter expects an output DIRECTORY, not a filename. The output file will use the input filename with .ozz extension.
+
 ```bash
 # Convert skeleton
-xray_to_ozz_converter skeleton actor.ogf actor_skeleton.ozz
+xray_to_ozz_converter skeleton actor.ogf output_dir/              # Creates output_dir/actor.ozz
+xray_to_ozz_converter skeleton actor.ogf .                        # Creates ./actor.ozz
 
-# Convert animation with skeleton
-xray_to_ozz_converter animation walk.omf walk.ozz actor_skeleton.ozz [-optimize]
+# Convert animation with skeleton (skeleton.ogf comes FIRST)
+xray_to_ozz_converter animation skeleton.ogf walk.omf output_dir/  # Creates output_dir/walk.ozz
+xray_to_ozz_converter animation skeleton.ogf walk.omf .           # Creates ./walk.ozz
 
 # Batch convert directory
-xray_to_ozz_converter batch animations/ ozz_animations/ actor_skeleton.ozz [-optimize]
+xray_to_ozz_converter batch animations/ ozz_animations/ skeleton.ogf [-optimize]
 ```
 
 #### Test Assets Location

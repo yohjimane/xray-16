@@ -571,8 +571,9 @@ ozz::animation::offline::RawAnimation OMFToOzzAnimationConverter::ConvertSingleM
                 key.time = bone_data.keys_translation_frames[i] / params.fps;
                 const Fvector& t = bone_data.keys_translation[i];
                 
-                // Apply coordinate system conversion (X-Ray Y-up to ozz Z-up)
-                key.value = ozz::math::Float3(t.x, t.z, -t.y);
+                // Apply the same transformation as the skeleton converter
+                // Keep translation as-is (no negation needed)
+                key.value = ozz::math::Float3(t.x, t.y, t.z);
                 
                 // Debug first few keys
                 if (i < 3 && track_idx < 5) {
@@ -589,9 +590,9 @@ ozz::animation::offline::RawAnimation OMFToOzzAnimationConverter::ConvertSingleM
                 key.time = bone_data.keys_rotation_frames[i] / params.fps;
                 const Fquaternion& q = bone_data.keys_rotation[i];
                 
-                // Apply coordinate system conversion for quaternions
-                // X-Ray Y-up to ozz Z-up: (x,y,z,w) -> (x,z,-y,w)
-                key.value = ozz::math::Quaternion(q.x, q.z, -q.y, q.w);
+                // Apply the same transformation as the skeleton converter
+                // Use quaternion conjugation to convert from left-handed to right-handed
+                key.value = ozz::math::Quaternion(-q.x, -q.y, -q.z, q.w);
                 track.rotations.push_back(key);
             }
             
@@ -631,6 +632,358 @@ ozz::animation::offline::RawAnimation OMFToOzzAnimationConverter::ConvertSingleM
     }
     
     Msg("* %d tracks out of %d had no animation data and used fallback values", 
+        tracks_without_data, animation.tracks.size());
+    
+    return animation;
+}
+
+xr_vector<ozz::animation::offline::RawAnimation> OMFToOzzAnimationConverter::ConvertAnimationsWithBindPose(
+    const xr_vector<OMFBoneMotion>& omf_motions,
+    const xr_vector<shared_str>& bone_names,
+    const xr_vector<ozz::math::Transform>& bind_poses,
+    const ConversionParams& params
+) {
+    xr_vector<ozz::animation::offline::RawAnimation> animations;
+    animations.reserve(omf_motions.size());
+    
+    for (const auto& motion : omf_motions) {
+        animations.push_back(ConvertSingleMotionWithBindPose(motion, bone_names, bind_poses, params));
+    }
+    
+    return animations;
+}
+
+ozz::animation::offline::RawAnimation OMFToOzzAnimationConverter::ConvertSingleMotionWithBindPose(
+    const OMFBoneMotion& omf_motion,
+    const xr_vector<shared_str>& bone_names,
+    const xr_vector<ozz::math::Transform>& bind_poses,
+    const ConversionParams& params
+) {
+    Msg("* Converting motion '%s' with bind pose (delta to absolute transform)", omf_motion.name.c_str());
+    Msg("  - Motion length: %d frames, FPS: %.1f", omf_motion.motion_length, params.fps);
+    Msg("  - Total bones in skeleton: %d", bone_names.size());
+    Msg("  - Bind poses provided: %d", bind_poses.size());
+    
+    ozz::animation::offline::RawAnimation animation;
+    animation.duration = omf_motion.motion_length / params.fps;
+    animation.tracks.resize(bone_names.size());
+    
+    // Process each bone's motion data
+    for (const auto& bone_data : omf_motion.bone_data) {
+        u32 track_idx = bone_data.bone_id;
+        
+        if (track_idx >= bone_names.size()) {
+            Msg("! Warning: bone ID %d exceeds skeleton bone count %d", track_idx, bone_names.size());
+            continue;
+        }
+        
+        if (track_idx >= bind_poses.size()) {
+            Msg("! Warning: bone ID %d exceeds bind pose count %d", track_idx, bind_poses.size());
+            continue;
+        }
+        
+        Msg("  - Bone ID %d (%s): %d translation keys, %d rotation keys", 
+            bone_data.bone_id,
+            bone_names[track_idx].c_str(),
+            bone_data.keys_translation_frames.size(),
+            bone_data.keys_rotation_frames.size());
+        
+        auto& track = animation.tracks[track_idx];
+        const ozz::math::Transform& bind_pose = bind_poses[track_idx];
+        
+        // Convert translation keys - add bind pose translation to delta
+        for (size_t i = 0; i < bone_data.keys_translation_frames.size(); ++i) {
+            ozz::animation::offline::RawAnimation::TranslationKey key;
+            key.time = bone_data.keys_translation_frames[i] / params.fps;
+            const Fvector& delta_t = bone_data.keys_translation[i];
+            
+            // X-Ray animations store absolute bone transforms in local space, not deltas
+            // Use the animation data directly without adding to bind pose
+            key.value = ozz::math::Float3(delta_t.x, delta_t.y, delta_t.z);
+            
+            if (i < 3 && track_idx < 5) {
+                Msg("    Track %d, key %d: time=%.3f, delta=(%.3f, %.3f, %.3f), bind=(%.3f, %.3f, %.3f), abs=(%.3f, %.3f, %.3f)",
+                    track_idx, i, key.time, 
+                    delta_t.x, delta_t.y, delta_t.z,
+                    bind_pose.translation.x, bind_pose.translation.y, bind_pose.translation.z,
+                    key.value.x, key.value.y, key.value.z);
+            }
+            
+            track.translations.push_back(key);
+        }
+        
+        // Convert rotation keys - use animation data directly
+        for (size_t i = 0; i < bone_data.keys_rotation_frames.size(); ++i) {
+            ozz::animation::offline::RawAnimation::RotationKey key;
+            key.time = bone_data.keys_rotation_frames[i] / params.fps;
+            const Fquaternion& q = bone_data.keys_rotation[i];
+            
+            // X-Ray animations store absolute bone transforms in local space, not deltas
+            // Apply coordinate system transformation (quaternion conjugation for handedness)
+            key.value = ozz::math::Quaternion(-q.x, -q.y, -q.z, q.w);
+            
+            track.rotations.push_back(key);
+        }
+        
+        // Add default scale key
+        ozz::animation::offline::RawAnimation::ScaleKey scale_key;
+        scale_key.time = 0.0f;
+        scale_key.value = bind_pose.scale;  // Use bind pose scale
+        track.scales.push_back(scale_key);
+    }
+    
+    // Ensure all tracks have at least one key (fallback for bones without animation data)
+    int tracks_without_data = 0;
+    for (size_t i = 0; i < animation.tracks.size(); ++i) {
+        auto& track = animation.tracks[i];
+        
+        if (i < bind_poses.size()) {
+            const ozz::math::Transform& bind_pose = bind_poses[i];
+            
+            if (track.translations.empty()) {
+                tracks_without_data++;
+                ozz::animation::offline::RawAnimation::TranslationKey key;
+                key.time = 0.0f;
+                // Use bind pose for bones without animation
+                key.value = ozz::math::Float3(bind_pose.translation.x, bind_pose.translation.y, -bind_pose.translation.z);
+                track.translations.push_back(key);
+            }
+            
+            if (track.rotations.empty()) {
+                ozz::animation::offline::RawAnimation::RotationKey key;
+                key.time = 0.0f;
+                // Use bind pose rotation
+                key.value = bind_pose.rotation;
+                track.rotations.push_back(key);
+            }
+            
+            if (track.scales.empty()) {
+                ozz::animation::offline::RawAnimation::ScaleKey key;
+                key.time = 0.0f;
+                key.value = bind_pose.scale;
+                track.scales.push_back(key);
+            }
+        } else {
+            // No bind pose available, use identity
+            if (track.translations.empty()) {
+                tracks_without_data++;
+                ozz::animation::offline::RawAnimation::TranslationKey key;
+                key.time = 0.0f;
+                key.value = ozz::math::Float3::zero();
+                track.translations.push_back(key);
+            }
+            
+            if (track.rotations.empty()) {
+                ozz::animation::offline::RawAnimation::RotationKey key;
+                key.time = 0.0f;
+                key.value = ozz::math::Quaternion::identity();
+                track.rotations.push_back(key);
+            }
+            
+            if (track.scales.empty()) {
+                ozz::animation::offline::RawAnimation::ScaleKey key;
+                key.time = 0.0f;
+                key.value = ozz::math::Float3::one();
+                track.scales.push_back(key);
+            }
+        }
+    }
+    
+    Msg("* %d tracks out of %d had no animation data and used bind pose values", 
+        tracks_without_data, animation.tracks.size());
+    
+    return animation;
+}
+
+xr_vector<ozz::animation::offline::RawAnimation> OMFToOzzAnimationConverter::ConvertAnimationsWithInverseBindPose(
+    const xr_vector<OMFBoneMotion>& omf_motions,
+    const xr_vector<shared_str>& bone_names,
+    const xr_vector<ozz::math::Transform>& bind_poses,
+    const xr_vector<Fmatrix>& inverse_local_transforms,
+    const ConversionParams& params
+) {
+    xr_vector<ozz::animation::offline::RawAnimation> animations;
+    
+    for (const auto& motion : omf_motions) {
+        animations.push_back(ConvertSingleMotionWithInverseBindPose(motion, bone_names, bind_poses, inverse_local_transforms, params));
+    }
+    
+    return animations;
+}
+
+ozz::animation::offline::RawAnimation OMFToOzzAnimationConverter::ConvertSingleMotionWithInverseBindPose(
+    const OMFBoneMotion& omf_motion,
+    const xr_vector<shared_str>& bone_names,
+    const xr_vector<ozz::math::Transform>& bind_poses,
+    const xr_vector<Fmatrix>& inverse_local_transforms,
+    const ConversionParams& params
+) {
+    Msg("* Converting motion '%s' with inverse bind pose transform", omf_motion.name.c_str());
+    Msg("  - Motion length: %d frames, FPS: %.1f", omf_motion.motion_length, params.fps);
+    Msg("  - Total bones in skeleton: %d", bone_names.size());
+    Msg("  - Bind poses provided: %d", bind_poses.size());
+    Msg("  - Inverse transforms provided: %d", inverse_local_transforms.size());
+    
+    ozz::animation::offline::RawAnimation animation;
+    animation.duration = omf_motion.motion_length / params.fps;
+    animation.tracks.resize(bone_names.size());
+    
+    // Process each bone's motion data
+    for (const auto& bone_data : omf_motion.bone_data) {
+        u32 track_idx = bone_data.bone_id;
+        
+        if (track_idx >= bone_names.size()) {
+            Msg("! Warning: bone ID %d exceeds skeleton bone count %d", track_idx, bone_names.size());
+            continue;
+        }
+        
+        if (track_idx >= inverse_local_transforms.size()) {
+            Msg("! Warning: bone ID %d exceeds inverse transform count %d", track_idx, inverse_local_transforms.size());
+            continue;
+        }
+        
+        Msg("  - Bone ID %d (%s): %d translation keys, %d rotation keys", 
+            bone_data.bone_id,
+            bone_names[track_idx].c_str(),
+            bone_data.keys_translation_frames.size(),
+            bone_data.keys_rotation_frames.size());
+        
+        auto& track = animation.tracks[track_idx];
+        const ozz::math::Transform& bind_pose = bind_poses[track_idx];
+        const Fmatrix& inverse_local = inverse_local_transforms[track_idx];
+        
+        // Convert translation keys - apply inverse bind pose transform
+        for (size_t i = 0; i < bone_data.keys_translation_frames.size(); ++i) {
+            ozz::animation::offline::RawAnimation::TranslationKey key;
+            key.time = bone_data.keys_translation_frames[i] / params.fps;
+            
+            // Get animation data
+            const Fvector& anim_t = bone_data.keys_translation[i];
+            
+            // X-Ray stores animation data in bone-local space
+            // We need to apply inverse bind pose to convert to parent-local space
+            // Create animation matrix
+            Fmatrix anim_matrix;
+            anim_matrix.identity();
+            
+            // Apply rotation first (using the corresponding rotation key if available)
+            if (i < bone_data.keys_rotation.size()) {
+                const Fquaternion& q = bone_data.keys_rotation[i];
+                anim_matrix.rotation(q);
+            }
+            
+            // Then apply translation
+            anim_matrix.translate(anim_t);
+            
+            // DO NOT apply inverse bind pose transform - animation data is already in local space
+            // Just extract translation directly from animation data
+            Fvector corrected_translation = anim_t;
+            
+            // Apply coordinate system transformation if needed
+            key.value = ozz::math::Float3(corrected_translation.x, corrected_translation.y, corrected_translation.z);
+            
+            if (i < 3 && track_idx < 5) {
+                Msg("    Track %d, key %d: anim=(%.3f, %.3f, %.3f), corrected=(%.3f, %.3f, %.3f)",
+                    track_idx, i, 
+                    anim_t.x, anim_t.y, anim_t.z,
+                    key.value.x, key.value.y, key.value.z);
+            }
+            
+            track.translations.push_back(key);
+        }
+        
+        // Convert rotation keys - apply inverse bind pose transform
+        for (size_t i = 0; i < bone_data.keys_rotation_frames.size(); ++i) {
+            ozz::animation::offline::RawAnimation::RotationKey key;
+            key.time = bone_data.keys_rotation_frames[i] / params.fps;
+            
+            // Get animation data
+            const Fquaternion& anim_q = bone_data.keys_rotation[i];
+            
+            // Create animation matrix from quaternion
+            Fmatrix anim_matrix;
+            anim_matrix.identity();
+            anim_matrix.rotation(anim_q);
+            
+            // If we have a corresponding translation key, apply it
+            if (i < bone_data.keys_translation.size()) {
+                anim_matrix.translate(bone_data.keys_translation[i]);
+            }
+            
+            // DO NOT apply inverse bind pose transform - animation data is already in local space
+            // Use animation rotation directly
+            
+            // Apply coordinate system transformation (quaternion conjugation for handedness)
+            key.value = ozz::math::Quaternion(-anim_q.x, -anim_q.y, -anim_q.z, anim_q.w);
+            
+            track.rotations.push_back(key);
+        }
+        
+        // Add default scale key
+        ozz::animation::offline::RawAnimation::ScaleKey scale_key;
+        scale_key.time = 0.0f;
+        scale_key.value = bind_pose.scale;  // Use bind pose scale
+        track.scales.push_back(scale_key);
+    }
+    
+    // Ensure all tracks have at least one key (fallback for bones without animation data)
+    int tracks_without_data = 0;
+    for (size_t i = 0; i < animation.tracks.size(); ++i) {
+        auto& track = animation.tracks[i];
+        
+        if (i < bind_poses.size()) {
+            const ozz::math::Transform& bind_pose = bind_poses[i];
+            
+            if (track.translations.empty()) {
+                tracks_without_data++;
+                ozz::animation::offline::RawAnimation::TranslationKey key;
+                key.time = 0.0f;
+                // Use bind pose for bones without animation
+                key.value = ozz::math::Float3(bind_pose.translation.x, bind_pose.translation.y, -bind_pose.translation.z);
+                track.translations.push_back(key);
+            }
+            
+            if (track.rotations.empty()) {
+                ozz::animation::offline::RawAnimation::RotationKey key;
+                key.time = 0.0f;
+                // Use bind pose rotation
+                key.value = bind_pose.rotation;
+                track.rotations.push_back(key);
+            }
+            
+            if (track.scales.empty()) {
+                ozz::animation::offline::RawAnimation::ScaleKey key;
+                key.time = 0.0f;
+                key.value = bind_pose.scale;
+                track.scales.push_back(key);
+            }
+        } else {
+            // No bind pose available, use identity
+            if (track.translations.empty()) {
+                tracks_without_data++;
+                ozz::animation::offline::RawAnimation::TranslationKey key;
+                key.time = 0.0f;
+                key.value = ozz::math::Float3::zero();
+                track.translations.push_back(key);
+            }
+            
+            if (track.rotations.empty()) {
+                ozz::animation::offline::RawAnimation::RotationKey key;
+                key.time = 0.0f;
+                key.value = ozz::math::Quaternion::identity();
+                track.rotations.push_back(key);
+            }
+            
+            if (track.scales.empty()) {
+                ozz::animation::offline::RawAnimation::ScaleKey key;
+                key.time = 0.0f;
+                key.value = ozz::math::Float3::one();
+                track.scales.push_back(key);
+            }
+        }
+    }
+    
+    Msg("* %d tracks out of %d had no animation data and used bind pose values", 
         tracks_without_data, animation.tracks.size());
     
     return animation;
@@ -774,6 +1127,62 @@ IFormatConverter::ConversionResult OMFConverter::ConvertWithSkeleton(
     } catch (...) {
         string512 error_buf;
         xr_sprintf(error_buf, "Exception during OMF conversion");
+        result.error_message = error_buf;
+    }
+    
+    return result;
+}
+
+IFormatConverter::ConversionResult OMFConverter::ConvertWithSkeletonAndBindPoses(
+    const shared_str& input_path,
+    const ozz::animation::offline::RawSkeleton& skeleton,
+    const xr_vector<ozz::math::Transform>& bind_poses
+) {
+    ConversionResult result;
+    
+    try {
+        // Load OMF file
+        if (!reader_.LoadFromFile(input_path)) {
+            string256 error_buf;
+            xr_sprintf(error_buf, "Failed to load OMF file: %s", input_path.c_str());
+            result.error_message = error_buf;
+            return result;
+        }
+        
+        // Extract bone names from skeleton
+        auto bone_names = ExtractBoneNamesFromSkeleton(skeleton);
+        
+        // Read motion definitions
+        auto motion_defs = reader_.ReadMotionDefs();
+        
+        // Read bone motions - use bone count for OGF format
+        xr_vector<OMFBoneMotion> bone_motions;
+        if (reader_.IsOGFFormat()) {
+            bone_motions = reader_.ReadOGFBoneMotions(static_cast<u32>(bone_names.size()));
+        } else {
+            bone_motions = reader_.ReadBoneMotions();
+        }
+        
+        if (bone_motions.empty()) {
+            result.error_message = "No motions found in OMF file";
+            return result;
+        }
+        
+        // Convert animations with bind poses to handle delta transforms
+        auto xr_animations = converter_.ConvertAnimationsWithBindPose(bone_motions, bone_names, bind_poses);
+        result.animations.assign(xr_animations.begin(), xr_animations.end());
+        
+        // Copy skeleton
+        result.skeleton = skeleton;
+        
+        // Extract metadata
+        result.metadata = ExtractMetadata(motion_defs);
+        
+        result.success = true;
+        
+    } catch (...) {
+        string512 error_buf;
+        xr_sprintf(error_buf, "Exception during OMF conversion with bind poses");
         result.error_message = error_buf;
     }
     
@@ -941,6 +1350,261 @@ xr_vector<OMFBoneMotion> OMFReader::ReadOGFBoneMotions(u32 bone_count) {
     
     motions_chunk->close();
     return bone_motions;
+}
+
+IFormatConverter::ConversionResult OMFConverter::ConvertWithSkeletonAndBindMatrices(
+    const shared_str& input_path,
+    const ozz::animation::offline::RawSkeleton& skeleton,
+    const xr_vector<Fmatrix>& bind_matrices,
+    const xr_vector<s16>& parent_indices
+) {
+    ConversionResult result;
+    
+    try {
+        // Load OMF file
+        if (!reader_.LoadFromFile(input_path)) {
+            string256 error_buf;
+            xr_sprintf(error_buf, "Failed to load OMF file: %s", input_path.c_str());
+            result.error_message = error_buf;
+            return result;
+        }
+        
+        // Extract bone names from skeleton
+        auto bone_names = ExtractBoneNamesFromSkeleton(skeleton);
+        
+        // Read motion definitions
+        xr_vector<OMFMotionDef> motion_defs;
+        xr_vector<OMFBoneMotion> bone_motions;
+        
+        if (reader_.IsOGFFormat()) {
+            motion_defs = reader_.ReadOGFMotionDefs();
+            bone_motions = reader_.ReadOGFBoneMotions(bone_names.size());
+        } else {
+            motion_defs = reader_.ReadMotionDefs();
+            bone_motions = reader_.ReadBoneMotions();
+        }
+        
+        if (bone_motions.empty()) {
+            result.error_message = "No motions found in OMF file";
+            return result;
+        }
+        
+        // Convert bind matrices to ozz transforms for the converter
+        xr_vector<ozz::math::Transform> bind_poses;
+        bind_poses.resize(bind_matrices.size());
+        for (size_t i = 0; i < bind_matrices.size(); ++i) {
+            bind_poses[i] = TransformConverter::XRayToOzz(bind_matrices[i]);
+        }
+        
+        // Calculate inverse local transforms for animation conversion
+        // These are simply the inverse of the local space transforms
+        xr_vector<Fmatrix> inverse_local_transforms;
+        inverse_local_transforms.resize(bind_matrices.size());
+        for (size_t i = 0; i < bind_matrices.size(); ++i) {
+            // Calculate local transform from world space
+            Fmatrix local_transform;
+            if (parent_indices[i] < 0) {
+                // Root bone - local transform is world transform
+                local_transform = bind_matrices[i];
+            } else {
+                // Child bone - local = parent_inverse * child_world
+                Fmatrix parent_inverse;
+                parent_inverse.invert_44(bind_matrices[parent_indices[i]]);
+                local_transform.mul_43(parent_inverse, bind_matrices[i]);
+            }
+            
+            // Store the inverse for animation conversion
+            inverse_local_transforms[i].invert_44(local_transform);
+        }
+        
+        // Convert animations with inverse bind pose transformation
+        auto xr_animations = converter_.ConvertAnimationsWithInverseBindPose(
+            bone_motions, bone_names, bind_poses, inverse_local_transforms);
+        result.animations.assign(xr_animations.begin(), xr_animations.end());
+        
+        // Copy skeleton
+        result.skeleton = skeleton;
+        
+        // Extract metadata
+        result.metadata = ExtractMetadata(motion_defs);
+        
+        result.success = true;
+        
+    } catch (...) {
+        string512 error_buf;
+        xr_sprintf(error_buf, "Exception during OMF conversion with bind matrices");
+        result.error_message = error_buf;
+    }
+    
+    return result;
+}
+
+xr_vector<ozz::animation::offline::RawAnimation> OMFToOzzAnimationConverter::ConvertAnimationsWithBindMatrices(
+    const xr_vector<OMFBoneMotion>& omf_motions,
+    const xr_vector<shared_str>& bone_names,
+    const xr_vector<Fmatrix>& bind_matrices,
+    const xr_vector<s16>& parent_indices,
+    const ConversionParams& params
+) {
+    xr_vector<ozz::animation::offline::RawAnimation> animations;
+    animations.reserve(omf_motions.size());
+    
+    for (const auto& motion : omf_motions) {
+        animations.push_back(ConvertSingleMotionWithBindMatrices(motion, bone_names, bind_matrices, parent_indices, params));
+    }
+    
+    return animations;
+}
+
+ozz::animation::offline::RawAnimation OMFToOzzAnimationConverter::ConvertSingleMotionWithBindMatrices(
+    const OMFBoneMotion& omf_motion,
+    const xr_vector<shared_str>& bone_names,
+    const xr_vector<Fmatrix>& bind_matrices,
+    const xr_vector<s16>& parent_indices,
+    const ConversionParams& params
+) {
+    Msg("* Converting motion '%s' with inverse bind pose transformation", omf_motion.name.c_str());
+    Msg("  - Motion length: %d frames, FPS: %.1f", omf_motion.motion_length, params.fps);
+    Msg("  - Total bones in skeleton: %d", bone_names.size());
+    Msg("  - Bind matrices provided: %d", bind_matrices.size());
+    
+    ozz::animation::offline::RawAnimation animation;
+    animation.duration = omf_motion.motion_length / params.fps;
+    animation.tracks.resize(bone_names.size());
+    
+    // Process each bone's motion data
+    for (const auto& bone_data : omf_motion.bone_data) {
+        u32 track_idx = bone_data.bone_id;
+        
+        if (track_idx >= bone_names.size()) {
+            Msg("! Warning: bone ID %d exceeds skeleton bone count %d", track_idx, bone_names.size());
+            continue;
+        }
+        
+        if (track_idx >= bind_matrices.size()) {
+            Msg("! Warning: bone ID %d exceeds bind matrix count %d", track_idx, bind_matrices.size());
+            continue;
+        }
+        
+        Msg("  - Bone ID %d (%s): %d translation keys, %d rotation keys", 
+            bone_data.bone_id,
+            bone_names[track_idx].c_str(),
+            bone_data.keys_translation_frames.size(),
+            bone_data.keys_rotation_frames.size());
+        
+        auto& track = animation.tracks[track_idx];
+        const Fmatrix& bind_matrix = bind_matrices[track_idx];
+        
+        // Compute inverse bind pose matrix (like blender-xray's bone.matrix_local.inverted())
+        Fmatrix inv_bind_matrix;
+        inv_bind_matrix.invert(bind_matrix);
+        
+        // Get parent's bind matrix if this bone has a parent
+        Fmatrix xmat;
+        
+        if (track_idx < parent_indices.size() && parent_indices[track_idx] >= 0) {
+            s16 parent_idx = parent_indices[track_idx];
+            if (parent_idx < bind_matrices.size()) {
+                // For child bones: xmat = inv_bind * parent_bind
+                xmat.mul(inv_bind_matrix, bind_matrices[parent_idx]);
+            } else {
+                // Fallback if parent not found
+                xmat = inv_bind_matrix;
+            }
+        } else {
+            // For root bones: xmat = inv_bind (no parent to multiply with)
+            // This matches blender-xray which multiplies with MATRIX_BONE for roots,
+            // but we don't need MATRIX_BONE since we're already in Y-up coordinates
+            xmat = inv_bind_matrix;
+        }
+        
+        // Convert translation keys
+        for (size_t i = 0; i < bone_data.keys_translation_frames.size(); ++i) {
+            ozz::animation::offline::RawAnimation::TranslationKey key;
+            key.time = bone_data.keys_translation_frames[i] / params.fps;
+            const Fvector& anim_translation = bone_data.keys_translation[i];
+            
+            // Apply inverse bind pose transformation
+            Fvector transformed_translation;
+            xmat.transform_tiny(transformed_translation, anim_translation);
+            
+            // Apply coordinate system transformation (keep as-is for now)
+            key.value = ozz::math::Float3(transformed_translation.x, transformed_translation.y, transformed_translation.z);
+            
+            if (i < 3 && track_idx < 5) {
+                Msg("    Track %d, trans key %d: anim=(%.3f,%.3f,%.3f) -> transformed=(%.3f,%.3f,%.3f)",
+                    track_idx, i, 
+                    anim_translation.x, anim_translation.y, anim_translation.z,
+                    key.value.x, key.value.y, key.value.z);
+            }
+            
+            track.translations.push_back(key);
+        }
+        
+        // Convert rotation keys
+        for (size_t i = 0; i < bone_data.keys_rotation_frames.size(); ++i) {
+            ozz::animation::offline::RawAnimation::RotationKey key;
+            key.time = bone_data.keys_rotation_frames[i] / params.fps;
+            const Fquaternion& anim_rotation = bone_data.keys_rotation[i];
+            
+            // Build rotation matrix from quaternion
+            Fmatrix anim_rot_matrix;
+            anim_rot_matrix.rotation(anim_rotation);
+            
+            // Apply inverse bind pose transformation
+            Fmatrix transformed_rot_matrix;
+            transformed_rot_matrix.mul(xmat, anim_rot_matrix);
+            
+            // Extract quaternion from transformed matrix
+            Fquaternion transformed_rotation;
+            transformed_rotation.set(transformed_rot_matrix);
+            
+            // Keep quaternion as-is for now - test inverse bind pose only
+            key.value = ozz::math::Quaternion(transformed_rotation.x, transformed_rotation.y, 
+                                             transformed_rotation.z, transformed_rotation.w);
+            
+            track.rotations.push_back(key);
+        }
+        
+        // Add default scale key
+        ozz::animation::offline::RawAnimation::ScaleKey scale_key;
+        scale_key.time = 0.0f;
+        scale_key.value = ozz::math::Float3::one();
+        track.scales.push_back(scale_key);
+    }
+    
+    // Ensure all tracks have at least one key (fallback for bones without animation data)
+    int tracks_without_data = 0;
+    for (size_t i = 0; i < animation.tracks.size(); ++i) {
+        auto& track = animation.tracks[i];
+        
+        if (track.translations.empty()) {
+            tracks_without_data++;
+            ozz::animation::offline::RawAnimation::TranslationKey key;
+            key.time = 0.0f;
+            key.value = ozz::math::Float3::zero();
+            track.translations.push_back(key);
+        }
+        
+        if (track.rotations.empty()) {
+            ozz::animation::offline::RawAnimation::RotationKey key;
+            key.time = 0.0f;
+            key.value = ozz::math::Quaternion::identity();
+            track.rotations.push_back(key);
+        }
+        
+        if (track.scales.empty()) {
+            ozz::animation::offline::RawAnimation::ScaleKey key;
+            key.time = 0.0f;
+            key.value = ozz::math::Float3::one();
+            track.scales.push_back(key);
+        }
+    }
+    
+    Msg("* %d tracks out of %d had no animation data and used identity values", 
+        tracks_without_data, animation.tracks.size());
+    
+    return animation;
 }
 
 } // namespace Animation

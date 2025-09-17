@@ -156,6 +156,55 @@ public:
         const ConversionParams& params = ConversionParams()
     );
     
+    // New methods that accept bind poses to convert delta animations to absolute
+    xr_vector<ozz::animation::offline::RawAnimation> ConvertAnimationsWithBindPose(
+        const xr_vector<OMFBoneMotion>& omf_motions,
+        const xr_vector<shared_str>& bone_names,
+        const xr_vector<ozz::math::Transform>& bind_poses,
+        const ConversionParams& params = ConversionParams()
+    );
+    
+    ozz::animation::offline::RawAnimation ConvertSingleMotionWithBindPose(
+        const OMFBoneMotion& omf_motion,
+        const xr_vector<shared_str>& bone_names,
+        const xr_vector<ozz::math::Transform>& bind_poses,
+        const ConversionParams& params = ConversionParams()
+    );
+    
+    // Methods that accept inverse local transforms for proper animation conversion
+    xr_vector<ozz::animation::offline::RawAnimation> ConvertAnimationsWithInverseBindPose(
+        const xr_vector<OMFBoneMotion>& omf_motions,
+        const xr_vector<shared_str>& bone_names,
+        const xr_vector<ozz::math::Transform>& bind_poses,
+        const xr_vector<Fmatrix>& inverse_local_transforms,
+        const ConversionParams& params = ConversionParams()
+    );
+    
+    ozz::animation::offline::RawAnimation ConvertSingleMotionWithInverseBindPose(
+        const OMFBoneMotion& omf_motion,
+        const xr_vector<shared_str>& bone_names,
+        const xr_vector<ozz::math::Transform>& bind_poses,
+        const xr_vector<Fmatrix>& inverse_local_transforms,
+        const ConversionParams& params = ConversionParams()
+    );
+    
+    // Methods that accept bind pose matrices for inverse transformation
+    xr_vector<ozz::animation::offline::RawAnimation> ConvertAnimationsWithBindMatrices(
+        const xr_vector<OMFBoneMotion>& omf_motions,
+        const xr_vector<shared_str>& bone_names,
+        const xr_vector<Fmatrix>& bind_matrices,
+        const xr_vector<s16>& parent_indices,
+        const ConversionParams& params = ConversionParams()
+    );
+    
+    ozz::animation::offline::RawAnimation ConvertSingleMotionWithBindMatrices(
+        const OMFBoneMotion& omf_motion,
+        const xr_vector<shared_str>& bone_names,
+        const xr_vector<Fmatrix>& bind_matrices,
+        const xr_vector<s16>& parent_indices,
+        const ConversionParams& params = ConversionParams()
+    );
+    
 private:
     struct KeyframeData {
         xr_vector<float> times;
@@ -206,6 +255,30 @@ public:
     ConversionResult ConvertWithSkeleton(
         const shared_str& input_path,
         const ozz::animation::offline::RawSkeleton& skeleton
+    );
+    
+    // Method to convert with skeleton and bind poses for delta animation support
+    ConversionResult ConvertWithSkeletonAndBindPoses(
+        const shared_str& input_path,
+        const ozz::animation::offline::RawSkeleton& skeleton,
+        const xr_vector<ozz::math::Transform>& bind_poses
+    );
+    
+    // Method to convert with skeleton and bind matrices for inverse transformation
+    ConversionResult ConvertWithSkeletonAndBindMatrices(
+        const shared_str& input_path,
+        const ozz::animation::offline::RawSkeleton& skeleton,
+        const xr_vector<Fmatrix>& bind_matrices,
+        const xr_vector<s16>& parent_indices
+    );
+    
+    // Method to convert with pre-calculated inverse local transforms
+    ConversionResult ConvertWithSkeletonAndInverseTransforms(
+        const shared_str& input_path,
+        const ozz::animation::offline::RawSkeleton& skeleton,
+        const xr_vector<Fmatrix>& bind_matrices,
+        const xr_vector<Fmatrix>& inverse_local_transforms,
+        const xr_vector<s16>& parent_indices
     );
     
 private:

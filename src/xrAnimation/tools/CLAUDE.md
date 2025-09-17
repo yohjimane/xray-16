@@ -5,19 +5,31 @@ Command-line tool for converting X-Ray Engine animation assets (OGF skeletons, O
 
 ## Usage
 
+**IMPORTANT:** The converter expects an output DIRECTORY, not a filename. The output file will use the input filename with .ozz extension.
+
 ### Converting a Skeleton
 ```bash
-xray_to_ozz_converter skeleton <input.ogf> <output.ozz>
+xray_to_ozz_converter skeleton <input.ogf> <output_directory>
+
+# Examples:
+xray_to_ozz_converter skeleton stalker_hero_1.ogf .              # Output to current directory as stalker_hero_1.ozz
+xray_to_ozz_converter skeleton stalker_hero_1.ogf /output/path/  # Output to specified directory as stalker_hero_1.ozz
 ```
 
 ### Converting an Animation
 ```bash
-xray_to_ozz_converter animation <input.omf> <output.ozz> <skeleton.ozz> [-optimize]
+xray_to_ozz_converter animation <skeleton.ogf> <input.omf> <output_directory> [-optimize]
+
+# Examples:
+xray_to_ozz_converter animation stalker_hero_1.ogf critical_hit.omf .              # Output to current directory
+xray_to_ozz_converter animation stalker_hero_1.ogf critical_hit.omf /output/path/  # Output to specified directory
 ```
+
+**Note:** For animation conversion, the skeleton.ogf file comes FIRST, then the animation.omf file, then the output directory.
 
 ### Batch Conversion
 ```bash
-xray_to_ozz_converter batch <input_dir> <output_dir> <skeleton.ozz> [-optimize]
+xray_to_ozz_converter batch <input_dir> <output_dir> <skeleton.ogf> [-optimize]
 ```
 
 ## Features

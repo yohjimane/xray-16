@@ -41,7 +41,7 @@ int CountJoints(const ozz::animation::offline::RawSkeleton& skeleton) {
 
 void PrintUsage(const char* program_name)
 {
-    Msg("Usage: %s <command> <input> <output> [options]", program_name);
+    Msg("Usage: %s <command> <input> <output_dir> [options]", program_name);
     Msg("\nCommands:");
     Msg("  skeleton  - Convert OGF skeleton to ozz skeleton");
     Msg("  animation - Convert OMF animation to ozz animation");
@@ -49,15 +49,14 @@ void PrintUsage(const char* program_name)
     Msg("  analyze   - Analyze OMF file structure (no conversion)");
     Msg("\nOptions:");
     Msg("  -optimize - Optimize animations (remove redundant keys)");
-    Msg("\nOutput:");
-    Msg("  <output> can be either:");
-    Msg("    - A filename (e.g., output.ozz)");
-    Msg("    - A directory (input filename will be used with .ozz extension)");
     Msg("  -compress - Use compression for ozz files");
+    Msg("\nOutput:");
+    Msg("  <output_dir> - Directory where the output file will be created");
+    Msg("                 Output filename will match input filename with .ozz extension");
     Msg("\nExamples:");
-    Msg("  %s skeleton actor.ogf actor_skeleton.ozz", program_name);
-    Msg("  %s animation walk.omf walk.ozz -optimize", program_name);
-    Msg("  %s batch animations/ ozz_animations/ -optimize", program_name);
+    Msg("  %s skeleton actor.ogf output_dir/", program_name);
+    Msg("  %s animation walk.omf output_dir/ skeleton.ogf -optimize", program_name);
+    Msg("  %s batch animations/ ozz_animations/ skeleton.ogf -optimize", program_name);
     Msg("  %s analyze stalker_animation.omf", program_name);
 }
 
@@ -113,26 +112,27 @@ void AnalyzeOMF(const std::string& input_path)
     fclose(file);
 }
 
-bool ConvertSkeleton(const std::string& input_path, const std::string& output_path)
+bool ConvertSkeleton(const std::string& input_path, const std::string& output_dir)
 {
-    // If output_path is a directory, use input filename with .ozz extension
-    std::string final_output_path = output_path;
-    struct stat path_stat;
-    if (stat(output_path.c_str(), &path_stat) == 0 && S_ISDIR(path_stat.st_mode)) {
-        // Extract filename from input path
-        size_t last_slash = input_path.find_last_of("/\\");
-        std::string filename = (last_slash != std::string::npos) ? input_path.substr(last_slash + 1) : input_path;
-        
-        // Replace extension with .ozz
-        size_t dot_pos = filename.find_last_of('.');
-        if (dot_pos != std::string::npos) {
-            filename = filename.substr(0, dot_pos) + ".ozz";
-        } else {
-            filename += ".ozz";
-        }
-        
-        final_output_path = output_path + "/" + filename;
+    // Always use input filename with .ozz extension
+    // Extract filename from input path
+    size_t last_slash = input_path.find_last_of("/\\");
+    std::string filename = (last_slash != std::string::npos) ? input_path.substr(last_slash + 1) : input_path;
+    
+    // Replace extension with .ozz
+    size_t dot_pos = filename.find_last_of('.');
+    if (dot_pos != std::string::npos) {
+        filename = filename.substr(0, dot_pos) + ".ozz";
+    } else {
+        filename += ".ozz";
     }
+    
+    // Ensure output_dir ends with separator
+    std::string final_output_path = output_dir;
+    if (!final_output_path.empty() && final_output_path.back() != '/' && final_output_path.back() != '\\') {
+        final_output_path += "/";
+    }
+    final_output_path += filename;
     
     Msg("Converting skeleton: %s -> %s", input_path.c_str(), final_output_path.c_str());
     
@@ -172,7 +172,7 @@ bool ConvertSkeleton(const std::string& input_path, const std::string& output_pa
     Msg("  - Root bones: %d", result.skeleton.roots.size());
     
     // Save metadata alongside skeleton (optional)
-    std::string metadata_path = output_path + ".meta";
+    std::string metadata_path = final_output_path + ".meta";
     IWriter* writer = FS.w_open(metadata_path.c_str());
     if (writer) {
         // Save X-Ray specific metadata
@@ -190,27 +190,28 @@ bool ConvertSkeleton(const std::string& input_path, const std::string& output_pa
     return true;
 }
 
-bool ConvertAnimation(const std::string& input_path, const std::string& output_path, 
+bool ConvertAnimation(const std::string& input_path, const std::string& output_dir, 
                      const std::string& skeleton_path, bool optimize)
 {
-    // If output_path is a directory, use input filename with .ozz extension
-    std::string final_output_path = output_path;
-    struct stat path_stat;
-    if (stat(output_path.c_str(), &path_stat) == 0 && S_ISDIR(path_stat.st_mode)) {
-        // Extract filename from input path
-        size_t last_slash = input_path.find_last_of("/\\");
-        std::string filename = (last_slash != std::string::npos) ? input_path.substr(last_slash + 1) : input_path;
-        
-        // Replace extension with .ozz
-        size_t dot_pos = filename.find_last_of('.');
-        if (dot_pos != std::string::npos) {
-            filename = filename.substr(0, dot_pos) + ".ozz";
-        } else {
-            filename += ".ozz";
-        }
-        
-        final_output_path = output_path + "/" + filename;
+    // Always use input filename with .ozz extension
+    // Extract filename from input path
+    size_t last_slash = input_path.find_last_of("/\\");
+    std::string filename = (last_slash != std::string::npos) ? input_path.substr(last_slash + 1) : input_path;
+    
+    // Replace extension with .ozz
+    size_t dot_pos = filename.find_last_of('.');
+    if (dot_pos != std::string::npos) {
+        filename = filename.substr(0, dot_pos) + ".ozz";
+    } else {
+        filename += ".ozz";
     }
+    
+    // Ensure output_dir ends with separator
+    std::string final_output_path = output_dir;
+    if (!final_output_path.empty() && final_output_path.back() != '/' && final_output_path.back() != '\\') {
+        final_output_path += "/";
+    }
+    final_output_path += filename;
     
     Msg("Converting animation: %s -> %s", input_path.c_str(), final_output_path.c_str());
     
@@ -222,20 +223,35 @@ bool ConvertAnimation(const std::string& input_path, const std::string& output_p
     // Check if skeleton_path is OGF or ozz
     bool is_ogf = skeleton_path.find(".ogf") != std::string::npos;
     
+    // Additional data needed for bind pose transformation
+    xr_vector<Fmatrix> bind_matrices;
+    xr_vector<Fmatrix> local_transforms;
+    xr_vector<Fmatrix> inverse_local_transforms;
+    xr_vector<s16> parent_indices;
+    
     if (is_ogf) {
         // Load OGF file to get skeleton and bind poses
         Msg("* Loading OGF skeleton with bind poses: %s", skeleton_path.c_str());
         
-        OGFConverter ogf_converter;
-        shared_str skeleton_str(skeleton_path.c_str());
-        auto ogf_result = ogf_converter.Convert(skeleton_str);
-        
-        if (!ogf_result.success) {
-            Msg("! Failed to load OGF skeleton: %s", ogf_result.error_message.c_str());
+        // Use OGF reader directly to get bind matrices
+        OGFReader ogf_reader;
+        if (!ogf_reader.LoadFromFile(shared_str(skeleton_path.c_str()))) {
+            Msg("! Failed to load OGF file: %s", skeleton_path.c_str());
             return false;
         }
         
-        raw_skeleton = ogf_result.skeleton;
+        OGFSkeletonParser ogf_parser;
+        auto parse_result = ogf_parser.Parse(ogf_reader);
+        
+        // Get bind matrices and parent indices from parse result
+        bind_matrices = parse_result.bind_poses;
+        parent_indices = parse_result.parent_indices;
+        local_transforms = parse_result.local_transforms;
+        inverse_local_transforms = parse_result.inverse_local_transforms;
+        
+        // Convert to ozz skeleton
+        OGFToOzzSkeletonConverter skeleton_converter;
+        raw_skeleton = skeleton_converter.ConvertSkeleton(parse_result);
         
         // Extract bind poses from OGF result
         // The OGF converter stores bind poses in the metadata or we need to extract them
@@ -312,9 +328,13 @@ bool ConvertAnimation(const std::string& input_path, const std::string& output_p
     // Create OMF converter
     OMFConverter converter;
     
-    // Convert with skeleton and bind poses
+    // Convert with skeleton and bind poses/matrices
     shared_str input_str(input_path.c_str());
-    auto result = converter.ConvertWithSkeletonAndBindPoses(input_str, raw_skeleton, bind_poses);
+    IFormatConverter::ConversionResult result;
+    
+    // TEST: Force simple conversion to see if animations are absolute transforms
+    Msg("* TEST: Using simple conversion without inverse bind pose transformation");
+    result = converter.ConvertWithSkeleton(input_str, raw_skeleton);
     
     if (!result.success) {
         Msg("! Failed to convert animation: %s", result.error_message.c_str());
@@ -371,16 +391,10 @@ bool ConvertAnimation(const std::string& input_path, const std::string& output_p
         return false;
     }
     
-    // Ensure output path has .ozz extension
-    std::string output_with_ext = final_output_path;
-    if (final_output_path.find(".ozz") == std::string::npos) {
-        output_with_ext = final_output_path + ".ozz";
-    }
-    
-    // Save all animations to a single file
-    ozz::io::File file(output_with_ext.c_str(), "wb");
+    // Save all animations to a single file (final_output_path already has .ozz extension)
+    ozz::io::File file(final_output_path.c_str(), "wb");
     if (!file.opened()) {
-        Msg("! Failed to create output file: %s", output_with_ext.c_str());
+        Msg("! Failed to create output file: %s", final_output_path.c_str());
         return false;
     }
     
@@ -395,10 +409,10 @@ bool ConvertAnimation(const std::string& input_path, const std::string& output_p
         archive << animation;
     }
     
-    Msg("* Saved %d animations to %s", anim_count, output_with_ext.c_str());
+    Msg("* Saved %d animations to %s", anim_count, final_output_path.c_str());
     
     // Save animation metadata
-    std::string meta_path = output_with_ext.substr(0, output_with_ext.rfind('.')) + ".meta";
+    std::string meta_path = final_output_path.substr(0, final_output_path.rfind('.')) + ".meta";
     ozz::io::File meta_file(meta_path.c_str(), "wb");
     if (meta_file.opened()) {
         ozz::io::OArchive meta_archive(&meta_file);
@@ -458,11 +472,9 @@ bool ConvertBatch(const std::string& input_dir, const std::string& output_dir,
             output_name = output_name.substr(0, dot_pos) + ".ozz";
         }
         
-        std::string output_path = output_dir + "/" + output_name;
-        
         Msg("\n[%d/%d] %s", converted + 1, files.size(), file.name.c_str());
         
-        if (ConvertAnimation(input_path, output_path, skeleton_path, optimize)) {
+        if (ConvertAnimation(input_path, output_dir, skeleton_path, optimize)) {
             converted++;
         }
     }
@@ -478,17 +490,15 @@ bool ConvertBatch(const std::string& input_dir, const std::string& output_dir,
             std::string input_path = input_dir + "/" + file.name.c_str();
             std::string output_name = file.name.c_str();
             
-            // Change extension to .ozz
+            // Change extension to .ozz (preserving original filename)
             size_t dot_pos = output_name.find_last_of('.');
             if (dot_pos != std::string::npos) {
-                output_name = output_name.substr(0, dot_pos) + "_skeleton.ozz";
+                output_name = output_name.substr(0, dot_pos) + ".ozz";
             }
-            
-            std::string output_path = output_dir + "/" + output_name;
             
             Msg("\n[Skeleton] %s", file.name.c_str());
             
-            if (ConvertSkeleton(input_path, output_path)) {
+            if (ConvertSkeleton(input_path, output_dir)) {
                 Msg("  - Skeleton converted: %s", output_name.c_str());
             }
         }
@@ -538,7 +548,7 @@ int main(int argc, char* argv[])
     } else if (command == "animation") {
         if (argc < 5) {
             Msg("! Animation conversion requires skeleton path");
-            Msg("  Usage: %s animation <omf> <ozz> <skeleton.ozz>", argv[0]);
+            Msg("  Usage: %s animation <omf> <output_dir> <skeleton>", argv[0]);
         } else {
             std::string skeleton_path = argv[4];
             success = ConvertAnimation(input, output, skeleton_path, optimize);
@@ -546,7 +556,7 @@ int main(int argc, char* argv[])
     } else if (command == "batch") {
         if (argc < 5) {
             Msg("! Batch conversion requires skeleton path");
-            Msg("  Usage: %s batch <input_dir> <output_dir> <skeleton.ozz>", argv[0]);
+            Msg("  Usage: %s batch <input_dir> <output_dir> <skeleton>", argv[0]);
         } else {
             std::string skeleton_path = argv[4];
             success = ConvertBatch(input, output, skeleton_path, optimize);
