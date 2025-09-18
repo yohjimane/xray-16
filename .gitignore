@@ -22,3 +22,6 @@
 
 # exclude doxygen output
 doc/doxygen/html/*
+
+# exclude ozz_utils folder
+ozz_utils/*

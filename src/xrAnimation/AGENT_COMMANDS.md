@@ -49,10 +49,10 @@ for row in rows:
 ## Ozz Bind Pose Dump (ozz_animation_viewer)
 - Context: Need bind-pose translations and Euler rotations directly from ozz runtime without legacy debug binaries.
 - Workflow:
-  1. Reconfigure debug build if needed: `cmake -B xray-16/build-debug -S xray-16 -DCMAKE_BUILD_TYPE=Debug`.
-  2. Rebuild the viewer: `cmake --build xray-16/build-debug --target ozz_animation_viewer -j`.
+  1. Reconfigure debug build if needed: `cmake -S xray-16 -B xray-16/ozz_utils -DCMAKE_BUILD_TYPE=Debug`.
+  2. Rebuild the viewer: `cmake --build xray-16/ozz_utils --target ozz_animation_viewer -j`.
   3. Run the viewer headless (ensure `LD_LIBRARY_PATH` points at the build bin dir):
-     `LD_LIBRARY_PATH=xray-16/build-debug/bin/Debug xray-16/build-debug/bin/Debug/ozz_animation_viewer --skeleton=asset_tests/stalker_hero_1.ozz --render=false --max_idle_loops=1`.
+     `LD_LIBRARY_PATH=xray-16/ozz_utils/bin/Debug xray-16/ozz_utils/bin/Debug/ozz_animation_viewer --skeleton=asset_tests/stalker_hero_1.ozz --render=false --max_idle_loops=1`.
   4. Capture the `=== OZZ BIND POSE TABLE ===` output for comparisons.
 
 ## Blender Bind Pose Dump (execute_blender_code)

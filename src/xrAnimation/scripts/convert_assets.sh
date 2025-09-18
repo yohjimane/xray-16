@@ -2,11 +2,15 @@
 
 # Script to convert X-Ray assets to ozz format based on user's examples
 
-# Set paths
-CONVERTER="/mnt/f/modding/claude_sessions/build-debug/bin/Debug/xray_to_ozz_converter"
-GAMEDATA="/mnt/f/modding/claude_sessions/gamedata"
-OUTPUT_DIR="/mnt/f/modding/claude_sessions/asset_tests"
-LOGGING_DIR="/mnt/f/modding/claude_sessions/logs"
+# Set paths relative to the repo layout
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_ROOT="$(realpath "${SCRIPT_DIR}/../../..")"
+WORKSPACE_ROOT="$(realpath "${PROJECT_ROOT}/..")"
+
+CONVERTER="${PROJECT_ROOT}/ozz_utils/bin/Debug/xray_to_ozz_converter"
+GAMEDATA="${WORKSPACE_ROOT}/gamedata"
+OUTPUT_DIR="${WORKSPACE_ROOT}/asset_tests"
+LOGGING_DIR="${WORKSPACE_ROOT}/logs"
 
 # Ensure output and logging directories exist
 mkdir -p "$OUTPUT_DIR"
