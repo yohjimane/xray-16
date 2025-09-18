@@ -1,38 +1,40 @@
-cmake_minimum_required(VERSION 3.8)
+set(_xrAnimation_tool_targets "")
 
-project(xrAnimationTools)
+# X-Ray to ozz converter tool (optional until implementation lands)
+set(_converter_src ${CMAKE_CURRENT_SOURCE_DIR}/xray_to_ozz_converter.cpp)
+if(EXISTS ${_converter_src})
+    add_executable(xray_to_ozz_converter
+        xray_to_ozz_converter.cpp
+    )
 
-# X-Ray to ozz converter tool
-add_executable(xray_to_ozz_converter
-    xray_to_ozz_converter.cpp
-)
+    target_link_libraries(xray_to_ozz_converter
+        PRIVATE
+        xrAnimation
+        xrCore
+        xrEngine
+        xrScriptEngine
+        ozz_animation_offline
+        ozz_animation
+        ozz_base
+    )
 
-target_link_libraries(xray_to_ozz_converter
-    PRIVATE
-    xrAnimation
-    xrCore
-    xrEngine
-    xrScriptEngine
-    ozz_animation_offline
-    ozz_animation
-    ozz_base
-)
+    target_include_directories(xray_to_ozz_converter
+        PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}/..
+        ${CMAKE_CURRENT_SOURCE_DIR}/../..
+        ${CMAKE_CURRENT_SOURCE_DIR}/../../Include
+        ${CMAKE_CURRENT_SOURCE_DIR}/../../../Externals/ozz-animation/include
+        ${CMAKE_CURRENT_SOURCE_DIR}/../../../Externals/imgui
+    )
 
-target_include_directories(xray_to_ozz_converter
-    PRIVATE
-    ${CMAKE_CURRENT_SOURCE_DIR}/..
-    ${CMAKE_CURRENT_SOURCE_DIR}/../..
-    ${CMAKE_CURRENT_SOURCE_DIR}/../../Include
-    ${CMAKE_CURRENT_SOURCE_DIR}/../../../Externals/ozz-animation/include
-    ${CMAKE_CURRENT_SOURCE_DIR}/../../../Externals/imgui
-)
+    set_target_properties(xray_to_ozz_converter PROPERTIES
+        CXX_STANDARD 17
+        CXX_STANDARD_REQUIRED ON
+        RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin/${CMAKE_BUILD_TYPE}
+    )
 
-# Set properties
-set_target_properties(xray_to_ozz_converter PROPERTIES
-    CXX_STANDARD 17
-    CXX_STANDARD_REQUIRED ON
-    RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin/${CMAKE_BUILD_TYPE}
-)
+    list(APPEND _xrAnimation_tool_targets xray_to_ozz_converter)
+endif()
 
 # ozz animation viewer tool (using ozz playback sample)
 add_executable(ozz_animation_viewer
@@ -65,7 +67,11 @@ set_target_properties(ozz_animation_viewer PROPERTIES
     RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin/${CMAKE_BUILD_TYPE}
 )
 
-# Install
-install(TARGETS xray_to_ozz_converter ozz_animation_viewer
-    RUNTIME DESTINATION bin
-)
+list(APPEND _xrAnimation_tool_targets ozz_animation_viewer)
+
+# Install any tools that have been enabled
+if(_xrAnimation_tool_targets)
+    install(TARGETS ${_xrAnimation_tool_targets}
+        RUNTIME DESTINATION bin
+    )
+endif()

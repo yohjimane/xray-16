@@ -179,28 +179,17 @@
     </Lib>
   </ItemDefinitionGroup>
   <ItemGroup>
-    <ClInclude Include="AnimationConverter.h" />
-    <ClInclude Include="OGFConverter.h" />
-    <ClInclude Include="OMFConverter.h" />
-    <ClInclude Include="OzzAnimationSystem.h" />
-    <ClInclude Include="OzzKinematicsAnimated.h" />
     <ClInclude Include="stdafx.h" />
-    <ClInclude Include="tests\test_ozz_basic.h" />
     <ClInclude Include="xrAnimation.h" />
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="AnimationConverter.cpp" />
-    <ClCompile Include="OGFConverter.cpp" />
-    <ClCompile Include="OMFConverter.cpp" />
-    <ClCompile Include="OzzAnimationSystem.cpp" />
-    <ClCompile Include="OzzKinematicsAnimated.cpp" />
     <ClCompile Include="stdafx.cpp">
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">Create</PrecompiledHeader>
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Create</PrecompiledHeader>
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">Create</PrecompiledHeader>
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|x64'">Create</PrecompiledHeader>
     </ClCompile>
-    <ClCompile Include="tests\test_ozz_basic.cpp" />
+    <ClCompile Include="tools\ozz_animation_viewer.cpp" />
     <ClCompile Include="xrAnimation.cpp" />
   </ItemGroup>
   <ItemGroup>
@@ -219,6 +208,10 @@
   </ItemGroup>
   <ItemGroup>
     <None Include="packages.config" />
+  </ItemGroup>
+  <ItemGroup>
+    <Text Include="CMakeLists.txt" />
+    <Text Include="tools\CMakeLists.txt" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

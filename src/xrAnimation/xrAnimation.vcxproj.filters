@@ -19,60 +19,34 @@
     <Filter Include="Animation System">
       <UniqueIdentifier>{A1B2C3D4-E5F6-7890-ABCD-EF1234567890}</UniqueIdentifier>
     </Filter>
+    <Filter Include="Utilities">
+      <UniqueIdentifier>{ff07acfc-bf18-4f2e-9962-d9d94de97176}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="stdafx.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="AnimationConverter.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="OGFConverter.h">
-      <Filter>Converters</Filter>
-    </ClInclude>
-    <ClInclude Include="OzzAnimationSystem.h">
-      <Filter>Animation System</Filter>
-    </ClInclude>
-    <ClInclude Include="OzzKinematicsAnimated.h">
-      <Filter>Animation System</Filter>
-    </ClInclude>
-    <ClInclude Include="tests\test_ozz_basic.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
     <ClInclude Include="xrAnimation.h">
       <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="OMFConverter.h">
-      <Filter>Converters</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="stdafx.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="AnimationConverter.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="OGFConverter.cpp">
-      <Filter>Converters</Filter>
-    </ClCompile>
-    <ClCompile Include="OzzAnimationSystem.cpp">
-      <Filter>Animation System</Filter>
-    </ClCompile>
-    <ClCompile Include="OzzKinematicsAnimated.cpp">
-      <Filter>Animation System</Filter>
-    </ClCompile>
-    <ClCompile Include="tests\test_ozz_basic.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
     <ClCompile Include="xrAnimation.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="OMFConverter.cpp">
-      <Filter>Converters</Filter>
+    <ClCompile Include="tools\ozz_animation_viewer.cpp">
+      <Filter>Utilities</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <None Include="packages.config" />
+  </ItemGroup>
+  <ItemGroup>
+    <Text Include="CMakeLists.txt" />
+    <Text Include="tools\CMakeLists.txt" />
   </ItemGroup>
 </Project>

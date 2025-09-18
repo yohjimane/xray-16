@@ -19,17 +19,6 @@ include_directories(
 
 # Source files
 set(SOURCES
-    AnimationConverter.cpp
-    AnimationConverter.h
-    OGFConverter.cpp
-    OGFConverter.h
-    OMFConverter.cpp
-    OMFConverter.h
-    OzzAnimationSystem.cpp
-    OzzAnimationSystem.h
-    OzzAnimationSystem_Extensions.cpp
-    OzzKinematicsAnimated.cpp
-    OzzKinematicsAnimated.h
     stdafx.cpp
     stdafx.h
 )
@@ -60,7 +49,7 @@ if(MSVC)
         /W3  # Warning level 3
         /wd4996  # Disable deprecated function warnings
     )
-    
+
     # Use precompiled headers
     target_precompile_headers(xrAnimation PRIVATE stdafx.h)
 endif()

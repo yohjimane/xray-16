@@ -24,11 +24,10 @@
 // DEALINGS IN THE SOFTWARE.                                                  //
 //                                                                            //
 //----------------------------------------------------------------------------//
-
-#include "framework/application.h"
-#include "framework/imgui.h"
-#include "framework/renderer.h"
-#include "framework/utils.h"
+#include "../Externals/ozz-animation/samples/framework/application.h"
+#include "../Externals/ozz-animation/samples/framework/imgui.h"
+#include "../Externals/ozz-animation/samples/framework/renderer.h"
+#include "../Externals/ozz-animation/samples/framework/utils.h"
 #include "ozz/animation/runtime/animation.h"
 #include "ozz/animation/runtime/local_to_model_job.h"
 #include "ozz/animation/runtime/sampling_job.h"
@@ -52,6 +51,7 @@
 #include <iostream>
 #include <limits>
 #include <sstream>
+#include "ozz/base/span.h"
 
 // Skeleton archive can be specified as an option.
 OZZ_OPTIONS_DECLARE_STRING(skeleton,
@@ -72,9 +72,9 @@ class PlaybackSampleApplication : public ozz::sample::Application {
       ozz::log::Err() << "Failed to open animation file: " << filename << std::endl;
       return false;
     }
-    
+
     ozz::io::IArchive archive(&file);
-    
+
     // First try to read a single animation (standard format)
     if (archive.TestTag<ozz::animation::Animation>()) {
       // Single animation file
@@ -82,29 +82,29 @@ class PlaybackSampleApplication : public ozz::sample::Application {
       archive >> animations_[0];
       return true;
     }
-    
+
     // Reset file position
     file.Seek(0, ozz::io::File::kSet);
     archive = ozz::io::IArchive(&file);
-    
+
     // Try to read multi-animation format (count + animations)
     uint32_t anim_count = 0;
     archive >> anim_count;
-    
+
     if (anim_count == 0 || anim_count > 100) { // Sanity check
       ozz::log::Err() << "Invalid animation count: " << anim_count << std::endl;
       return false;
     }
-    
+
     animations_.resize(anim_count);
     for (uint32_t i = 0; i < anim_count; ++i) {
       archive >> animations_[i];
     }
-    
+
     ozz::log::LogV() << "Loaded " << anim_count << " animations from " << filename << std::endl;
     return true;
   }
-  
+
   void PrintPoseTable() {
     const auto joint_names = skeleton_.joint_names();
     const int joint_count = skeleton_.num_joints();
@@ -123,6 +123,9 @@ class PlaybackSampleApplication : public ozz::sample::Application {
     }
 
     auto format_value = [](float value, int precision) {
+      if (!std::isfinite(value)) {
+        return std::string("--");
+      }
       if (std::fabs(value) < 1e-6f) {
         value = 0.0f;
       }
@@ -160,15 +163,20 @@ class PlaybackSampleApplication : public ozz::sample::Application {
       const float ty = ozz::math::GetY(matrix.cols[3]);
       const float tz = ozz::math::GetZ(matrix.cols[3]);
 
-      const ozz::math::SimdFloat4 quat_simd = ozz::math::ToQuaternion(matrix);
-      float quat_values[4];
-      ozz::math::StorePtrU(quat_simd, quat_values);
-      const ozz::math::Quaternion quat(quat_values[0], quat_values[1],
-                                       quat_values[2], quat_values[3]);
-      const ozz::math::Float3 euler = ozz::math::ToEuler(quat);
-      const float rx = euler.x * ozz::math::kRadianToDegree;
-      const float ry = euler.y * ozz::math::kRadianToDegree;
-      const float rz = euler.z * ozz::math::kRadianToDegree;
+      float rx = std::numeric_limits<float>::quiet_NaN();
+      float ry = std::numeric_limits<float>::quiet_NaN();
+      float rz = std::numeric_limits<float>::quiet_NaN();
+      if (ozz::math::AreAllTrue1(ozz::math::IsOrthogonal(matrix))) {
+        const ozz::math::SimdFloat4 quat_simd = ozz::math::ToQuaternion(matrix);
+        float quat_values[4];
+        ozz::math::StorePtrU(quat_simd, quat_values);
+        const ozz::math::Quaternion quat(quat_values[0], quat_values[1],
+                                         quat_values[2], quat_values[3]);
+        const ozz::math::Float3 euler = ozz::math::ToEuler(quat);
+        rx = euler.x * ozz::math::kRadianToDegree;
+        ry = euler.y * ozz::math::kRadianToDegree;
+        rz = euler.z * ozz::math::kRadianToDegree;
+      }
 
       std::cout << std::left << std::setw(name_width) << joint_names[joint]
                 << "  " << std::right
@@ -189,7 +197,7 @@ class PlaybackSampleApplication : public ozz::sample::Application {
   virtual bool OnUpdate(float _dt, float) {
     // Debug: count frames and output debug info for first few frames
     debug_frame_count_++;
-    
+
     if (!animations_.empty() && animations_[current_animation_].duration() > 0.0f) {
       // Updates current animation time.
       controller_.Update(animations_[current_animation_], _dt);
@@ -223,15 +231,15 @@ class PlaybackSampleApplication : public ozz::sample::Application {
     if (debug_frame_count_ <= 3) {
       std::cout << "\n=== DEBUG FRAME " << debug_frame_count_ << " ===" << std::endl;
       std::cout << "Animation time ratio: " << controller_.time_ratio() << std::endl;
-      
+
       // Show skeleton bounds
       ozz::math::Box bounds;
       GetSceneBounds(&bounds);
-      std::cout << "Scene bounds: min(" << bounds.min.x << ", " 
+      std::cout << "Scene bounds: min(" << bounds.min.x << ", "
                 << bounds.min.y << ", " << bounds.min.z
-                << ") max(" << bounds.max.x << ", " 
+                << ") max(" << bounds.max.x << ", "
                 << bounds.max.y << ", " << bounds.max.z << ")" << std::endl;
-      
+
       // Show first 10 bone transforms
       const ozz::span<const char* const> joint_names = skeleton_.joint_names();
       for (int i = 0; i < std::min(10, static_cast<int>(models_.size())); ++i) {
@@ -240,10 +248,10 @@ class PlaybackSampleApplication : public ozz::sample::Application {
         float x = ozz::math::GetX(matrix.cols[3]);
         float y = ozz::math::GetY(matrix.cols[3]);
         float z = ozz::math::GetZ(matrix.cols[3]);
-        std::cout << "  Bone[" << i << "] '" << joint_names[i] << "': pos(" 
+        std::cout << "  Bone[" << i << "] '" << joint_names[i] << "': pos("
                   << std::fixed << std::setprecision(3) << x << ", " << y << ", " << z << ")" << std::endl;
       }
-      
+
       // Show all bone positions in a compact format
       std::cout << "\nAll bone positions:" << std::endl;
       for (int i = 0; i < static_cast<int>(models_.size()); ++i) {
@@ -252,8 +260,8 @@ class PlaybackSampleApplication : public ozz::sample::Application {
         float y = ozz::math::GetY(matrix.cols[3]);
         float z = ozz::math::GetZ(matrix.cols[3]);
         if (i % 5 == 0) std::cout << std::endl; // New line every 5 bones
-        std::cout << "(" << std::setw(7) << std::setprecision(2) << x << "," 
-                  << std::setw(7) << std::setprecision(2) << y << "," 
+        std::cout << "(" << std::setw(7) << std::setprecision(2) << x << ","
+                  << std::setw(7) << std::setprecision(2) << y << ","
                   << std::setw(7) << std::setprecision(2) << z << ") ";
       }
       std::cout << std::endl;
@@ -275,21 +283,21 @@ class PlaybackSampleApplication : public ozz::sample::Application {
         min_z = z;
       }
     }
-    
+
     // Create transform matrix with vertical offset
     ozz::math::Float4x4 transform = ozz::math::Float4x4::identity();
     if (min_z < 0.0f) {
       // Offset character up so lowest bone is at ground level
       transform.cols[3] = ozz::math::simd_float4::Load(0.0f, 0.0f, -min_z + 0.05f, 1.0f); // +0.05 for small buffer
     }
-    
+
     return _renderer->DrawPosture(skeleton_, make_span(models_), transform);
   }
 
   virtual bool OnInitialize() {
     // Initialize debug counter
     debug_frame_count_ = 0;
-    
+
     // Reading skeleton.
     if (!ozz::sample::LoadSkeleton(OPTIONS_skeleton, &skeleton_)) {
       return false;
@@ -297,7 +305,7 @@ class PlaybackSampleApplication : public ozz::sample::Application {
 
     // Try reading animation(s), but allow failure for bind pose testing
     bool has_animation = LoadMultipleAnimations(OPTIONS_animation);
-    
+
     if (has_animation && !animations_.empty()) {
       // Skeleton and animation needs to match.
       if (skeleton_.num_joints() != animations_[0].num_tracks()) {
@@ -311,13 +319,13 @@ class PlaybackSampleApplication : public ozz::sample::Application {
     if (has_animation && !animations_.empty()) {
       std::cout << "Loaded " << animations_.size() << " animations" << std::endl;
       for (size_t i = 0; i < animations_.size(); ++i) {
-        std::cout << "  Animation " << i << ": tracks=" << animations_[i].num_tracks() 
+        std::cout << "  Animation " << i << ": tracks=" << animations_[i].num_tracks()
                   << ", duration=" << animations_[i].duration() << " seconds" << std::endl;
       }
     } else {
       std::cout << "No animation loaded - using bind pose" << std::endl;
     }
-    
+
     // Output all bone names
     const ozz::span<const char* const> joint_names = skeleton_.joint_names();
     std::cout << "Bone names:" << std::endl;
@@ -367,7 +375,7 @@ class PlaybackSampleApplication : public ozz::sample::Application {
         char label[64];
         snprintf(label, sizeof(label), "Animation %d of %zu", current_animation_ + 1, animations_.size());
         _im_gui->DoLabel(label);
-        
+
         // Previous/Next buttons
         bool changed = false;
         if (_im_gui->DoButton("Previous") && current_animation_ > 0) {
@@ -379,13 +387,13 @@ class PlaybackSampleApplication : public ozz::sample::Application {
           current_animation_++;
           changed = true;
         }
-        
+
         // Reset animation when changed
         if (changed) {
           controller_.Reset();
           context_.Invalidate();
         }
-        
+
         // Animation info
         if (current_animation_ < (int)animations_.size()) {
           snprintf(label, sizeof(label), "Duration: %.2f seconds", animations_[current_animation_].duration());
@@ -393,7 +401,7 @@ class PlaybackSampleApplication : public ozz::sample::Application {
         }
       }
     }
-    
+
     // Exposes animation runtime playback controls.
     {
       static bool open = true;
@@ -420,7 +428,7 @@ class PlaybackSampleApplication : public ozz::sample::Application {
 
   // Runtime animations (support multiple).
   ozz::vector<ozz::animation::Animation> animations_;
-  
+
   // Current animation index
   int current_animation_ = 0;
 
@@ -432,7 +440,7 @@ class PlaybackSampleApplication : public ozz::sample::Application {
 
   // Buffer of model space matrices.
   ozz::vector<ozz::math::Float4x4> models_;
-  
+
   // Debug frame counter
   int debug_frame_count_;
 
