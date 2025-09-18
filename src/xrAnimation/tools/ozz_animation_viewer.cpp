@@ -24,6 +24,9 @@
 // DEALINGS IN THE SOFTWARE.                                                  //
 //                                                                            //
 //----------------------------------------------------------------------------//
+#ifdef _MSC_VER
+#include "stdafx.h"
+#endif
 #include "../Externals/ozz-animation/samples/framework/application.h"
 #include "../Externals/ozz-animation/samples/framework/imgui.h"
 #include "../Externals/ozz-animation/samples/framework/renderer.h"
