@@ -34,17 +34,24 @@
 #include "ozz/animation/runtime/sampling_job.h"
 #include "ozz/animation/runtime/skeleton.h"
 #include "ozz/base/log.h"
+#include "ozz/base/maths/box.h"
+#include "ozz/base/maths/quaternion.h"
 #include "ozz/base/maths/simd_math.h"
 #include "ozz/base/maths/soa_transform.h"
 #include "ozz/base/maths/vec_float.h"
-#include "ozz/base/maths/box.h"
 #include "ozz/base/io/stream.h"
 #include "ozz/base/io/archive.h"
-#include <cstdio>
 #include "ozz/options/options.h"
-#include <iostream>
+#include <algorithm>
+#include <array>
+#include <cmath>
+#include <cstdio>
+#include <cstring>
+#include <cstdlib>
 #include <iomanip>
+#include <iostream>
 #include <limits>
+#include <sstream>
 
 // Skeleton archive can be specified as an option.
 OZZ_OPTIONS_DECLARE_STRING(skeleton,
@@ -98,6 +105,85 @@ class PlaybackSampleApplication : public ozz::sample::Application {
     return true;
   }
   
+  void PrintPoseTable() {
+    const auto joint_names = skeleton_.joint_names();
+    const int joint_count = skeleton_.num_joints();
+
+    size_t name_width_sz = std::strlen("Bone");
+    for (int joint = 0; joint < joint_count; ++joint) {
+      name_width_sz = std::max(name_width_sz, std::strlen(joint_names[joint]));
+    }
+    const int name_width = static_cast<int>(name_width_sz);
+
+    const std::array<const char*, 6> headers = {
+        "PosX", "PosY", "PosZ", "RotX", "RotY", "RotZ"};
+    std::array<int, 6> column_widths{};
+    for (size_t i = 0; i < headers.size(); ++i) {
+      column_widths[i] = std::max<int>(10, std::strlen(headers[i]));
+    }
+
+    auto format_value = [](float value, int precision) {
+      if (std::fabs(value) < 1e-6f) {
+        value = 0.0f;
+      }
+      std::ostringstream oss;
+      oss << std::fixed << std::setprecision(precision);
+      if (value >= 0.f) {
+        oss << ' ';
+      }
+      oss << value;
+      return oss.str();
+    };
+
+    std::cout << "\n=== OZZ BIND POSE TABLE ===" << std::endl;
+    std::cout << std::left << std::setw(name_width) << "Bone" << "  ";
+    for (size_t i = 0; i < headers.size(); ++i) {
+      std::cout << std::left << std::setw(column_widths[i]) << headers[i];
+      if (i + 1 != headers.size()) {
+        std::cout << "  ";
+      }
+    }
+    std::cout << std::endl;
+
+    std::cout << std::string(name_width, '-') << "  ";
+    for (size_t i = 0; i < headers.size(); ++i) {
+      std::cout << std::string(column_widths[i], '-');
+      if (i + 1 != headers.size()) {
+        std::cout << "  ";
+      }
+    }
+    std::cout << std::endl;
+
+    for (int joint = 0; joint < joint_count; ++joint) {
+      const ozz::math::Float4x4& matrix = models_[joint];
+      const float tx = ozz::math::GetX(matrix.cols[3]);
+      const float ty = ozz::math::GetY(matrix.cols[3]);
+      const float tz = ozz::math::GetZ(matrix.cols[3]);
+
+      const ozz::math::SimdFloat4 quat_simd = ozz::math::ToQuaternion(matrix);
+      float quat_values[4];
+      ozz::math::StorePtrU(quat_simd, quat_values);
+      const ozz::math::Quaternion quat(quat_values[0], quat_values[1],
+                                       quat_values[2], quat_values[3]);
+      const ozz::math::Float3 euler = ozz::math::ToEuler(quat);
+      const float rx = euler.x * ozz::math::kRadianToDegree;
+      const float ry = euler.y * ozz::math::kRadianToDegree;
+      const float rz = euler.z * ozz::math::kRadianToDegree;
+
+      std::cout << std::left << std::setw(name_width) << joint_names[joint]
+                << "  " << std::right
+                << std::setw(column_widths[0]) << format_value(tx, 6) << "  "
+                << std::setw(column_widths[1]) << format_value(ty, 6) << "  "
+                << std::setw(column_widths[2]) << format_value(tz, 6) << "  "
+                << std::setw(column_widths[3]) << format_value(rx, 3) << "  "
+                << std::setw(column_widths[4]) << format_value(ry, 3) << "  "
+                << std::setw(column_widths[5]) << format_value(rz, 3)
+                << std::endl;
+    }
+
+    std::cout << std::endl;
+  }
+
  protected:
   // Updates current animation time and skeleton pose.
   virtual bool OnUpdate(float _dt, float) {
@@ -171,6 +257,10 @@ class PlaybackSampleApplication : public ozz::sample::Application {
                   << std::setw(7) << std::setprecision(2) << z << ") ";
       }
       std::cout << std::endl;
+
+      if (debug_frame_count_ == 1) {
+        PrintPoseTable();
+      }
     }
 
     return true;
@@ -243,6 +333,26 @@ class PlaybackSampleApplication : public ozz::sample::Application {
 
     // Allocates a context that matches animation requirements.
     context_.Resize(num_joints);
+
+    // Optionally set a forced animation time ratio from environment.
+    const char* ratio_env = std::getenv("OZZ_SAMPLE_RATIO");
+    const char* time_env = std::getenv("OZZ_SAMPLE_TIME");
+    if (ratio_env) {
+      forced_time_ratio_ = std::clamp(static_cast<float>(std::atof(ratio_env)), 0.f, 1.f);
+      use_forced_time_ratio_ = true;
+    } else if (time_env && !animations_.empty()) {
+      const float duration = animations_[current_animation_].duration();
+      if (duration > 0.f) {
+        const float sample_time = static_cast<float>(std::atof(time_env));
+        forced_time_ratio_ = std::clamp(sample_time / duration, 0.f, 1.f);
+        use_forced_time_ratio_ = true;
+      }
+    }
+
+    if (use_forced_time_ratio_) {
+      controller_.set_playback_speed(0.f);
+      controller_.set_time_ratio(forced_time_ratio_);
+    }
 
     return true;
   }
@@ -325,6 +435,10 @@ class PlaybackSampleApplication : public ozz::sample::Application {
   
   // Debug frame counter
   int debug_frame_count_;
+
+  // Optional externally forced time ratio for sampling animations.
+  float forced_time_ratio_ = 0.f;
+  bool use_forced_time_ratio_ = false;
 };
 
 int main(int _argc, const char** _argv) {

@@ -12,6 +12,7 @@ target_link_libraries(xray_to_ozz_converter
     xrAnimation
     xrCore
     xrEngine
+    xrScriptEngine
     ozz_animation_offline
     ozz_animation
     ozz_base

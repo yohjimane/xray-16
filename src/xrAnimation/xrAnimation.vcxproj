@@ -181,6 +181,7 @@
   <ItemGroup>
     <ClInclude Include="AnimationConverter.h" />
     <ClInclude Include="OGFConverter.h" />
+    <ClInclude Include="OMFConverter.h" />
     <ClInclude Include="OzzAnimationSystem.h" />
     <ClInclude Include="OzzKinematicsAnimated.h" />
     <ClInclude Include="stdafx.h" />
@@ -190,6 +191,7 @@
   <ItemGroup>
     <ClCompile Include="AnimationConverter.cpp" />
     <ClCompile Include="OGFConverter.cpp" />
+    <ClCompile Include="OMFConverter.cpp" />
     <ClCompile Include="OzzAnimationSystem.cpp" />
     <ClCompile Include="OzzKinematicsAnimated.cpp" />
     <ClCompile Include="stdafx.cpp">
