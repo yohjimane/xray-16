@@ -48,10 +48,14 @@
 #include <cstdio>
 #include <cstring>
 #include <cstdlib>
+#include <fstream>
 #include <iomanip>
 #include <iostream>
 #include <limits>
 #include <sstream>
+#include <string>
+#include <string_view>
+#include <locale>
 #include "ozz/base/span.h"
 
 // Skeleton archive can be specified as an option.
@@ -63,6 +67,66 @@ OZZ_OPTIONS_DECLARE_STRING(skeleton,
 OZZ_OPTIONS_DECLARE_STRING(animation,
                            "Path to the animation (ozz archive format).",
                            "media/animation.ozz", false)
+
+// Optional JSON export for sampled animation data.
+OZZ_OPTIONS_DECLARE_STRING(dump_animation_json,
+                           "Path to write sampled animation data as JSON.",
+                           "", false)
+
+namespace {
+
+std::string EscapeJsonString(const char* input) {
+  std::string escaped;
+  if (!input) {
+    return escaped;
+  }
+  escaped.reserve(std::strlen(input));
+  for (const unsigned char ch : std::string_view(input)) {
+    switch (ch) {
+      case '"':
+        escaped += "\\\"";
+        break;
+      case '\\':
+        escaped += "\\\\";
+        break;
+      case '\b':
+        escaped += "\\b";
+        break;
+      case '\f':
+        escaped += "\\f";
+        break;
+      case '\n':
+        escaped += "\\n";
+        break;
+      case '\r':
+        escaped += "\\r";
+        break;
+      case '\t':
+        escaped += "\\t";
+        break;
+      default:
+        if (ch < 0x20) {
+          std::ostringstream oss;
+          oss << "\\u" << std::hex << std::setw(4) << std::setfill('0')
+              << static_cast<int>(ch);
+          escaped += oss.str();
+        } else {
+          escaped += static_cast<char>(ch);
+        }
+        break;
+    }
+  }
+  return escaped;
+}
+
+std::string FormatFloat(float value, int precision = 6) {
+  std::ostringstream oss;
+  oss.imbue(std::locale::classic());
+  oss << std::fixed << std::setprecision(precision) << value;
+  return oss.str();
+}
+
+}  // namespace
 
 class PlaybackSampleApplication : public ozz::sample::Application {
  protected:
@@ -194,7 +258,7 @@ class PlaybackSampleApplication : public ozz::sample::Application {
   }
 
  protected:
-  // Updates current animation time and skeleton pose.
+ // Updates current animation time and skeleton pose.
   virtual bool OnUpdate(float _dt, float) {
     // Debug: count frames and output debug info for first few frames
     debug_frame_count_++;
@@ -343,6 +407,13 @@ class PlaybackSampleApplication : public ozz::sample::Application {
     // Allocates a context that matches animation requirements.
     context_.Resize(num_joints);
 
+    if (OPTIONS_dump_animation_json &&
+        OPTIONS_dump_animation_json[0] != '\0') {
+      if (!ExportAnimationToJson(OPTIONS_dump_animation_json)) {
+        return false;
+      }
+    }
+
     // Optionally set a forced animation time ratio from environment.
     const char* ratio_env = std::getenv("OZZ_SAMPLE_RATIO");
     const char* time_env = std::getenv("OZZ_SAMPLE_TIME");
@@ -448,6 +519,151 @@ class PlaybackSampleApplication : public ozz::sample::Application {
   // Optional externally forced time ratio for sampling animations.
   float forced_time_ratio_ = 0.f;
   bool use_forced_time_ratio_ = false;
+
+  bool ExportAnimationToJson(const char* path) {
+    if (path == nullptr || path[0] == '\0') {
+      return true;
+    }
+
+    if (animations_.empty()) {
+      ozz::log::Err() << "No animation available for JSON export." << std::endl;
+      return false;
+    }
+
+    const ozz::animation::Animation& animation = animations_[current_animation_];
+    const float duration = animation.duration();
+    const ozz::span<const float> timepoints = animation.timepoints();
+
+    ozz::vector<float> samples;
+    samples.reserve(timepoints.size() + 2);
+    constexpr float kEpsilon = 1e-5f;
+    if (timepoints.empty() || timepoints.front() > kEpsilon) {
+      samples.push_back(0.f);
+    }
+    samples.insert(samples.end(), timepoints.begin(), timepoints.end());
+    if (!samples.empty()) {
+      std::sort(samples.begin(), samples.end());
+      samples.erase(std::unique(samples.begin(), samples.end(),
+                                [](float a, float b) {
+                                  return std::fabs(a - b) <= kEpsilon;
+                                }),
+                    samples.end());
+    }
+    if (duration > kEpsilon) {
+      if (samples.empty() || std::fabs(samples.back() - duration) > kEpsilon) {
+        samples.push_back(duration);
+      }
+    } else if (samples.empty()) {
+      samples.push_back(0.f);
+    }
+
+    std::ofstream file(path, std::ios::binary);
+    if (!file) {
+      ozz::log::Err() << "Failed to open JSON export path: " << path
+                      << std::endl;
+      return false;
+    }
+    file.imbue(std::locale::classic());
+
+    const int joint_count = skeleton_.num_joints();
+    const ozz::span<const char* const> joint_names = skeleton_.joint_names();
+
+    ozz::animation::SamplingJob sampling_job;
+    sampling_job.animation = &animation;
+    sampling_job.context = &context_;
+    sampling_job.output = make_span(locals_);
+
+    ozz::animation::LocalToModelJob ltm_job;
+    ltm_job.skeleton = &skeleton_;
+    ltm_job.input = make_span(locals_);
+    ltm_job.output = make_span(models_);
+
+    const int frame_count = static_cast<int>(samples.size());
+    const float frame_rate = duration > kEpsilon && frame_count > 1
+                                 ? static_cast<float>(frame_count - 1) /
+                                       std::max(duration, kEpsilon)
+                                 : 0.f;
+
+    file << "{\n";
+    file << "  \"skeleton\": \"" << EscapeJsonString(OPTIONS_skeleton)
+         << "\",\n";
+    file << "  \"animation\": \"" << EscapeJsonString(OPTIONS_animation)
+         << "\",\n";
+    file << "  \"duration\": " << FormatFloat(duration) << ",\n";
+    file << "  \"frame_rate\": " << FormatFloat(frame_rate) << ",\n";
+    file << "  \"frame_count\": " << frame_count << ",\n";
+    file << "  \"frame_start\": 0,\n";
+    file << "  \"frame_end\": " << (frame_count > 0 ? frame_count - 1 : 0)
+         << ",\n";
+    file << "  \"frames\": [\n";
+
+    for (int frame = 0; frame < frame_count; ++frame) {
+      const float sample_time = samples[frame];
+      const float ratio = duration > kEpsilon ? sample_time / duration : 0.f;
+      sampling_job.ratio = std::clamp(ratio, 0.f, 1.f);
+      if (!sampling_job.Run()) {
+        ozz::log::Err() << "SamplingJob failed at frame " << frame
+                        << std::endl;
+        return false;
+      }
+      if (!ltm_job.Run()) {
+        ozz::log::Err() << "LocalToModelJob failed at frame " << frame
+                        << std::endl;
+        return false;
+      }
+
+      file << "    {\n";
+      file << "      \"frame\": " << frame << ",\n";
+      file << "      \"time\": " << FormatFloat(sample_time) << ",\n";
+      file << "      \"ratio\": " << FormatFloat(sampling_job.ratio)
+           << ",\n";
+      file << "      \"bones\": {\n";
+
+      for (int joint = 0; joint < joint_count; ++joint) {
+        const ozz::math::Float4x4& matrix = models_[joint];
+        const float tx = ozz::math::GetX(matrix.cols[3]);
+        const float ty = ozz::math::GetY(matrix.cols[3]);
+        const float tz = ozz::math::GetZ(matrix.cols[3]);
+
+        const ozz::math::SimdFloat4 quat_simd = ozz::math::ToQuaternion(matrix);
+        float quat_values[4];
+        ozz::math::StorePtrU(quat_simd, quat_values);
+
+        const float sx = ozz::math::GetX(ozz::math::Length3(matrix.cols[0]));
+        const float sy = ozz::math::GetX(ozz::math::Length3(matrix.cols[1]));
+        const float sz = ozz::math::GetX(ozz::math::Length3(matrix.cols[2]));
+
+        file << "        \"" << EscapeJsonString(joint_names[joint])
+             << "\": {\n";
+        file << "          \"location\": [" << FormatFloat(tx) << ", "
+             << FormatFloat(ty) << ", " << FormatFloat(tz) << "],\n";
+        file << "          \"rotation\": [" << FormatFloat(quat_values[0])
+             << ", " << FormatFloat(quat_values[1]) << ", "
+             << FormatFloat(quat_values[2]) << ", "
+             << FormatFloat(quat_values[3]) << "],\n";
+        file << "          \"scale\": [" << FormatFloat(sx) << ", "
+             << FormatFloat(sy) << ", " << FormatFloat(sz) << "]\n";
+        file << "        }";
+        if (joint + 1 != joint_count) {
+          file << ",";
+        }
+        file << "\n";
+      }
+
+      file << "      }\n";
+      file << "    }";
+      if (frame + 1 != frame_count) {
+        file << ",";
+      }
+      file << "\n";
+    }
+
+    file << "  ]\n";
+    file << "}\n";
+
+    ozz::log::LogV() << "Exported animation JSON to " << path << std::endl;
+    return true;
+  }
 };
 
 int main(int _argc, const char** _argv) {

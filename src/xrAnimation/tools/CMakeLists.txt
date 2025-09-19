@@ -47,6 +47,8 @@ target_link_libraries(ozz_animation_viewer
     sample_framework  # From ozz-animation
     xrAnimation
     xrCore
+    xrScriptEngine
+    xrEngine
     ozz_animation
     ozz_base
 )

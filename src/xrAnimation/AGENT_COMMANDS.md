@@ -55,6 +55,14 @@ for row in rows:
      `LD_LIBRARY_PATH=xray-16/ozz_utils/bin/Debug xray-16/ozz_utils/bin/Debug/ozz_animation_viewer --skeleton=asset_tests/stalker_hero_1.ozz --render=false --max_idle_loops=1`.
   4. Capture the `=== OZZ BIND POSE TABLE ===` output for comparisons.
 
+## Animation JSON Dump (ozz_animation_viewer)
+- Context: Need frame-by-frame world transforms straight from ozz to diff against Blender exports.
+- Workflow:
+  1. Build the viewer (`cmake --build xray-16/ozz_utils --target ozz_animation_viewer -j`).
+  2. Run with skeleton/animation arguments plus `--dump-animation-json=<path>`; for example:
+     `./xray-16/ozz_utils/bin/Debug/ozz_animation_viewer --skeleton=asset_tests/stalker_hero_1.ozz --animation=asset_tests/critical_hit_grup_1.ozz --render=false --max_idle_loops=1 --dump-animation-json=xray-16/res/testdata/critical_hit_grup_1_world.json`.
+  3. The viewer samples every animation time point (including first/last frame) and writes a JSON blob with per-joint translation, rotation (quaternion), and scale, ready for diffing.
+
 ## Blender Bind Pose Dump (execute_blender_code)
 - Context: Export Blender’s world-space bind pose transforms in the same format as the ozz viewer table.
 - Workflow:
