@@ -292,6 +292,10 @@ class PlaybackSampleApplication : public ozz::sample::Application {
       return false;
     }
 
+    if (log_bones_each_frame_) {
+      LogBoneTransformsForFrame();
+    }
+
     // Debug: output bone transforms for first few frames
     if (debug_frame_count_ <= 3) {
       std::cout << "\n=== DEBUG FRAME " << debug_frame_count_ << " ===" << std::endl;
@@ -407,6 +411,9 @@ class PlaybackSampleApplication : public ozz::sample::Application {
     // Allocates a context that matches animation requirements.
     context_.Resize(num_joints);
 
+    log_bone_limit_ = num_joints > 0 ? num_joints : 0;
+    bone_display_limit_ = std::min(num_joints, 16);
+
     if (OPTIONS_dump_animation_json &&
         OPTIONS_dump_animation_json[0] != '\0') {
       if (!ExportAnimationToJson(OPTIONS_dump_animation_json)) {
@@ -482,6 +489,118 @@ class PlaybackSampleApplication : public ozz::sample::Application {
         controller_.OnGui(animations_[current_animation_], _im_gui);
       }
     }
+
+    // Logging options
+    {
+      static bool logging_open = false;
+      ozz::sample::ImGui::OpenClose oc(_im_gui, "Logging options", &logging_open);
+      if (logging_open) {
+        _im_gui->DoCheckBox("Log bones every frame", &log_bones_each_frame_);
+        if (log_bones_each_frame_) {
+          const int max_joints = skeleton_.num_joints();
+          if (max_joints > 0) {
+            if (log_bone_limit_ < 1) {
+              log_bone_limit_ = 1;
+            }
+            _im_gui->DoSlider("Bones printed", 1, max_joints, &log_bone_limit_,
+                              1.f, true);
+          } else {
+            log_bone_limit_ = 0;
+          }
+        }
+      }
+    }
+
+    // On-screen bone transform display
+    {
+      static bool display_open = true;
+      ozz::sample::ImGui::OpenClose oc(_im_gui, "Bone transforms", &display_open);
+      if (display_open) {
+        _im_gui->DoCheckBox("Show bone transforms", &show_bone_debug_);
+        const int max_joints = skeleton_.num_joints();
+        if (max_joints > 0) {
+          if (bone_display_limit_ < 1) {
+            bone_display_limit_ = 1;
+          }
+          if (bone_display_limit_ > max_joints) {
+            bone_display_limit_ = max_joints;
+          }
+          _im_gui->DoSlider("Bones shown", 1, max_joints, &bone_display_limit_, 1.f,
+                            show_bone_debug_);
+        } else {
+          bone_display_limit_ = 0;
+        }
+
+        if (show_bone_debug_ && max_joints > 0) {
+          const auto joint_names = skeleton_.joint_names();
+          const int display_count = std::min(bone_display_limit_, max_joints);
+
+          if (!animations_.empty()) {
+            const float duration = animations_[current_animation_].duration();
+            const float ratio = controller_.time_ratio();
+            const float time = duration * ratio;
+            char header[128];
+            std::snprintf(header, sizeof(header),
+                          "Time %.3fs / %.3fs (ratio %.3f)", time, duration, ratio);
+            _im_gui->DoLabel(header);
+          }
+
+          int name_width = 4;
+          for (int joint = 0; joint < display_count; ++joint) {
+            name_width =
+                std::max<int>(name_width, static_cast<int>(std::strlen(joint_names[joint])));
+          }
+
+          constexpr std::array<const char*, 7> column_headers = {
+              "Pos X", "Pos Y", "Pos Z", "Rot W", "Rot X", "Rot Y", "Rot Z"};
+          constexpr int numeric_width = 11;
+
+          std::ostringstream header_stream;
+          header_stream.imbue(std::locale::classic());
+          header_stream << std::left << std::setw(name_width) << "Bone" << "  ";
+          for (const char* col : column_headers) {
+            header_stream << std::right << std::setw(numeric_width) << col << ' ';
+          }
+          _im_gui->DoLabel(header_stream.str().c_str());
+
+          const int separator_width =
+              name_width + 2 + static_cast<int>(column_headers.size()) * (numeric_width + 1);
+          std::string separator(separator_width, '-');
+          _im_gui->DoLabel(separator.c_str());
+
+          for (int joint = 0; joint < display_count; ++joint) {
+            const ozz::math::Float4x4& matrix = models_[joint];
+            const float tx = ozz::math::GetX(matrix.cols[3]);
+            const float ty = ozz::math::GetY(matrix.cols[3]);
+            const float tz = ozz::math::GetZ(matrix.cols[3]);
+
+            const ozz::math::SimdFloat4 quat_simd = ozz::math::ToQuaternion(matrix);
+            float quat[4];
+            ozz::math::StorePtrU(quat_simd, quat);
+
+            std::array<std::string, 7> value_strings = {
+                FormatFloat(tx, 3), FormatFloat(ty, 3), FormatFloat(tz, 3),
+                FormatFloat(quat[3], 4), FormatFloat(quat[0], 4),
+                FormatFloat(quat[1], 4), FormatFloat(quat[2], 4)};
+
+            std::ostringstream row_stream;
+            row_stream.imbue(std::locale::classic());
+            row_stream << std::left << std::setw(name_width) << joint_names[joint] << "  ";
+            for (const std::string& value : value_strings) {
+              row_stream << std::right << std::setw(numeric_width) << value << ' ';
+            }
+            _im_gui->DoLabel(row_stream.str().c_str(), ozz::sample::ImGui::kLeft, false);
+          }
+
+          if (display_count < max_joints) {
+            char footer[96];
+            std::snprintf(footer, sizeof(footer), "Showing %d of %d bones",
+                          display_count, max_joints);
+            _im_gui->DoLabel(footer);
+          }
+        }
+      }
+    }
     return true;
   }
 
@@ -519,6 +638,49 @@ class PlaybackSampleApplication : public ozz::sample::Application {
   // Optional externally forced time ratio for sampling animations.
   float forced_time_ratio_ = 0.f;
   bool use_forced_time_ratio_ = false;
+
+  bool log_bones_each_frame_ = false;
+  int log_bone_limit_ = 0;
+  bool show_bone_debug_ = true;
+  int bone_display_limit_ = 16;
+
+  void LogBoneTransformsForFrame() const {
+    const int joint_count = skeleton_.num_joints();
+    if (joint_count == 0) {
+      return;
+    }
+
+    const auto joint_names = skeleton_.joint_names();
+    const int max_joints = log_bone_limit_ > 0
+                               ? std::min(log_bone_limit_, joint_count)
+                               : joint_count;
+
+    std::ostringstream oss;
+    oss.imbue(std::locale::classic());
+    oss << "\n=== FRAME " << debug_frame_count_ << " BONE TRANSFORMS ===" << std::endl;
+    oss << "Animation time ratio: " << controller_.time_ratio() << std::endl;
+
+    for (int joint = 0; joint < max_joints; ++joint) {
+      const ozz::math::Float4x4& matrix = models_[joint];
+      const float tx = ozz::math::GetX(matrix.cols[3]);
+      const float ty = ozz::math::GetY(matrix.cols[3]);
+      const float tz = ozz::math::GetZ(matrix.cols[3]);
+
+      const ozz::math::SimdFloat4 quat_simd = ozz::math::ToQuaternion(matrix);
+      float quat[4];
+      ozz::math::StorePtrU(quat_simd, quat);
+
+      oss << "  Bone[" << joint << "] '" << joint_names[joint]
+          << "': pos(" << FormatFloat(tx, 6) << ", " << FormatFloat(ty, 6)
+          << ", " << FormatFloat(tz, 6) << ") rot(" << FormatFloat(quat[3], 6)
+          << ", " << FormatFloat(quat[0], 6) << ", "
+          << FormatFloat(quat[1], 6) << ", " << FormatFloat(quat[2], 6)
+          << ")" << std::endl;
+    }
+
+    oss << std::endl;
+    std::cout << oss.str();
+  }
 
   bool ExportAnimationToJson(const char* path) {
     if (path == nullptr || path[0] == '\0') {
