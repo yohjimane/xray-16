@@ -6,6 +6,7 @@
 #include <iomanip>
 #include <iostream>
 #include <optional>
+#include <set>
 #include <sstream>
 #include <string>
 #include <string_view>
@@ -76,6 +77,13 @@ fs::path AnimationMetadataPath()
 {
     return TestArtifactsDir() / "critical_hit_grup_1.json";
 }
+
+const std::array<const char*, 4> kExpectedMultiMotionNames = {{
+    "norm_2_critical_hit_hend_left_0",
+    "norm_2_critical_hit_hend_right_0",
+    "norm_2_critical_hit_torso_0",
+    "norm_2_critical_hit_torso_1",
+}};
 
 std::string QuoteForShell(const std::string& value)
 {
@@ -533,6 +541,69 @@ bool TestAnimationMatchesReference()
     return ok;
 }
 
+bool TestMultipleAnimationConversion()
+{
+    if (!ConvertAnimation(true))
+        return false;
+
+    ozz::io::File file(AnimationOutputPath().string().c_str(), "rb");
+    if (!file.opened())
+    {
+        std::cerr << "failed to open animation archive: " << AnimationOutputPath() << std::endl;
+        return false;
+    }
+
+    ozz::io::IArchive archive(&file);
+    if (archive.TestTag<ozz::animation::Animation>())
+    {
+        std::cerr << "expected multi-animation archive but found single animation" << std::endl;
+        return false;
+    }
+
+    file.Seek(0, ozz::io::File::kSet);
+    archive = ozz::io::IArchive(&file);
+
+    uint32_t animation_count = 0;
+    archive >> animation_count;
+    if (animation_count != kExpectedMultiMotionNames.size())
+    {
+        std::cerr << "expected " << kExpectedMultiMotionNames.size() << " animations, found "
+                  << animation_count << std::endl;
+        return false;
+    }
+
+    std::set<std::string> names;
+    for (uint32_t i = 0; i < animation_count; ++i)
+    {
+        ozz::animation::Animation animation;
+        archive >> animation;
+        if (animation.num_tracks() == 0)
+        {
+            std::cerr << "animation " << i << " has zero tracks" << std::endl;
+            return false;
+        }
+
+        const char* name = animation.name();
+        if (!name || *name == '\0')
+        {
+            std::cerr << "animation " << i << " missing name" << std::endl;
+            return false;
+        }
+        names.insert(std::string(name));
+    }
+
+    for (const char* expected : kExpectedMultiMotionNames)
+    {
+        if (names.count(expected) == 0)
+        {
+            std::cerr << "missing animation named '" << expected << "'" << std::endl;
+            return false;
+        }
+    }
+
+    return true;
+}
+
 struct TestCase
 {
     const char* name;
@@ -544,12 +615,13 @@ struct TestCase
 
 int main()
 {
-    const std::array<TestCase, 5> tests = {{
+    const std::array<TestCase, 6> tests = {{
         {"GenerateSkeleton", &TestGenerateSkeleton, false},
         {"BindPoseMatchesBlender", &TestBindPoseMatchesBlender, false},
         {"ConvertAnimationProducesFile", &TestConvertAnimationProducesFile, false},
         {"AnimationCompatibleWithSkeleton", &TestAnimationCompatibleWithSkeleton, false},
         {"AnimationMatchesReference", &TestAnimationMatchesReference, false},
+        {"TestMultipleAnimationConversion", &TestMultipleAnimationConversion, false},
     }};
 
     int failures = 0;
