@@ -1,8 +1,9 @@
+#include <algorithm>
 #include <array>
-#include <cerrno>
 #include <cmath>
 #include <cstdlib>
 #include <filesystem>
+#include <iomanip>
 #include <iostream>
 #include <optional>
 #include <sstream>
@@ -21,10 +22,14 @@
 #include <sys/wait.h>
 #endif
 
+#include "ozz/animation/runtime/animation.h"
+#include "ozz/animation/runtime/sampling_job.h"
 #include "ozz/animation/runtime/skeleton.h"
 #include "ozz/animation/runtime/skeleton_utils.h"
 #include "ozz/base/io/archive.h"
 #include "ozz/base/io/stream.h"
+#include "ozz/base/maths/soa_transform.h"
+#include "ozz/base/maths/transform.h"
 
 namespace fs = std::filesystem;
 
@@ -40,6 +45,36 @@ fs::path WorkspaceRoot()
 fs::path TestArtifactsDir()
 {
     return WorkspaceRoot() / "asset_tests" / "test_outputs";
+}
+
+fs::path SkeletonInputPath()
+{
+    return WorkspaceRoot() / "xray-16" / "res" / "testdata" / "stalker_hero_1.ogf";
+}
+
+fs::path AnimationInputPath()
+{
+    return WorkspaceRoot() / "xray-16" / "res" / "testdata" / "critical_hit_grup_1.omf";
+}
+
+fs::path SkeletonOutputPath()
+{
+    return TestArtifactsDir() / "stalker_hero_bind_pose.ozz";
+}
+
+fs::path SkeletonCsvPath()
+{
+    return TestArtifactsDir() / "stalker_hero_bind_pose.csv";
+}
+
+fs::path AnimationOutputPath()
+{
+    return TestArtifactsDir() / "critical_hit_grup_1.ozz";
+}
+
+fs::path AnimationMetadataPath()
+{
+    return TestArtifactsDir() / "critical_hit_grup_1.json";
 }
 
 std::string QuoteForShell(const std::string& value)
@@ -111,7 +146,6 @@ std::string BuildCommand(const std::vector<std::string>& args)
     }
     return command;
 #else
-    // Prepend LD_LIBRARY_PATH so the converter can locate ozz shared objects.
     std::string command = "LD_LIBRARY_PATH=";
     command.append(QuoteForShell(converter_dir.string()));
     command.push_back(' ');
@@ -143,15 +177,13 @@ int ExecuteCommand(const std::vector<std::string>& args)
 #endif
 }
 
-bool GenerateSkeleton(bool force)
+bool ConvertSkeleton(bool force)
 {
     const fs::path output_dir = TestArtifactsDir();
-    const fs::path output_file = output_dir / "stalker_hero_bind_pose.ozz";
-    const fs::path input_file = WorkspaceRoot() / "gamedata" / "stalker_hero" / "stalker_hero_1.ogf";
+    const fs::path output_file = SkeletonOutputPath();
 
     std::error_code ec;
     fs::create_directories(output_dir, ec);
-    (void)ec;
 
     if (force && fs::exists(output_file))
         fs::remove(output_file);
@@ -161,8 +193,10 @@ bool GenerateSkeleton(bool force)
 
     std::vector<std::string> args = {
         "skeleton",
-        input_file.string(),
-        output_file.string()};
+        SkeletonInputPath().string(),
+        output_file.string(),
+        "--dump-bind",
+        SkeletonCsvPath().string()};
 
     const int exit_code = ExecuteCommand(args);
     if (exit_code != 0)
@@ -171,13 +205,7 @@ bool GenerateSkeleton(bool force)
         return false;
     }
 
-    if (!fs::exists(output_file))
-    {
-        std::cerr << "converter reported success but output file is missing: " << output_file << std::endl;
-        return false;
-    }
-
-    return true;
+    return fs::exists(output_file);
 }
 
 bool EnsureSkeletonGenerated()
@@ -186,10 +214,118 @@ bool EnsureSkeletonGenerated()
     static bool status = false;
     if (!cached)
     {
-        status = GenerateSkeleton(false);
+        status = ConvertSkeleton(false);
         cached = true;
     }
     return status;
+}
+
+bool ConvertAnimation(bool force)
+{
+    if (!EnsureSkeletonGenerated())
+        return false;
+
+    const fs::path output_file = AnimationOutputPath();
+    std::error_code ec;
+    fs::create_directories(TestArtifactsDir(), ec);
+
+    if (force && fs::exists(output_file))
+        fs::remove(output_file);
+
+    if (!force && fs::exists(output_file))
+        return true;
+
+    std::vector<std::string> args = {
+        "animation",
+        AnimationInputPath().string(),
+        output_file.string(),
+        SkeletonInputPath().string(),
+        "--metadata",
+        AnimationMetadataPath().string()};
+
+    const int exit_code = ExecuteCommand(args);
+    if (exit_code != 0)
+    {
+        std::cerr << "animation conversion failed with exit code " << exit_code << std::endl;
+        return false;
+    }
+
+    return fs::exists(output_file);
+}
+
+template <typename T>
+bool LoadOzz(const fs::path& path, T& object)
+{
+    ozz::io::File file(path.string().c_str(), "rb");
+    if (!file.opened())
+    {
+        std::cerr << "failed to open ozz archive: " << path << std::endl;
+        return false;
+    }
+
+    ozz::io::IArchive archive(&file);
+    archive >> object;
+    return true;
+}
+
+[[maybe_unused]] int FindJoint(const ozz::animation::Skeleton& skeleton, const std::string& name)
+{
+    const int index = ozz::animation::FindJoint(skeleton, name.c_str());
+    if (index < 0)
+        std::cerr << "joint not found: " << name << std::endl;
+    return index;
+}
+
+bool SampleLocals(const ozz::animation::Animation& animation,
+                  const ozz::animation::Skeleton& skeleton,
+                  float time,
+                  std::vector<ozz::math::Transform>& locals)
+{
+    if (animation.duration() <= 0.f)
+        return false;
+
+    const float clamped = std::clamp(time, 0.f, animation.duration());
+
+    ozz::animation::SamplingJob::Context context(animation.num_tracks());
+    std::vector<ozz::math::SoaTransform> soa_transforms(skeleton.num_soa_joints());
+
+    ozz::animation::SamplingJob job;
+    job.animation = &animation;
+    job.context = &context;
+    job.ratio = clamped / animation.duration();
+    job.output = ozz::make_span(soa_transforms);
+    if (!job.Run())
+        return false;
+
+    locals.resize(skeleton.num_joints());
+    for (int soa_index = 0; soa_index < skeleton.num_soa_joints(); ++soa_index)
+    {
+        const auto& soa = soa_transforms[soa_index];
+
+        ozz::math::SimdFloat4 translations[4];
+        ozz::math::Transpose3x4(&soa.translation.x, translations);
+
+        ozz::math::SimdFloat4 rotations[4];
+        ozz::math::Transpose4x4(&soa.rotation.x, rotations);
+
+        ozz::math::SimdFloat4 scales[4];
+        ozz::math::Transpose3x4(&soa.scale.x, scales);
+
+        for (int lane = 0; lane < 4; ++lane)
+        {
+            const int joint = soa_index * 4 + lane;
+            if (joint >= skeleton.num_joints())
+                break;
+
+            ozz::math::Transform transform;
+            ozz::math::Store3PtrU(translations[lane], &transform.translation.x);
+            ozz::math::StorePtrU(rotations[lane], &transform.rotation.x);
+            ozz::math::Store3PtrU(scales[lane], &transform.scale.x);
+            locals[joint] = transform;
+        }
+    }
+
+    return true;
 }
 
 struct ExpectedBindPose
@@ -202,23 +338,19 @@ struct ExpectedBindPose
 
 const std::array<ExpectedBindPose, 5> kExpectedBindPose = {{
     {"root_stalker", 0.0f, 0.0f, 0.0f},
-    {"bip01", 6.96513e-06f, 0.987438f, 4.5056e-06f},
+    {"bip01", 6.96513e-06f, 0.987438f, 4.50560e-06f},
     {"bip01_pelvis", 0.0f, 0.0f, 0.0f},
     {"bip01_spine", 0.102435f, 1.76455e-07f, 0.0213843f},
     {"bip01_head", 0.0559939f, 2.85225e-09f, 1.90456e-08f},
 }};
 
 constexpr float kTranslationTolerance = 1e-4f;
-
-fs::path SkeletonOutputPath()
-{
-    return TestArtifactsDir() / "stalker_hero_bind_pose.ozz";
-}
+constexpr float kRotationTolerance = 1e-4f;
 
 bool TestGenerateSkeleton()
 {
     std::cout << "Generating skeleton via converter..." << std::endl;
-    return GenerateSkeleton(true);
+    return ConvertSkeleton(true);
 }
 
 bool TestBindPoseMatchesBlender()
@@ -226,25 +358,16 @@ bool TestBindPoseMatchesBlender()
     if (!EnsureSkeletonGenerated())
         return false;
 
-    const fs::path skeleton_path = SkeletonOutputPath();
-    ozz::io::File file(skeleton_path.string().c_str(), "rb");
-    if (!file.opened())
-    {
-        std::cerr << "failed to open skeleton: " << skeleton_path << std::endl;
-        return false;
-    }
-
-    ozz::io::IArchive archive(&file);
     ozz::animation::Skeleton skeleton;
-    archive >> skeleton;
+    if (!LoadOzz(SkeletonOutputPath(), skeleton))
+        return false;
 
     bool ok = true;
     for (const auto& expected : kExpectedBindPose)
     {
-        const int joint_index = ozz::animation::FindJoint(skeleton, expected.joint);
+        const int joint_index = FindJoint(skeleton, expected.joint);
         if (joint_index < 0)
         {
-            std::cerr << "joint not found in skeleton: " << expected.joint << std::endl;
             ok = false;
             continue;
         }
@@ -265,27 +388,149 @@ bool TestBindPoseMatchesBlender()
     return ok;
 }
 
-bool TestGenerateAnimation()
+bool TestConvertAnimationProducesFile()
 {
-    const fs::path input_skeleton = WorkspaceRoot() / "gamedata" / "stalker_hero" / "stalker_hero_1.ogf";
-    const fs::path input_animation = WorkspaceRoot() / "gamedata" / "critical_hit_grup_1.omf";
-    const fs::path output_dir = TestArtifactsDir();
-    const fs::path output_animation = output_dir / "critical_hit_grup_1.ozz";
+    const bool status = ConvertAnimation(true);
+    if (!status)
+        return false;
+    return fs::exists(AnimationOutputPath()) && fs::exists(AnimationMetadataPath());
+}
 
-    std::vector<std::string> args = {
-        "animation",
-        input_animation.string(),
-        output_animation.string(),
-        input_skeleton.string()};
+bool TestAnimationCompatibleWithSkeleton()
+{
+    if (!ConvertAnimation(false))
+        return false;
 
-    const int exit_code = ExecuteCommand(args);
-    if (exit_code != 0)
+    ozz::animation::Skeleton skeleton;
+    if (!LoadOzz(SkeletonOutputPath(), skeleton))
+        return false;
+
+    ozz::animation::Animation animation;
+    if (!LoadOzz(AnimationOutputPath(), animation))
+        return false;
+
+    if (animation.num_tracks() != skeleton.num_joints())
     {
-        std::cerr << "[TODO] animation conversion is not yet implemented (converter exit code " << exit_code << ")" << std::endl;
+        std::cerr << "animation track count " << animation.num_tracks()
+                  << " does not match skeleton joints " << skeleton.num_joints() << std::endl;
         return false;
     }
 
-    return true;
+    return animation.duration() > 0.f;
+}
+
+struct JointSampleExpectation
+{
+    const char* joint;
+    float tx;
+    float ty;
+    float tz;
+    float qx;
+    float qy;
+    float qz;
+    float qw;
+};
+
+struct FrameExpectation
+{
+    int frame;
+    std::vector<JointSampleExpectation> joints;
+};
+
+bool CompareQuaternion(const ozz::math::Quaternion& actual,
+                       float qx, float qy, float qz, float qw)
+{
+    const float dx = std::fabs(actual.x - qx);
+    const float dy = std::fabs(actual.y - qy);
+    const float dz = std::fabs(actual.z - qz);
+    const float dw = std::fabs(actual.w - qw);
+    return dx <= kRotationTolerance && dy <= kRotationTolerance && dz <= kRotationTolerance && dw <= kRotationTolerance;
+}
+
+bool TestAnimationMatchesReference()
+{
+    if (!ConvertAnimation(false))
+        return false;
+
+    ozz::animation::Skeleton skeleton;
+    if (!LoadOzz(SkeletonOutputPath(), skeleton))
+        return false;
+
+    ozz::animation::Animation animation;
+    if (!LoadOzz(AnimationOutputPath(), animation))
+        return false;
+
+    const float frame_duration = 1.0f / 30.0f;
+    const int total_frames = static_cast<int>(std::round(animation.duration() / frame_duration)) + 1;
+    if (total_frames < 2)
+    {
+        std::cerr << "animation frame count too small" << std::endl;
+        return false;
+    }
+
+    const std::array<FrameExpectation, 3> expectations = {{
+        {0,
+         {{"bip01_pelvis", 0.0f, 0.0f, 0.0f, 0.00000f, 0.00000f, 0.00000f, 1.00000f},
+          {"bip01_spine", 0.10244f, 0.00000f, 0.02138f, 0.00000f, 0.00000f, 0.00000f, 1.00000f},
+          {"bip01_head", 0.05599f, 0.00000f, 0.00000f, 0.00000f, 0.00000f, 0.00000f, 1.00000f}}},
+        {total_frames / 2,
+         {{"bip01_pelvis", 0.05985f, 0.92727f, -0.13289f, 0.00661f, -0.71725f, 0.69680f, -0.00127f},
+          {"bip01_spine", 0.04618f, 1.02785f, -0.15830f, -0.12347f, -0.02831f, 0.69777f, 0.70458f},
+          {"bip01_head", -0.09405f, 1.57454f, -0.12226f, -0.30937f, -0.14131f, 0.60664f, 0.71922f}}},
+        {total_frames - 1,
+         {{"bip01_pelvis", 0.05198f, 0.99550f, -0.11888f, 0.00614f, -0.78895f, 0.61445f, -0.00776f},
+          {"bip01_spine", 0.02653f, 1.08829f, -0.17544f, -0.08374f, -0.03335f, 0.71219f, 0.696129f},
+          {"bip01_head", -0.05817f, 1.63351f, -0.14511f, -0.27743f, -0.19140f, 0.63215f, 0.69934f}}},
+    }};
+
+    bool ok = true;
+
+    for (const auto& frame_expectation : expectations)
+    {
+        const float time = static_cast<float>(frame_expectation.frame) * frame_duration;
+        std::vector<ozz::math::Transform> locals;
+        if (!SampleLocals(animation, skeleton, time, locals))
+            return false;
+
+        for (const auto& joint_expectation : frame_expectation.joints)
+        {
+            const int joint_index = FindJoint(skeleton, joint_expectation.joint);
+            if (joint_index < 0)
+            {
+                ok = false;
+                continue;
+            }
+
+            const auto& actual = locals[joint_index];
+            const float dx = std::fabs(actual.translation.x - joint_expectation.tx);
+            const float dy = std::fabs(actual.translation.y - joint_expectation.ty);
+            const float dz = std::fabs(actual.translation.z - joint_expectation.tz);
+
+            if (dx > kTranslationTolerance || dy > kTranslationTolerance || dz > kTranslationTolerance)
+            {
+                std::cerr << "frame " << frame_expectation.frame << " joint '" << joint_expectation.joint
+                          << "' translation mismatch\n"
+                          << "  expected: [" << joint_expectation.tx << ", " << joint_expectation.ty << ", "
+                          << joint_expectation.tz << "]\n"
+                          << "  actual:   [" << actual.translation.x << ", " << actual.translation.y << ", "
+                          << actual.translation.z << "]\n";
+                ok = false;
+            }
+
+            if (!CompareQuaternion(actual.rotation,
+                                   joint_expectation.qx,
+                                   joint_expectation.qy,
+                                   joint_expectation.qz,
+                                   joint_expectation.qw))
+            {
+                std::cerr << "frame " << frame_expectation.frame << " joint '" << joint_expectation.joint
+                          << "' rotation mismatch\n";
+                ok = false;
+            }
+        }
+    }
+
+    return ok;
 }
 
 struct TestCase
@@ -299,10 +544,12 @@ struct TestCase
 
 int main()
 {
-    const std::array<TestCase, 3> tests = {{
+    const std::array<TestCase, 5> tests = {{
         {"GenerateSkeleton", &TestGenerateSkeleton, false},
         {"BindPoseMatchesBlender", &TestBindPoseMatchesBlender, false},
-        {"GenerateAnimation", &TestGenerateAnimation, true},
+        {"ConvertAnimationProducesFile", &TestConvertAnimationProducesFile, false},
+        {"AnimationCompatibleWithSkeleton", &TestAnimationCompatibleWithSkeleton, false},
+        {"AnimationMatchesReference", &TestAnimationMatchesReference, false},
     }};
 
     int failures = 0;
@@ -334,7 +581,7 @@ int main()
             ++failures;
             std::cout << "[  FAILED ] " << test.name;
             if (test.expected_to_fail)
-                std::cout << " (expected TODO failure)";
+                std::cout << " (expected failure)";
             std::cout << std::endl;
         }
     }
