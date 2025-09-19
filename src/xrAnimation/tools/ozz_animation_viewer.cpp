@@ -130,6 +130,13 @@ std::string FormatFloat(float value, int precision = 6) {
 
 class PlaybackSampleApplication : public ozz::sample::Application {
  protected:
+  static constexpr int kNoAnimationIndex = -1;
+
+  bool HasAnimationSelected() const {
+    return current_animation_ >= 0 &&
+           current_animation_ < static_cast<int>(animations_.size());
+  }
+
   // Load multiple animations from a single file
   bool LoadMultipleAnimations(const char* filename) {
     ozz::io::File file(filename, "rb");
@@ -263,7 +270,8 @@ class PlaybackSampleApplication : public ozz::sample::Application {
     // Debug: count frames and output debug info for first few frames
     debug_frame_count_++;
 
-    if (!animations_.empty() && animations_[current_animation_].duration() > 0.0f) {
+    if (HasAnimationSelected() &&
+        animations_[current_animation_].duration() > 0.0f) {
       // Updates current animation time.
       controller_.Update(animations_[current_animation_], _dt);
 
@@ -277,7 +285,7 @@ class PlaybackSampleApplication : public ozz::sample::Application {
         return false;
       }
     } else {
-      // No animation - use bind pose
+      // No animation selected - use bind pose
       for (int i = 0; i < skeleton_.num_soa_joints(); ++i) {
         locals_[i] = skeleton_.joint_rest_poses()[i];
       }
@@ -402,6 +410,8 @@ class PlaybackSampleApplication : public ozz::sample::Application {
       std::cout << "  [" << i << "] " << joint_names[i] << std::endl;
     }
 
+    current_animation_ = animations_.empty() ? kNoAnimationIndex : 0;
+
     // Allocates runtime buffers.
     const int num_soa_joints = skeleton_.num_soa_joints();
     locals_.resize(num_soa_joints);
@@ -446,37 +456,65 @@ class PlaybackSampleApplication : public ozz::sample::Application {
 
   virtual bool OnGui(ozz::sample::ImGui* _im_gui) {
     // Animation selection
-    if (animations_.size() > 1) {
+    {
       static bool select_open = true;
       ozz::sample::ImGui::OpenClose select_oc(_im_gui, "Animation selection", &select_open);
       if (select_open) {
-        _im_gui->DoLabel("Current animation:");
-        char label[64];
-        snprintf(label, sizeof(label), "Animation %d of %zu", current_animation_ + 1, animations_.size());
-        _im_gui->DoLabel(label);
+        if (animations_.empty()) {
+          _im_gui->DoLabel("No animations loaded. Displaying bind pose.");
+        } else {
+          const int animation_count = static_cast<int>(animations_.size());
+          int selected_animation = std::clamp(current_animation_, kNoAnimationIndex,
+                                              animation_count - 1);
 
-        // Previous/Next buttons
-        bool changed = false;
-        if (_im_gui->DoButton("Previous") && current_animation_ > 0) {
-          current_animation_--;
-          changed = true;
-        }
-        // _im_gui->DoSameLine(); // Not available in this ImGui wrapper
-        if (_im_gui->DoButton("Next") && current_animation_ < (int)animations_.size() - 1) {
-          current_animation_++;
-          changed = true;
-        }
+          _im_gui->DoLabel(
+              "Choose an animation to preview or select the bind pose.");
 
-        // Reset animation when changed
-        if (changed) {
-          controller_.Reset();
-          context_.Invalidate();
-        }
+          if (_im_gui->DoButton("Previous")) {
+            if (selected_animation == kNoAnimationIndex) {
+              selected_animation = animation_count - 1;
+            } else if (selected_animation > 0) {
+              --selected_animation;
+            } else {
+              selected_animation = kNoAnimationIndex;
+            }
+          }
 
-        // Animation info
-        if (current_animation_ < (int)animations_.size()) {
-          snprintf(label, sizeof(label), "Duration: %.2f seconds", animations_[current_animation_].duration());
-          _im_gui->DoLabel(label);
+          if (_im_gui->DoButton("Next")) {
+            if (selected_animation == kNoAnimationIndex) {
+              selected_animation = 0;
+            } else if (selected_animation < animation_count - 1) {
+              ++selected_animation;
+            } else {
+              selected_animation = kNoAnimationIndex;
+            }
+          }
+
+          char label[64];
+          _im_gui->DoRadioButton(kNoAnimationIndex, "Bind pose (no animation)",
+                                 &selected_animation);
+          for (int i = 0; i < animation_count; ++i) {
+            std::snprintf(label, sizeof(label), "Animation %d of %d", i + 1,
+                          animation_count);
+            _im_gui->DoRadioButton(i, label, &selected_animation);
+          }
+
+          if (selected_animation != current_animation_) {
+            current_animation_ = selected_animation;
+            controller_.Reset();
+            context_.Invalidate();
+          }
+
+          if (HasAnimationSelected()) {
+            std::snprintf(label, sizeof(label), "Current: Animation %d of %zu",
+                          current_animation_ + 1, animations_.size());
+            _im_gui->DoLabel(label);
+            std::snprintf(label, sizeof(label), "Duration: %.2f seconds",
+                          animations_[current_animation_].duration());
+            _im_gui->DoLabel(label);
+          } else {
+            _im_gui->DoLabel("Current: Bind pose (no animation selected)");
+          }
         }
       }
     }
@@ -485,8 +523,12 @@ class PlaybackSampleApplication : public ozz::sample::Application {
     {
       static bool open = true;
       ozz::sample::ImGui::OpenClose oc(_im_gui, "Animation control", &open);
-      if (open && !animations_.empty()) {
-        controller_.OnGui(animations_[current_animation_], _im_gui);
+      if (open) {
+        if (HasAnimationSelected()) {
+          controller_.OnGui(animations_[current_animation_], _im_gui);
+        } else {
+          _im_gui->DoLabel("Select an animation to enable playback controls.");
+        }
       }
     }
 
@@ -535,7 +577,7 @@ class PlaybackSampleApplication : public ozz::sample::Application {
           const auto joint_names = skeleton_.joint_names();
           const int display_count = std::min(bone_display_limit_, max_joints);
 
-          if (!animations_.empty()) {
+          if (HasAnimationSelected()) {
             const float duration = animations_[current_animation_].duration();
             const float ratio = controller_.time_ratio();
             const float time = duration * ratio;
@@ -543,6 +585,8 @@ class PlaybackSampleApplication : public ozz::sample::Application {
             std::snprintf(header, sizeof(header),
                           "Time %.3fs / %.3fs (ratio %.3f)", time, duration, ratio);
             _im_gui->DoLabel(header);
+          } else {
+            _im_gui->DoLabel("Bind pose (no animation)");
           }
 
           int name_width = 4;
@@ -620,8 +664,8 @@ class PlaybackSampleApplication : public ozz::sample::Application {
   // Runtime animations (support multiple).
   ozz::vector<ozz::animation::Animation> animations_;
 
-  // Current animation index
-  int current_animation_ = 0;
+  // Current animation index (-1 selects bind pose)
+  int current_animation_ = kNoAnimationIndex;
 
   // Sampling context.
   ozz::animation::SamplingJob::Context context_;
@@ -689,6 +733,11 @@ class PlaybackSampleApplication : public ozz::sample::Application {
 
     if (animations_.empty()) {
       ozz::log::Err() << "No animation available for JSON export." << std::endl;
+      return false;
+    }
+
+    if (!HasAnimationSelected()) {
+      ozz::log::Err() << "No animation selected for JSON export." << std::endl;
       return false;
     }
 
