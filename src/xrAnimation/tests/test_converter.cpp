@@ -90,6 +90,11 @@ fs::path SingleAnimationOutputPath()
     return TestArtifactsDir() / "critical_hit_grup_1_single.ozz";
 }
 
+fs::path MeshOutputPath()
+{
+    return TestArtifactsDir() / "stalker_hero_mesh.ozz";
+}
+
 const std::array<const char*, 4> kExpectedMultiMotionNames = {{
     "norm_2_critical_hit_hend_left_0",
     "norm_2_critical_hit_hend_right_0",
@@ -367,6 +372,36 @@ bool ConvertSkeleton(bool force)
     return fs::exists(output_file);
 }
 
+bool ConvertMesh(bool force)
+{
+    const fs::path output_dir = TestArtifactsDir();
+    const fs::path output_file = MeshOutputPath();
+
+    std::error_code ec;
+    fs::create_directories(output_dir, ec);
+
+    if (force && fs::exists(output_file))
+        fs::remove(output_file);
+
+    if (!force && fs::exists(output_file))
+        return true;
+
+    std::vector<std::string> args = {
+        "mesh",
+        SkeletonInputPath().string(),
+        output_file.string(),
+    };
+
+    const int exit_code = ExecuteConverterCommand(args);
+    if (exit_code != 0)
+    {
+        std::cerr << "xray_to_ozz_converter returned exit code " << exit_code << std::endl;
+        return false;
+    }
+
+    return fs::exists(output_file);
+}
+
 bool EnsureSkeletonGenerated()
 {
     static bool cached = false;
@@ -571,6 +606,12 @@ bool TestGenerateSkeleton()
 {
     std::cout << "Generating skeleton via converter..." << std::endl;
     return ConvertSkeleton(true);
+}
+
+bool TestGenerateMesh()
+{
+    std::cout << "Generating mesh via converter..." << std::endl;
+    return ConvertMesh(true);
 }
 
 bool TestBindPoseMatchesBlender()
@@ -912,8 +953,9 @@ struct TestCase
 
 int main()
 {
-    const std::array<TestCase, 7> tests = {{
+    const std::array<TestCase, 8> tests = {{
         {"GenerateSkeleton", &TestGenerateSkeleton, false},
+        {"GenerateMesh", &TestGenerateMesh, false},
         {"BindPoseMatchesBlender", &TestBindPoseMatchesBlender, false},
         {"ConvertAnimationProducesFile", &TestConvertAnimationProducesFile, false},
         {"AnimationCompatibleWithSkeleton", &TestAnimationCompatibleWithSkeleton, false},
