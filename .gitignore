@@ -27,3 +27,4 @@ doc/doxygen/html/*
 ozz_utils/*
 src/intermediate/*
 intermediate/*
+src/xrAnimation/tests/testdata/*

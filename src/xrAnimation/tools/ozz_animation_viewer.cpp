@@ -28,6 +28,7 @@
 #include "../Externals/ozz-animation/samples/framework/application.h"
 #include "../Externals/ozz-animation/samples/framework/imgui.h"
 #include "../Externals/ozz-animation/samples/framework/renderer.h"
+#include "../Externals/ozz-animation/samples/framework/mesh.h"
 #include "../Externals/ozz-animation/samples/framework/utils.h"
 #include "ozz/animation/runtime/animation.h"
 #include "ozz/animation/runtime/local_to_model_job.h"
@@ -71,9 +72,19 @@ OZZ_OPTIONS_DECLARE_STRING(animation,
                            "Path to the animation (ozz archive format).",
                            "media/animation.ozz", false)
 
+// Mesh archive can be specified as an option.
+OZZ_OPTIONS_DECLARE_STRING(mesh,
+                           "Path to the skinned mesh (ozz archive format).",
+                           "", false)
+
 // Optional JSON export for sampled animation data.
 OZZ_OPTIONS_DECLARE_STRING(dump_animation_json,
                            "Path to write sampled animation data as JSON.",
+                           "", false)
+
+// Optional JSON export for bind-pose skinning baseline data.
+OZZ_OPTIONS_DECLARE_STRING(dump_skinning_json,
+                           "Path to write bind-pose skinning data as JSON.",
                            "", false)
 
 namespace {
@@ -127,6 +138,35 @@ std::string FormatFloat(float value, int precision = 6) {
   oss.imbue(std::locale::classic());
   oss << std::fixed << std::setprecision(precision) << value;
   return oss.str();
+}
+
+std::string GetFileStem(const char* path) {
+  if (path == nullptr) {
+    return std::string();
+  }
+  std::string value(path);
+  const size_t separator = value.find_last_of("/\\");
+  if (separator != std::string::npos) {
+    value.erase(0, separator + 1);
+  }
+  const size_t dot = value.find_last_of('.');
+  if (dot != std::string::npos) {
+    value.erase(dot);
+  }
+  return value;
+}
+
+std::array<std::array<float, 4>, 4> MatrixToRows(
+    const ozz::math::Float4x4& matrix) {
+  std::array<std::array<float, 4>, 4> rows{};
+  for (int column = 0; column < 4; ++column) {
+    float values[4];
+    ozz::math::StorePtrU(matrix.cols[column], values);
+    for (int row = 0; row < 4; ++row) {
+      rows[row][column] = values[row];
+    }
+  }
+  return rows;
 }
 
 }  // namespace
@@ -477,6 +517,7 @@ class PlaybackSampleApplication : public ozz::sample::Application {
     if (!ozz::sample::LoadSkeleton(OPTIONS_skeleton, &skeleton_)) {
       return false;
     }
+    skeleton_label_ = GetFileStem(OPTIONS_skeleton);
 
     // Try reading animation(s), but allow failure for bind pose testing
     bool has_animation = LoadMultipleAnimations(OPTIONS_animation);
@@ -526,12 +567,46 @@ class PlaybackSampleApplication : public ozz::sample::Application {
     // Allocates a context that matches animation requirements.
     context_.Resize(num_joints);
 
+    const bool mesh_requested = OPTIONS_mesh && OPTIONS_mesh[0] != '\0';
+    if (mesh_requested) {
+      if (!ozz::sample::LoadMeshes(OPTIONS_mesh, &meshes_)) {
+        return false;
+      }
+      mesh_label_ = GetFileStem(OPTIONS_mesh);
+      size_t skinning_count = 0;
+      for (const ozz::sample::Mesh& mesh : meshes_) {
+        skinning_count = std::max(skinning_count, mesh.joint_remaps.size());
+      }
+      skinning_matrices_.resize(skinning_count);
+      for (const ozz::sample::Mesh& mesh : meshes_) {
+        if (num_joints < mesh.highest_joint_index()) {
+          ozz::log::Err() << "The provided mesh doesn't match skeleton"
+                          << " (joint count mismatch)." << std::endl;
+          return false;
+        }
+      }
+    } else {
+      meshes_.clear();
+      skinning_matrices_.clear();
+    }
+
+    if (!ComputeBindPoseModelMatrices()) {
+      return false;
+    }
+
     log_bone_limit_ = num_joints > 0 ? num_joints : 0;
     bone_display_limit_ = std::min(num_joints, 16);
 
     if (OPTIONS_dump_animation_json &&
         OPTIONS_dump_animation_json[0] != '\0') {
       if (!ExportAnimationToJson(OPTIONS_dump_animation_json)) {
+        return false;
+      }
+    }
+
+    if (OPTIONS_dump_skinning_json &&
+        OPTIONS_dump_skinning_json[0] != '\0') {
+      if (!ExportSkinningToJson(OPTIONS_dump_skinning_json)) {
         return false;
       }
     }
@@ -831,6 +906,14 @@ class PlaybackSampleApplication : public ozz::sample::Application {
   // Buffer of model space matrices.
   ozz::vector<ozz::math::Float4x4> models_;
 
+  // Optional meshes used for skinning validation / rendering.
+  ozz::vector<ozz::sample::Mesh> meshes_;
+  ozz::vector<ozz::math::Float4x4> skinning_matrices_;
+
+  // Cached labels for reporting/exporting.
+  std::string skeleton_label_;
+  std::string mesh_label_;
+
   // Debug frame counter
   int debug_frame_count_;
 
@@ -843,6 +926,191 @@ class PlaybackSampleApplication : public ozz::sample::Application {
   bool show_bone_debug_ = true;
   int bone_display_limit_ = 16;
   bool space_was_down_ = false;
+
+  bool ComputeBindPoseModelMatrices() {
+    if (skeleton_.num_joints() == 0) {
+      models_.clear();
+      return true;
+    }
+
+    const auto rest_poses = skeleton_.joint_rest_poses();
+    if (rest_poses.size() != locals_.size()) {
+      locals_.resize(rest_poses.size());
+    }
+    for (size_t i = 0; i < rest_poses.size(); ++i) {
+      locals_[i] = rest_poses[i];
+    }
+
+    if (models_.size() != static_cast<size_t>(skeleton_.num_joints())) {
+      models_.resize(skeleton_.num_joints());
+    }
+
+    ozz::animation::LocalToModelJob ltm_job;
+    ltm_job.skeleton = &skeleton_;
+    ltm_job.input = make_span(locals_);
+    ltm_job.output = make_span(models_);
+    if (!ltm_job.Run()) {
+      ozz::log::Err() << "Failed to build bind-pose model matrices." << std::endl;
+      return false;
+    }
+    return true;
+  }
+
+  bool ExportSkinningToJson(const char* path) {
+    if (path == nullptr || path[0] == '\0') {
+      return true;
+    }
+    if (meshes_.empty()) {
+      ozz::log::Err() << "No mesh loaded; cannot export skinning JSON." << std::endl;
+      return false;
+    }
+    if (!ComputeBindPoseModelMatrices()) {
+      return false;
+    }
+
+    std::ofstream file(path, std::ios::binary);
+    if (!file) {
+      ozz::log::Err() << "Failed to open skinning JSON export path: " << path
+                      << std::endl;
+      return false;
+    }
+    file.imbue(std::locale::classic());
+
+    const int joint_count = skeleton_.num_joints();
+    const auto joint_names = skeleton_.joint_names();
+
+    file << "{\n";
+    file << "  \"armature\": {\n";
+    file << "    \"name\": \"" << EscapeJsonString(skeleton_label_.c_str())
+         << "\",\n";
+    file << "    \"bones\": [\n";
+
+    for (int joint = 0; joint < joint_count; ++joint) {
+      const auto rows = MatrixToRows(models_[joint]);
+      ozz::math::SimdInt4 invertible;
+      const ozz::math::Float4x4 inverse =
+          ozz::math::Invert(models_[joint], &invertible);
+      const auto inverse_rows = MatrixToRows(inverse);
+
+      file << "      {\n";
+      file << "        \"index\": " << joint << ",\n";
+      file << "        \"name\": \""
+           << EscapeJsonString(joint_names[joint]) << "\",\n";
+      file << "        \"matrix_global\": [\n";
+      for (int row = 0; row < 4; ++row) {
+        file << "          [" << FormatFloat(rows[row][0]) << ", "
+             << FormatFloat(rows[row][1]) << ", "
+             << FormatFloat(rows[row][2]) << ", "
+             << FormatFloat(rows[row][3]) << "]";
+        file << (row < 3 ? ",\n" : "\n");
+      }
+      file << "        ],\n";
+      file << "        \"matrix_global_inverse\": [\n";
+      for (int row = 0; row < 4; ++row) {
+        file << "          [" << FormatFloat(inverse_rows[row][0]) << ", "
+             << FormatFloat(inverse_rows[row][1]) << ", "
+             << FormatFloat(inverse_rows[row][2]) << ", "
+             << FormatFloat(inverse_rows[row][3]) << "]";
+        file << (row < 3 ? ",\n" : "\n");
+      }
+      file << "        ]\n";
+      file << "      }";
+      file << (joint + 1 < joint_count ? ",\n" : "\n");
+    }
+
+    file << "    ]\n";
+    file << "  },\n";
+    file << "  \"meshes\": [\n";
+
+    for (size_t mesh_index = 0; mesh_index < meshes_.size(); ++mesh_index) {
+      const ozz::sample::Mesh& mesh = meshes_[mesh_index];
+      file << "    {\n";
+      file << "      \"name\": \"";
+      if (!mesh_label_.empty()) {
+        file << EscapeJsonString(mesh_label_.c_str());
+        if (meshes_.size() > 1) {
+          file << "_" << mesh_index;
+        }
+      } else {
+        file << "mesh_" << mesh_index;
+      }
+      file << "\",\n";
+      file << "      \"vertex_count\": " << mesh.vertex_count() << ",\n";
+      file << "      \"vertices\": [\n";
+
+      int global_vertex = 0;
+      for (const ozz::sample::Mesh::Part& part : mesh.parts) {
+        const int influences = part.influences_count();
+        const int vertex_count = part.vertex_count();
+        for (int v = 0; v < vertex_count; ++v, ++global_vertex) {
+          file << "        {\n";
+          file << "          \"index\": " << global_vertex << ",\n";
+          const int pos_offset = v * ozz::sample::Mesh::Part::kPositionsCpnts;
+          const float px = part.positions[pos_offset + 0];
+          const float py = part.positions[pos_offset + 1];
+          const float pz = part.positions[pos_offset + 2];
+          file << "          \"position\": [" << FormatFloat(px) << ", "
+               << FormatFloat(py) << ", " << FormatFloat(pz) << "],\n";
+
+          file << "          \"weights\": [";
+          if (influences > 0) {
+            std::vector<std::pair<uint16_t, float>> weights;
+            weights.reserve(influences);
+            const int joint_base = v * influences;
+            const int weight_base = v * std::max(0, influences - 1);
+            float accum = 0.f;
+            for (int influence = 0; influence < influences; ++influence) {
+              const uint16_t palette_index =
+                  part.joint_indices[joint_base + influence];
+              if (palette_index >= mesh.joint_remaps.size()) {
+                ozz::log::Err() << "Vertex " << global_vertex
+                                << " references out-of-range joint index"
+                                << std::endl;
+                continue;
+              }
+              const uint16_t joint_index = mesh.joint_remaps[palette_index];
+              float weight = 0.f;
+              if (influence < influences - 1) {
+                weight = part.joint_weights[weight_base + influence];
+                accum += weight;
+              } else {
+                weight = std::max(0.f, 1.f - accum);
+              }
+              weight = std::clamp(weight, 0.f, 1.f);
+              weights.emplace_back(joint_index, weight);
+            }
+            std::sort(weights.begin(), weights.end(),
+                      [](const auto& lhs, const auto& rhs) {
+                        return lhs.first < rhs.first;
+                      });
+            for (size_t idx = 0; idx < weights.size(); ++idx) {
+              file << "[" << weights[idx].first << ", "
+                   << FormatFloat(weights[idx].second) << "]";
+              if (idx + 1 < weights.size()) {
+                file << ", ";
+              }
+            }
+          }
+          file << "]\n";
+          file << "        }";
+          if (global_vertex + 1 < mesh.vertex_count()) {
+            file << ",";
+          }
+          file << "\n";
+        }
+      }
+
+      file << "      ]\n";
+      file << "    }";
+      file << (mesh_index + 1 < meshes_.size() ? ",\n" : "\n");
+    }
+
+    file << "  ]\n";
+    file << "}\n";
+
+    ozz::log::LogV() << "Exported skinning JSON to " << path << std::endl;
+    return true;
+  }
 
   void LogBoneTransformsForFrame() const {
     const int joint_count = skeleton_.num_joints();
