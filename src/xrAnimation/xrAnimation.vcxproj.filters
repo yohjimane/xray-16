@@ -19,8 +19,8 @@
     <Filter Include="Animation System">
       <UniqueIdentifier>{A1B2C3D4-E5F6-7890-ABCD-EF1234567890}</UniqueIdentifier>
     </Filter>
-    <Filter Include="Utilities">
-      <UniqueIdentifier>{ff07acfc-bf18-4f2e-9962-d9d94de97176}</UniqueIdentifier>
+    <Filter Include="Tools">
+      <UniqueIdentifier>{123f6e41-d6f6-436e-8c4c-7f44fe6e5ce3}</UniqueIdentifier>
     </Filter>
   </ItemGroup>
   <ItemGroup>
@@ -39,7 +39,10 @@
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="tools\ozz_animation_viewer.cpp">
-      <Filter>Utilities</Filter>
+      <Filter>Tools</Filter>
+    </ClCompile>
+    <ClCompile Include="tools\xray_to_ozz_converter.cpp">
+      <Filter>Tools</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
@@ -47,6 +50,8 @@
   </ItemGroup>
   <ItemGroup>
     <Text Include="CMakeLists.txt" />
-    <Text Include="tools\CMakeLists.txt" />
+    <Text Include="tools\CMakeLists.txt">
+      <Filter>Tools</Filter>
+    </Text>
   </ItemGroup>
 </Project>

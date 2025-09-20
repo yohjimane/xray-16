@@ -950,7 +950,47 @@ std::string escape_json(const std::string& value)
     return escaped;
 }
 
-void write_metadata(const fs::path& path, const MotionMetadata& metadata, const fs::path& source_omf)
+void SerializeString(ozz::io::OArchive& archive, const std::string& value)
+{
+    const uint32_t length = static_cast<uint32_t>(value.size());
+    archive << length;
+    if (length > 0)
+        archive << ozz::io::MakeArray(value.c_str(), length);
+}
+
+void SerializeMotionMarks(ozz::io::OArchive& archive, const MotionMetadata& metadata)
+{
+    const uint32_t mark_count = static_cast<uint32_t>(metadata.marks.size());
+    archive << mark_count;
+    for (const auto& mark : metadata.marks)
+    {
+        SerializeString(archive, mark.name);
+        const uint32_t interval_count = static_cast<uint32_t>(mark.intervals.size());
+        archive << interval_count;
+        for (const auto& interval : mark.intervals)
+        {
+            archive << interval.first;
+            archive << interval.second;
+        }
+    }
+}
+
+void SerializeMotionMetadata(ozz::io::OArchive& archive, const MotionMetadata& metadata)
+{
+    SerializeString(archive, metadata.name);
+    archive << metadata.flags;
+    archive << metadata.bone_or_part;
+    archive << metadata.motion_id;
+    archive << metadata.speed;
+    archive << metadata.power;
+    archive << metadata.accrue;
+    archive << metadata.falloff;
+    SerializeMotionMarks(archive, metadata);
+}
+
+void write_metadata_json(const fs::path& path,
+                         const std::vector<MotionMetadata>& metadata_list,
+                         const fs::path& source_omf)
 {
     std::error_code ec;
     if (const auto parent = path.parent_path(); !parent.empty())
@@ -963,31 +1003,42 @@ void write_metadata(const fs::path& path, const MotionMetadata& metadata, const 
     stream << std::fixed << std::setprecision(6);
     stream << "{\n";
     stream << "  \"source_omf\": \"" << escape_json(source_omf.string()) << "\",\n";
-    stream << "  \"motion_name\": \"" << escape_json(metadata.name) << "\",\n";
-    stream << "  \"flags\": " << metadata.flags << ",\n";
-    stream << "  \"bone_or_part\": " << metadata.bone_or_part << ",\n";
-    stream << "  \"motion_id\": " << metadata.motion_id << ",\n";
-    stream << "  \"speed\": " << metadata.speed << ",\n";
-    stream << "  \"power\": " << metadata.power << ",\n";
-    stream << "  \"accrue\": " << metadata.accrue << ",\n";
-    stream << "  \"falloff\": " << metadata.falloff << ",\n";
-    stream << "  \"marks\": [\n";
-    for (size_t i = 0; i < metadata.marks.size(); ++i)
+    stream << "  \"motions\": [\n";
+    for (size_t index = 0; index < metadata_list.size(); ++index)
     {
-        const auto& mark = metadata.marks[i];
+        const MotionMetadata& metadata = metadata_list[index];
         stream << "    {\n";
-        stream << "      \"name\": \"" << escape_json(mark.name) << "\",\n";
-        stream << "      \"intervals\": [";
-        for (size_t j = 0; j < mark.intervals.size(); ++j)
+        stream << "      \"motion_name\": \"" << escape_json(metadata.name) << "\",\n";
+        stream << "      \"flags\": " << metadata.flags << ",\n";
+        stream << "      \"bone_or_part\": " << metadata.bone_or_part << ",\n";
+        stream << "      \"motion_id\": " << metadata.motion_id << ",\n";
+        stream << "      \"speed\": " << metadata.speed << ",\n";
+        stream << "      \"power\": " << metadata.power << ",\n";
+        stream << "      \"accrue\": " << metadata.accrue << ",\n";
+        stream << "      \"falloff\": " << metadata.falloff << ",\n";
+        stream << "      \"marks\": [\n";
+        for (size_t mark_index = 0; mark_index < metadata.marks.size(); ++mark_index)
         {
-            const auto& interval = mark.intervals[j];
-            stream << '[' << interval.first << ", " << interval.second << ']';
-            if (j + 1 < mark.intervals.size())
-                stream << ", ";
+            const auto& mark = metadata.marks[mark_index];
+            stream << "        {\n";
+            stream << "          \"name\": \"" << escape_json(mark.name) << "\",\n";
+            stream << "          \"intervals\": [";
+            for (size_t interval_index = 0; interval_index < mark.intervals.size(); ++interval_index)
+            {
+                const auto& interval = mark.intervals[interval_index];
+                stream << '[' << interval.first << ", " << interval.second << ']';
+                if (interval_index + 1 < mark.intervals.size())
+                    stream << ", ";
+            }
+            stream << "]\n";
+            stream << "        }";
+            if (mark_index + 1 < metadata.marks.size())
+                stream << ',';
+            stream << "\n";
         }
-        stream << "]\n";
+        stream << "      ]\n";
         stream << "    }";
-        if (i + 1 < metadata.marks.size())
+        if (index + 1 < metadata_list.size())
             stream << ',';
         stream << "\n";
     }
@@ -1133,7 +1184,9 @@ void convert_animation(const AnimationConfig& config)
     if (omf.motions.empty())
         throw std::runtime_error("OMF file contains no motions");
 
-    const OmfMotion* selected_motion = nullptr;
+    std::vector<const OmfMotion*> motions_to_export;
+    motions_to_export.reserve(omf.motions.size());
+
     if (config.motion_name)
     {
         const std::string target = to_lower_copy(*config.motion_name);
@@ -1141,23 +1194,24 @@ void convert_animation(const AnimationConfig& config)
         {
             if (to_lower_copy(motion.name) == target)
             {
-                selected_motion = &motion;
+                motions_to_export.push_back(&motion);
                 break;
             }
         }
-        if (!selected_motion)
+        if (motions_to_export.empty())
             throw std::runtime_error("requested motion '" + *config.motion_name + "' not found in OMF");
     }
     else
     {
-        selected_motion = &omf.motions.front();
+        for (const auto& motion : omf.motions)
+            motions_to_export.push_back(&motion);
     }
 
-    auto raw_animation = build_raw_animation_from_omf(*selected_motion, omf, bones);
-    ozz::animation::offline::AnimationBuilder builder;
-    auto animation = builder(raw_animation);
-    if (!animation)
-        throw std::runtime_error("ozz animation build failed");
+    if (motions_to_export.empty())
+        throw std::runtime_error("no animations selected for export");
+
+    std::vector<MotionMetadata> metadata_to_write;
+    metadata_to_write.reserve(motions_to_export.size());
 
     std::error_code ec;
     if (const auto parent = config.output_ozz.parent_path(); !parent.empty())
@@ -1168,14 +1222,43 @@ void convert_animation(const AnimationConfig& config)
         throw std::runtime_error("failed to open output animation file: " + config.output_ozz.string());
 
     ozz::io::OArchive archive(&output);
-    archive << *animation;
+    const uint32_t animation_count = static_cast<uint32_t>(motions_to_export.size());
+    archive << animation_count;
+
+    ozz::animation::offline::AnimationBuilder builder;
+    for (const OmfMotion* motion : motions_to_export)
+    {
+        auto raw_animation = build_raw_animation_from_omf(*motion, omf, bones);
+        auto animation = builder(raw_animation);
+        if (!animation)
+            throw std::runtime_error("ozz animation build failed");
+
+        archive << *animation;
+
+        MotionMetadata metadata = motion->metadata;
+        if (metadata.name.empty())
+        {
+            metadata.name = motion->name;
+        }
+        SerializeMotionMetadata(archive, metadata);
+        metadata_to_write.push_back(std::move(metadata));
+    }
 
     fs::path metadata_path = config.metadata_path.value_or(config.output_ozz);
     if (!config.metadata_path)
         metadata_path.replace_extension(".json");
-    write_metadata(metadata_path, selected_motion->metadata, config.input_omf);
+    write_metadata_json(metadata_path, metadata_to_write, config.input_omf);
 
-    std::cout << "Converted animation '" << selected_motion->name << "' written to " << config.output_ozz << std::endl;
+    if (motions_to_export.size() == 1)
+    {
+        std::cout << "Converted animation '" << motions_to_export.front()->name
+                  << "' written to " << config.output_ozz << std::endl;
+    }
+    else
+    {
+        std::cout << "Converted " << motions_to_export.size() << " animations written to "
+                  << config.output_ozz << std::endl;
+    }
 }
 
 } // namespace

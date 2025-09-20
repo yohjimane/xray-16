@@ -56,6 +56,9 @@
 #include <string>
 #include <string_view>
 #include <locale>
+#include <cstdint>
+#include <vector>
+#include "GL/glfw.h"
 #include "ozz/base/span.h"
 
 // Skeleton archive can be specified as an option.
@@ -128,6 +131,23 @@ std::string FormatFloat(float value, int precision = 6) {
 
 }  // namespace
 
+struct MotionMarkData {
+  std::string name;
+  std::vector<std::pair<float, float>> intervals;
+};
+
+struct MotionMetadataData {
+  std::string name;
+  uint32_t flags = 0;
+  uint16_t bone_or_part = 0;
+  uint16_t motion_id = 0;
+  float speed = 0.f;
+  float power = 0.f;
+  float accrue = 0.f;
+  float falloff = 0.f;
+  std::vector<MotionMarkData> marks;
+};
+
 class PlaybackSampleApplication : public ozz::sample::Application {
  protected:
   static constexpr int kNoAnimationIndex = -1;
@@ -135,6 +155,69 @@ class PlaybackSampleApplication : public ozz::sample::Application {
   bool HasAnimationSelected() const {
     return current_animation_ >= 0 &&
            current_animation_ < static_cast<int>(animations_.size());
+  }
+
+  std::string GetAnimationName(int index) const {
+    if (index < 0 || index >= static_cast<int>(animations_.size())) {
+      return std::string();
+    }
+    if (index < static_cast<int>(animation_metadata_.size())) {
+      const std::string& meta_name = animation_metadata_[index].name;
+      if (!meta_name.empty()) {
+        return meta_name;
+      }
+    }
+    const char* runtime_name = animations_[index].name();
+    if (runtime_name && runtime_name[0] != '\0') {
+      return runtime_name;
+    }
+    return std::string();
+  }
+
+  std::string ReadString(ozz::io::IArchive& archive) {
+    uint32_t length = 0;
+    archive >> length;
+    std::string value;
+    value.resize(length);
+    if (length > 0) {
+      archive >> ozz::io::MakeArray(value.data(), length);
+    }
+    return value;
+  }
+
+  // Read serialized metadata chunk that follows each animation in converter output.
+  MotionMetadataData ReadSerializedMetadata(ozz::io::IArchive& archive) {
+    MotionMetadataData metadata;
+    metadata.name = ReadString(archive);
+    archive >> metadata.flags;
+    archive >> metadata.bone_or_part;
+    archive >> metadata.motion_id;
+    archive >> metadata.speed;
+    archive >> metadata.power;
+    archive >> metadata.accrue;
+    archive >> metadata.falloff;
+
+    uint32_t mark_count = 0;
+    archive >> mark_count;
+    metadata.marks.resize(mark_count);
+    for (uint32_t mark_index = 0; mark_index < mark_count; ++mark_index) {
+      MotionMarkData& mark = metadata.marks[mark_index];
+      mark.name = ReadString(archive);
+
+      uint32_t interval_count = 0;
+      archive >> interval_count;
+      mark.intervals.resize(interval_count);
+      for (uint32_t interval_index = 0; interval_index < interval_count;
+           ++interval_index) {
+        float start = 0.f;
+        float end = 0.f;
+        archive >> start;
+        archive >> end;
+        mark.intervals[interval_index] = {start, end};
+      }
+    }
+
+    return metadata;
   }
 
   // Load multiple animations from a single file
@@ -147,11 +230,17 @@ class PlaybackSampleApplication : public ozz::sample::Application {
 
     ozz::io::IArchive archive(&file);
 
+    animation_metadata_.clear();
+
     // First try to read a single animation (standard format)
     if (archive.TestTag<ozz::animation::Animation>()) {
       // Single animation file
       animations_.resize(1);
       archive >> animations_[0];
+      MotionMetadataData metadata;
+      const char* name = animations_[0].name();
+      metadata.name = name ? name : "";
+      animation_metadata_.push_back(std::move(metadata));
       return true;
     }
 
@@ -169,8 +258,16 @@ class PlaybackSampleApplication : public ozz::sample::Application {
     }
 
     animations_.resize(anim_count);
+    animation_metadata_.resize(anim_count);
     for (uint32_t i = 0; i < anim_count; ++i) {
       archive >> animations_[i];
+      animation_metadata_[i] = ReadSerializedMetadata(archive);
+      if (animation_metadata_[i].name.empty()) {
+        const char* animation_name = animations_[i].name();
+        if (animation_name) {
+          animation_metadata_[i].name = animation_name;
+        }
+      }
     }
 
     ozz::log::LogV() << "Loaded " << anim_count << " animations from " << filename << std::endl;
@@ -269,6 +366,13 @@ class PlaybackSampleApplication : public ozz::sample::Application {
   virtual bool OnUpdate(float _dt, float) {
     // Debug: count frames and output debug info for first few frames
     debug_frame_count_++;
+
+    const bool space_down = glfwGetKey(GLFW_KEY_SPACE) == GLFW_PRESS;
+    if (space_down && !space_was_down_ && HasAnimationSelected() &&
+        animations_[current_animation_].duration() > 0.0f) {
+      controller_.TogglePlay();
+    }
+    space_was_down_ = space_down;
 
     if (HasAnimationSelected() &&
         animations_[current_animation_].duration() > 0.0f) {
@@ -396,7 +500,14 @@ class PlaybackSampleApplication : public ozz::sample::Application {
     if (has_animation && !animations_.empty()) {
       std::cout << "Loaded " << animations_.size() << " animations" << std::endl;
       for (size_t i = 0; i < animations_.size(); ++i) {
-        std::cout << "  Animation " << i << ": tracks=" << animations_[i].num_tracks()
+        const char* animation_name = animations_[i].name();
+        const std::string display_name = animation_name && animation_name[0] != '\0'
+                                             ? animation_name
+                                             : animation_metadata_.size() > i
+                                                   ? animation_metadata_[i].name
+                                                   : std::string();
+        std::cout << "  Animation " << i << " ('" << display_name
+                  << "'): tracks=" << animations_[i].num_tracks()
                   << ", duration=" << animations_[i].duration() << " seconds" << std::endl;
       }
     } else {
@@ -494,9 +605,16 @@ class PlaybackSampleApplication : public ozz::sample::Application {
           _im_gui->DoRadioButton(kNoAnimationIndex, "Bind pose (no animation)",
                                  &selected_animation);
           for (int i = 0; i < animation_count; ++i) {
-            std::snprintf(label, sizeof(label), "Animation %d of %d", i + 1,
-                          animation_count);
-            _im_gui->DoRadioButton(i, label, &selected_animation);
+            const std::string motion_name = GetAnimationName(i);
+            if (!motion_name.empty()) {
+              std::snprintf(label, sizeof(label), "%d: %s", i + 1,
+                            motion_name.c_str());
+            } else {
+              std::snprintf(label, sizeof(label), "Animation %d of %d", i + 1,
+                            animation_count);
+            }
+
+            _im_gui->DoRadioButton(i, motion_name.c_str(), &selected_animation);
           }
 
           if (selected_animation != current_animation_) {
@@ -506,31 +624,68 @@ class PlaybackSampleApplication : public ozz::sample::Application {
           }
 
           if (HasAnimationSelected()) {
-            std::snprintf(label, sizeof(label), "Current: Animation %d of %zu",
-                          current_animation_ + 1, animations_.size());
-            _im_gui->DoLabel(label);
+            const MotionMetadataData* metadata =
+                animation_metadata_.size() > static_cast<size_t>(current_animation_)
+                    ? &animation_metadata_[current_animation_]
+                    : nullptr;
+            if (metadata) {
+              std::snprintf(label, sizeof(label), "Flags: 0x%08X", metadata->flags);
+              _im_gui->DoLabel(label);
+              std::snprintf(label, sizeof(label), "Motion ID: %u", metadata->motion_id);
+              _im_gui->DoLabel(label);
+              std::snprintf(label, sizeof(label), "Speed: %.3f  Power: %.3f",
+                            metadata->speed, metadata->power);
+              _im_gui->DoLabel(label);
+              std::snprintf(label, sizeof(label), "Accrue: %.3f  Falloff: %.3f",
+                            metadata->accrue, metadata->falloff);
+              _im_gui->DoLabel(label);
+            }
             std::snprintf(label, sizeof(label), "Duration: %.2f seconds",
                           animations_[current_animation_].duration());
             _im_gui->DoLabel(label);
-          } else {
-            _im_gui->DoLabel("Current: Bind pose (no animation selected)");
+            if (metadata && !metadata->marks.empty()) {
+              _im_gui->DoLabel("Marks:");
+              metadata_labels_.clear();
+              for (const MotionMarkData& mark : metadata->marks) {
+                std::ostringstream mark_stream;
+                mark_stream.imbue(std::locale::classic());
+                mark_stream << "  " << mark.name << " [";
+                for (size_t idx = 0; idx < mark.intervals.size(); ++idx) {
+                  mark_stream << std::fixed << std::setprecision(3)
+                              << mark.intervals[idx].first << " - "
+                              << mark.intervals[idx].second;
+                  if (idx + 1 < mark.intervals.size()) {
+                    mark_stream << ", ";
+                  }
+                }
+                mark_stream << "]";
+                metadata_labels_.push_back(mark_stream.str());
+              }
+              for (const std::string& mark_label : metadata_labels_) {
+                _im_gui->DoLabel(mark_label.c_str());
+              }
+              metadata_labels_.clear();
+            }
+
+
+            // Exposes animation runtime playback controls.
+            {
+                static bool open = true;
+                ozz::sample::ImGui::OpenClose oc(_im_gui, "Animation control", &open);
+                if (open) {
+                    if (HasAnimationSelected()) {
+                        controller_.OnGui(animations_[current_animation_], _im_gui);
+                    }
+                    else {
+                        _im_gui->DoLabel("Select an animation to enable playback controls.");
+                    }
+                }
+            }
           }
         }
       }
     }
 
-    // Exposes animation runtime playback controls.
-    {
-      static bool open = true;
-      ozz::sample::ImGui::OpenClose oc(_im_gui, "Animation control", &open);
-      if (open) {
-        if (HasAnimationSelected()) {
-          controller_.OnGui(animations_[current_animation_], _im_gui);
-        } else {
-          _im_gui->DoLabel("Select an animation to enable playback controls.");
-        }
-      }
-    }
 
     // Logging options
     {
@@ -664,6 +819,12 @@ class PlaybackSampleApplication : public ozz::sample::Application {
   // Runtime animations (support multiple).
   ozz::vector<ozz::animation::Animation> animations_;
 
+  // Metadata per animation loaded from converter archives.
+  std::vector<MotionMetadataData> animation_metadata_;
+
+  // Temporary strings used to display mark information.
+  std::vector<std::string> metadata_labels_;
+
   // Current animation index (-1 selects bind pose)
   int current_animation_ = kNoAnimationIndex;
 
@@ -687,6 +848,7 @@ class PlaybackSampleApplication : public ozz::sample::Application {
   int log_bone_limit_ = 0;
   bool show_bone_debug_ = true;
   int bone_display_limit_ = 16;
+  bool space_was_down_ = false;
 
   void LogBoneTransformsForFrame() const {
     const int joint_count = skeleton_.num_joints();

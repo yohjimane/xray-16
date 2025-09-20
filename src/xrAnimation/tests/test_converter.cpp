@@ -11,6 +11,7 @@
 #include <string>
 #include <string_view>
 #include <system_error>
+#include <type_traits>
 #include <vector>
 
 #ifndef WORKSPACE_ROOT
@@ -78,12 +79,138 @@ fs::path AnimationMetadataPath()
     return TestArtifactsDir() / "critical_hit_grup_1.json";
 }
 
+fs::path SingleAnimationOutputPath()
+{
+    return TestArtifactsDir() / "critical_hit_grup_1_single.ozz";
+}
+
 const std::array<const char*, 4> kExpectedMultiMotionNames = {{
     "norm_2_critical_hit_hend_left_0",
     "norm_2_critical_hit_hend_right_0",
     "norm_2_critical_hit_torso_0",
     "norm_2_critical_hit_torso_1",
 }};
+
+std::string ReadString(ozz::io::IArchive& archive)
+{
+    uint32_t length = 0;
+    archive >> length;
+    std::string value;
+    value.resize(length);
+    if (length > 0)
+        archive >> ozz::io::MakeArray(value.data(), length);
+    return value;
+}
+
+bool ReadSerializedMotionMetadata(ozz::io::IArchive& archive, std::string* motion_name)
+{
+    std::string name = ReadString(archive);
+
+    uint32_t flags = 0;
+    archive >> flags;
+
+    uint16_t bone_or_part = 0;
+    archive >> bone_or_part;
+
+    uint16_t motion_id = 0;
+    archive >> motion_id;
+
+    float speed = 0.f;
+    float power = 0.f;
+    float accrue = 0.f;
+    float falloff = 0.f;
+    archive >> speed;
+    archive >> power;
+    archive >> accrue;
+    archive >> falloff;
+
+    uint32_t mark_count = 0;
+    archive >> mark_count;
+    for (uint32_t mark_index = 0; mark_index < mark_count; ++mark_index)
+    {
+        std::string mark_name = ReadString(archive);
+
+        uint32_t interval_count = 0;
+        archive >> interval_count;
+        for (uint32_t interval_index = 0; interval_index < interval_count; ++interval_index)
+        {
+            float start = 0.f;
+            float end = 0.f;
+            archive >> start;
+            archive >> end;
+        }
+    }
+
+    if (motion_name)
+        *motion_name = std::move(name);
+
+    return true;
+}
+
+bool LoadAnimationByName(const fs::path& path,
+                         const std::string& motion_name,
+                         ozz::animation::Animation& animation_out)
+{
+    ozz::io::File file(path.string().c_str(), "rb");
+    if (!file.opened())
+    {
+        std::cerr << "failed to open animation archive: " << path << std::endl;
+        return false;
+    }
+
+    ozz::io::IArchive archive(&file);
+
+    if (archive.TestTag<ozz::animation::Animation>())
+    {
+        ozz::animation::Animation animation;
+        archive >> animation;
+        const char* name = animation.name();
+        const std::string actual_name = name ? name : std::string();
+        if (!motion_name.empty() && actual_name != motion_name)
+        {
+            std::cerr << "animation '" << motion_name
+                      << "' not found in single-animation archive" << std::endl;
+            return false;
+        }
+
+        animation_out = std::move(animation);
+        return true;
+    }
+
+    file.Seek(0, ozz::io::File::kSet);
+    archive = ozz::io::IArchive(&file);
+
+    uint32_t animation_count = 0;
+    archive >> animation_count;
+
+    bool found = false;
+    for (uint32_t i = 0; i < animation_count; ++i)
+    {
+        ozz::animation::Animation animation;
+        archive >> animation;
+
+        std::string metadata_name;
+        ReadSerializedMotionMetadata(archive, &metadata_name);
+
+        if (!found)
+        {
+            const char* animation_name_cstr = animation.name();
+            const std::string animation_name = animation_name_cstr ? animation_name_cstr : std::string();
+            if (animation_name == motion_name || metadata_name == motion_name)
+            {
+                animation_out = std::move(animation);
+                found = true;
+            }
+        }
+    }
+
+    if (!found)
+    {
+        std::cerr << "animation '" << motion_name << "' not found in archive" << std::endl;
+    }
+
+    return found;
+}
 
 std::string QuoteForShell(const std::string& value)
 {
@@ -261,6 +388,40 @@ bool ConvertAnimation(bool force)
     return fs::exists(output_file);
 }
 
+bool ConvertSpecificMotion(const std::string& motion_name, bool force)
+{
+    if (!EnsureSkeletonGenerated())
+        return false;
+
+    const fs::path output_file = SingleAnimationOutputPath();
+    std::error_code ec;
+    fs::create_directories(TestArtifactsDir(), ec);
+
+    if (force && fs::exists(output_file))
+        fs::remove(output_file);
+
+    if (!force && fs::exists(output_file))
+        return true;
+
+    std::vector<std::string> args = {
+        "animation",
+        AnimationInputPath().string(),
+        output_file.string(),
+        SkeletonInputPath().string(),
+        "--motion",
+        motion_name};
+
+    const int exit_code = ExecuteCommand(args);
+    if (exit_code != 0)
+    {
+        std::cerr << "animation conversion for motion '" << motion_name
+                  << "' failed with exit code " << exit_code << std::endl;
+        return false;
+    }
+
+    return fs::exists(output_file);
+}
+
 template <typename T>
 bool LoadOzz(const fs::path& path, T& object)
 {
@@ -272,8 +433,35 @@ bool LoadOzz(const fs::path& path, T& object)
     }
 
     ozz::io::IArchive archive(&file);
-    archive >> object;
-    return true;
+
+    if constexpr (std::is_same_v<T, ozz::animation::Animation>)
+    {
+        if (archive.TestTag<ozz::animation::Animation>())
+        {
+            archive >> object;
+            return true;
+        }
+
+        file.Seek(0, ozz::io::File::kSet);
+        archive = ozz::io::IArchive(&file);
+
+        uint32_t animation_count = 0;
+        archive >> animation_count;
+        if (animation_count == 0)
+        {
+            std::cerr << "animation archive contains no animations" << std::endl;
+            return false;
+        }
+
+        archive >> object;
+        ReadSerializedMotionMetadata(archive, nullptr);
+        return true;
+    }
+    else
+    {
+        archive >> object;
+        return true;
+    }
 }
 
 [[maybe_unused]] int FindJoint(const ozz::animation::Skeleton& skeleton, const std::string& name)
@@ -414,7 +602,7 @@ bool TestAnimationCompatibleWithSkeleton()
         return false;
 
     ozz::animation::Animation animation;
-    if (!LoadOzz(AnimationOutputPath(), animation))
+    if (!LoadAnimationByName(AnimationOutputPath(), kExpectedMultiMotionNames[0], animation))
         return false;
 
     if (animation.num_tracks() != skeleton.num_joints())
@@ -426,24 +614,6 @@ bool TestAnimationCompatibleWithSkeleton()
 
     return animation.duration() > 0.f;
 }
-
-struct JointSampleExpectation
-{
-    const char* joint;
-    float tx;
-    float ty;
-    float tz;
-    float qx;
-    float qy;
-    float qz;
-    float qw;
-};
-
-struct FrameExpectation
-{
-    int frame;
-    std::vector<JointSampleExpectation> joints;
-};
 
 bool CompareQuaternion(const ozz::math::Quaternion& actual,
                        float qx, float qy, float qz, float qw)
@@ -460,78 +630,79 @@ bool TestAnimationMatchesReference()
     if (!ConvertAnimation(false))
         return false;
 
+    if (!ConvertSpecificMotion(kExpectedMultiMotionNames[0], true))
+        return false;
+
     ozz::animation::Skeleton skeleton;
     if (!LoadOzz(SkeletonOutputPath(), skeleton))
         return false;
 
     ozz::animation::Animation animation;
-    if (!LoadOzz(AnimationOutputPath(), animation))
+    if (!LoadAnimationByName(AnimationOutputPath(), kExpectedMultiMotionNames[0], animation))
+        return false;
+
+    ozz::animation::Animation reference_animation;
+    if (!LoadOzz(SingleAnimationOutputPath(), reference_animation))
         return false;
 
     const float frame_duration = 1.0f / 30.0f;
-    const int total_frames = static_cast<int>(std::round(animation.duration() / frame_duration)) + 1;
+    const int total_frames = static_cast<int>(std::round(reference_animation.duration() / frame_duration)) + 1;
     if (total_frames < 2)
     {
         std::cerr << "animation frame count too small" << std::endl;
         return false;
     }
 
-    const std::array<FrameExpectation, 3> expectations = {{
-        {0,
-         {{"bip01_pelvis", 0.0f, 0.0f, 0.0f, 0.00000f, 0.00000f, 0.00000f, 1.00000f},
-          {"bip01_spine", 0.10244f, 0.00000f, 0.02138f, 0.00000f, 0.00000f, 0.00000f, 1.00000f},
-          {"bip01_head", 0.05599f, 0.00000f, 0.00000f, 0.00000f, 0.00000f, 0.00000f, 1.00000f}}},
-        {total_frames / 2,
-         {{"bip01_pelvis", 0.05985f, 0.92727f, -0.13289f, 0.00661f, -0.71725f, 0.69680f, -0.00127f},
-          {"bip01_spine", 0.04618f, 1.02785f, -0.15830f, -0.12347f, -0.02831f, 0.69777f, 0.70458f},
-          {"bip01_head", -0.09405f, 1.57454f, -0.12226f, -0.30937f, -0.14131f, 0.60664f, 0.71922f}}},
-        {total_frames - 1,
-         {{"bip01_pelvis", 0.05198f, 0.99550f, -0.11888f, 0.00614f, -0.78895f, 0.61445f, -0.00776f},
-          {"bip01_spine", 0.02653f, 1.08829f, -0.17544f, -0.08374f, -0.03335f, 0.71219f, 0.696129f},
-          {"bip01_head", -0.05817f, 1.63351f, -0.14511f, -0.27743f, -0.19140f, 0.63215f, 0.69934f}}},
-    }};
-
     bool ok = true;
 
-    for (const auto& frame_expectation : expectations)
+    const std::array<int, 3> frames = {0, total_frames / 2, total_frames - 1};
+    const std::array<const char*, 3> tracked_joints = {
+        "bip01_pelvis", "bip01_spine", "bip01_head"};
+
+    for (const int frame : frames)
     {
-        const float time = static_cast<float>(frame_expectation.frame) * frame_duration;
-        std::vector<ozz::math::Transform> locals;
-        if (!SampleLocals(animation, skeleton, time, locals))
+        const float time = static_cast<float>(frame) * frame_duration;
+
+        std::vector<ozz::math::Transform> locals_multi;
+        std::vector<ozz::math::Transform> locals_reference;
+        if (!SampleLocals(animation, skeleton, time, locals_multi))
+            return false;
+        if (!SampleLocals(reference_animation, skeleton, time, locals_reference))
             return false;
 
-        for (const auto& joint_expectation : frame_expectation.joints)
+        for (const char* joint_name : tracked_joints)
         {
-            const int joint_index = FindJoint(skeleton, joint_expectation.joint);
+            const int joint_index = FindJoint(skeleton, joint_name);
             if (joint_index < 0)
             {
                 ok = false;
                 continue;
             }
 
-            const auto& actual = locals[joint_index];
-            const float dx = std::fabs(actual.translation.x - joint_expectation.tx);
-            const float dy = std::fabs(actual.translation.y - joint_expectation.ty);
-            const float dz = std::fabs(actual.translation.z - joint_expectation.tz);
+            const auto& actual = locals_multi[joint_index];
+            const auto& expected = locals_reference[joint_index];
+            const float dx = std::fabs(actual.translation.x - expected.translation.x);
+            const float dy = std::fabs(actual.translation.y - expected.translation.y);
+            const float dz = std::fabs(actual.translation.z - expected.translation.z);
 
             if (dx > kTranslationTolerance || dy > kTranslationTolerance || dz > kTranslationTolerance)
             {
-                std::cerr << "frame " << frame_expectation.frame << " joint '" << joint_expectation.joint
+                std::cerr << "frame " << frame << " joint '" << joint_name
                           << "' translation mismatch\n"
-                          << "  expected: [" << joint_expectation.tx << ", " << joint_expectation.ty << ", "
-                          << joint_expectation.tz << "]\n"
+                          << "  expected: [" << expected.translation.x << ", "
+                          << expected.translation.y << ", " << expected.translation.z << "]\n"
                           << "  actual:   [" << actual.translation.x << ", " << actual.translation.y << ", "
                           << actual.translation.z << "]\n";
                 ok = false;
             }
 
             if (!CompareQuaternion(actual.rotation,
-                                   joint_expectation.qx,
-                                   joint_expectation.qy,
-                                   joint_expectation.qz,
-                                   joint_expectation.qw))
+                                   expected.rotation.x,
+                                   expected.rotation.y,
+                                   expected.rotation.z,
+                                   expected.rotation.w))
             {
-                std::cerr << "frame " << frame_expectation.frame << " joint '" << joint_expectation.joint
+                std::cerr << "frame " << frame << " joint '" << joint_name
                           << "' rotation mismatch\n";
                 ok = false;
             }
@@ -589,6 +760,16 @@ bool TestMultipleAnimationConversion()
             std::cerr << "animation " << i << " missing name" << std::endl;
             return false;
         }
+
+        std::string metadata_name;
+        ReadSerializedMotionMetadata(archive, &metadata_name);
+        if (metadata_name != name)
+        {
+            std::cerr << "metadata name mismatch for animation '" << name
+                      << "', metadata reports '" << metadata_name << "'" << std::endl;
+            return false;
+        }
+
         names.insert(std::string(name));
     }
 
@@ -597,6 +778,98 @@ bool TestMultipleAnimationConversion()
         if (names.count(expected) == 0)
         {
             std::cerr << "missing animation named '" << expected << "'" << std::endl;
+            return false;
+        }
+    }
+
+    return true;
+}
+
+bool TestAnimationNamesPreserved()
+{
+    if (!ConvertAnimation(true))
+        return false;
+
+    ozz::io::File file(AnimationOutputPath().string().c_str(), "rb");
+    if (!file.opened())
+    {
+        std::cerr << "failed to open animation archive: " << AnimationOutputPath() << std::endl;
+        return false;
+    }
+
+    ozz::io::IArchive archive(&file);
+    if (archive.TestTag<ozz::animation::Animation>())
+    {
+        ozz::animation::Animation animation;
+        archive >> animation;
+        const char* name = animation.name();
+        if (!name || std::string(name) != kExpectedMultiMotionNames[0])
+        {
+            std::cerr << "single animation archive missing expected name" << std::endl;
+            return false;
+        }
+        return true;
+    }
+
+    file.Seek(0, ozz::io::File::kSet);
+    archive = ozz::io::IArchive(&file);
+
+    uint32_t animation_count = 0;
+    archive >> animation_count;
+
+    if (animation_count != kExpectedMultiMotionNames.size())
+    {
+        std::cerr << "expected " << kExpectedMultiMotionNames.size() << " animations, found "
+                  << animation_count << std::endl;
+        return false;
+    }
+
+    std::vector<std::string> names;
+    names.reserve(animation_count);
+
+    for (uint32_t i = 0; i < animation_count; ++i)
+    {
+        ozz::animation::Animation animation;
+        archive >> animation;
+
+        const char* name = animation.name();
+        if (!name || *name == '\0')
+        {
+            std::cerr << "animation index " << i << " missing runtime name" << std::endl;
+            return false;
+        }
+
+        std::string metadata_name;
+        ReadSerializedMotionMetadata(archive, &metadata_name);
+
+        if (metadata_name.empty())
+        {
+            std::cerr << "metadata missing name for animation index " << i << std::endl;
+            return false;
+        }
+
+        if (metadata_name != name)
+        {
+            std::cerr << "metadata name mismatch for animation index " << i << " ('"
+                      << name << "' vs '" << metadata_name << "')" << std::endl;
+            return false;
+        }
+
+        names.emplace_back(name);
+    }
+
+    std::set<std::string> unique_names(names.begin(), names.end());
+    if (unique_names.size() != names.size())
+    {
+        std::cerr << "duplicate animation names detected" << std::endl;
+        return false;
+    }
+
+    for (const char* expected : kExpectedMultiMotionNames)
+    {
+        if (unique_names.count(expected) == 0)
+        {
+            std::cerr << "missing animation name '" << expected << "'" << std::endl;
             return false;
         }
     }
@@ -615,13 +888,14 @@ struct TestCase
 
 int main()
 {
-    const std::array<TestCase, 6> tests = {{
+    const std::array<TestCase, 7> tests = {{
         {"GenerateSkeleton", &TestGenerateSkeleton, false},
         {"BindPoseMatchesBlender", &TestBindPoseMatchesBlender, false},
         {"ConvertAnimationProducesFile", &TestConvertAnimationProducesFile, false},
         {"AnimationCompatibleWithSkeleton", &TestAnimationCompatibleWithSkeleton, false},
         {"AnimationMatchesReference", &TestAnimationMatchesReference, false},
         {"TestMultipleAnimationConversion", &TestMultipleAnimationConversion, false},
+        {"TestAnimationNamesPreserved", &TestAnimationNamesPreserved, false},
     }};
 
     int failures = 0;

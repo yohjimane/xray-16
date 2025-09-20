@@ -60,6 +60,7 @@ target_include_directories(ozz_animation_viewer
     ${CMAKE_CURRENT_SOURCE_DIR}/../../Include
     ${CMAKE_CURRENT_SOURCE_DIR}/../../../Externals/ozz-animation/include
     ${CMAKE_CURRENT_SOURCE_DIR}/../../../Externals/ozz-animation/samples
+    ${CMAKE_CURRENT_SOURCE_DIR}/../../../Externals/ozz-animation/extern/glfw/include
 )
 
 # Set properties
