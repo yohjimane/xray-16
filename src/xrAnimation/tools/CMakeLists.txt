@@ -9,6 +9,7 @@ if(EXISTS ${_converter_src})
 
     target_link_libraries(xray_to_ozz_converter
         PRIVATE
+        sample_framework
         xrAnimation
         xrCore
         xrEngine
@@ -24,6 +25,7 @@ if(EXISTS ${_converter_src})
         ${CMAKE_CURRENT_SOURCE_DIR}/../..
         ${CMAKE_CURRENT_SOURCE_DIR}/../../Include
         ${CMAKE_CURRENT_SOURCE_DIR}/../../../Externals/ozz-animation/include
+        ${CMAKE_CURRENT_SOURCE_DIR}/../../../Externals/ozz-animation/samples
         ${CMAKE_CURRENT_SOURCE_DIR}/../../../Externals/imgui
     )
 

@@ -22,6 +22,9 @@
 #include <ozz/base/maths/quaternion.h>
 #include <ozz/base/maths/vec_float.h>
 #include <ozz/base/maths/soa_transform.h>
+#include <ozz/base/containers/vector_archive.h>
+
+#include "../Externals/ozz-animation/samples/framework/mesh.h"
 
 #include <algorithm>
 #include <array>
@@ -44,6 +47,7 @@
 #include <string_view>
 #include <system_error>
 #include <unordered_map>
+#include <map>
 #include <utility>
 #include <vector>
 
@@ -147,6 +151,79 @@ Matrix4 ConvertBlenderLocalToOzz(const Fmatrix& matrix)
 Matrix4 ConvertXrayLocalToOzz(const Fmatrix& matrix)
 {
     return ConvertBlenderToOzz(ConvertXrayToBlender(ToColumnMajor(matrix)));
+}
+
+std::array<float, 3> ApplyBasis(const Matrix4& matrix, const std::array<float, 3>& vector)
+{
+    std::array<float, 3> result{};
+    for (int row = 0; row < 3; ++row)
+    {
+        result[static_cast<size_t>(row)] =
+            matrix[static_cast<size_t>(row)][0] * vector[0] +
+            matrix[static_cast<size_t>(row)][1] * vector[1] +
+            matrix[static_cast<size_t>(row)][2] * vector[2];
+    }
+    return result;
+}
+
+std::array<float, 3> ConvertVectorXrayToOzz(const Fvector& v)
+{
+    const std::array<float, 3> source{v.x, v.y, v.z};
+    const auto blender = ApplyBasis(kXrayToBlender, source);
+    const auto ozz_vec = ApplyBasis(kBlenderToOzz, blender);
+    return ozz_vec;
+}
+
+std::array<float, 2> ConvertUV(const Fvector2& uv)
+{
+    return {uv.x, uv.y};
+}
+
+std::array<float, 3> Normalize(const std::array<float, 3>& v)
+{
+    const float len_sq = v[0] * v[0] + v[1] * v[1] + v[2] * v[2];
+    if (len_sq <= std::numeric_limits<float>::epsilon())
+        return v;
+    const float inv_len = 1.f / std::sqrt(len_sq);
+    return {v[0] * inv_len, v[1] * inv_len, v[2] * inv_len};
+}
+
+float Dot(const std::array<float, 3>& a, const std::array<float, 3>& b)
+{
+    return a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
+}
+
+std::array<float, 3> Cross(const std::array<float, 3>& a, const std::array<float, 3>& b)
+{
+    return {
+        a[1] * b[2] - a[2] * b[1],
+        a[2] * b[0] - a[0] * b[2],
+        a[0] * b[1] - a[1] * b[0],
+    };
+}
+
+Matrix4 InvertMatrix(const Matrix4& matrix)
+{
+    const Fmatrix row_major = ToRowMajor(matrix);
+    Fmatrix inverted;
+    inverted.invert(row_major);
+    return ToColumnMajor(inverted);
+}
+
+ozz::math::Float4x4 ToOzzFloat4x4(const Matrix4& matrix)
+{
+    ozz::math::Float4x4 result;
+    for (int col = 0; col < 4; ++col)
+    {
+        float column[4] = {
+            matrix[0][col],
+            matrix[1][col],
+            matrix[2][col],
+            matrix[3][col],
+        };
+        result.cols[col] = ozz::math::simd_float4::LoadPtrU(column);
+    }
+    return result;
 }
 
 ozz::math::Float3 ExtractTranslation(const Matrix4& matrix)
@@ -324,6 +401,36 @@ struct MotionMetadata
     std::vector<MotionMark> marks;
 };
 
+struct MeshVertex
+{
+    Fvector position{};
+    Fvector normal{};
+    Fvector tangent{};
+    Fvector binormal{};
+    Fvector2 uv{};
+    std::array<uint16_t, 4> bones{0, 0, 0, 0};
+    std::array<float, 4> weights{0.f, 0.f, 0.f, 0.f};
+    uint8_t influence_count = 0;
+};
+
+struct ConvertedVertex
+{
+    std::array<float, 3> position{0.f, 0.f, 0.f};
+    std::array<float, 3> normal{0.f, 0.f, 0.f};
+    std::array<float, 4> tangent{0.f, 0.f, 0.f, 1.f};
+    std::array<float, 2> uv{0.f, 0.f};
+    std::array<uint16_t, 4> joint_indices{0, 0, 0, 0};
+    std::array<float, 4> joint_weights{0.f, 0.f, 0.f, 0.f};
+    uint8_t influence_count = 0;
+    size_t original_index = 0;
+};
+
+struct PartData
+{
+    int influence_count = 0;
+    std::vector<ConvertedVertex> vertices;
+};
+
 struct BoneTrack
 {
     std::vector<Fquaternion> rotations;
@@ -349,6 +456,9 @@ struct OmfFile
 constexpr u32 kChunkHeader = OGF_HEADER;
 constexpr u32 kChunkBoneNames = OGF_S_BONE_NAMES;
 constexpr u32 kChunkIkData = OGF_S_IKDATA;
+constexpr u32 kChunkVertices = OGF_VERTICES;
+constexpr u32 kChunkIndices = OGF_INDICES;
+constexpr u32 kChunkChildren = OGF_CHILDREN;
 
 std::vector<std::byte> load_file(const fs::path& path)
 {
@@ -625,6 +735,305 @@ std::vector<BoneRecord> load_skeleton_bones_from_ogf(const fs::path& path)
     convert_locals_to_blender_basis(bones);
     compute_global_transforms(bones);
     return bones;
+}
+
+void finalize_influences(MeshVertex& vertex, const std::array<uint16_t, 4>& bone_ids, const std::array<float, 4>& weights, uint32_t link_type)
+{
+    std::map<uint16_t, float> accum;
+    for (uint32_t idx = 0; idx < link_type && idx < 4; ++idx)
+    {
+        const uint16_t bone = bone_ids[idx];
+        const float weight = weights[idx];
+        accum[bone] += weight;
+    }
+
+    std::vector<std::pair<uint16_t, float>> combined(accum.begin(), accum.end());
+    combined.erase(std::remove_if(combined.begin(), combined.end(), [](const auto& entry) {
+        return std::fabs(entry.second) <= std::numeric_limits<float>::epsilon();
+    }), combined.end());
+
+    if (combined.empty())
+    {
+        combined.emplace_back(bone_ids[0], 1.f);
+    }
+
+    if (combined.size() > 4)
+    {
+        std::stable_sort(combined.begin(), combined.end(), [](const auto& lhs, const auto& rhs) {
+            return lhs.second > rhs.second;
+        });
+        combined.resize(4);
+    }
+
+    std::sort(combined.begin(), combined.end(), [](const auto& lhs, const auto& rhs) {
+        if (lhs.first != rhs.first)
+            return lhs.first < rhs.first;
+        return lhs.second > rhs.second;
+    });
+
+    float sum = 0.f;
+    for (const auto& entry : combined)
+        sum += entry.second;
+
+    if (sum <= std::numeric_limits<float>::epsilon())
+    {
+        combined.clear();
+        combined.emplace_back(bone_ids[0], 1.f);
+        sum = 1.f;
+    }
+
+    const float inv_sum = 1.f / sum;
+    for (auto& entry : combined)
+        entry.second *= inv_sum;
+
+    vertex.influence_count = static_cast<uint8_t>(combined.size());
+    for (size_t idx = 0; idx < combined.size(); ++idx)
+    {
+        vertex.bones[idx] = combined[idx].first;
+        vertex.weights[idx] = combined[idx].second;
+    }
+
+    for (size_t idx = combined.size(); idx < 4; ++idx)
+    {
+        vertex.bones[idx] = vertex.bones[0];
+        vertex.weights[idx] = idx == 0 ? 1.f : 0.f;
+    }
+}
+
+std::vector<MeshVertex> read_mesh_vertices(const Chunk& chunk)
+{
+    BinaryReader reader{chunk.data, chunk.size};
+    const uint32_t link_type = reader.read<u32>();
+    const uint32_t vertex_count = reader.read<u32>();
+
+    if (link_type == 0 || link_type > 4)
+        throw std::runtime_error("unsupported vertex influence count in OGF mesh");
+
+    std::vector<MeshVertex> vertices;
+    vertices.reserve(vertex_count);
+
+    for (uint32_t idx = 0; idx < vertex_count; ++idx)
+    {
+        MeshVertex vertex;
+        std::array<uint16_t, 4> bone_ids{0, 0, 0, 0};
+        std::array<float, 4> raw_weights{0.f, 0.f, 0.f, 0.f};
+
+        if (link_type == 1)
+        {
+            vertex.position = reader.read<Fvector>();
+            vertex.normal = reader.read<Fvector>();
+            vertex.tangent = reader.read<Fvector>();
+            vertex.binormal = reader.read<Fvector>();
+            vertex.uv = reader.read<Fvector2>();
+            bone_ids[0] = static_cast<uint16_t>(reader.read<u32>());
+            raw_weights[0] = 1.f;
+        }
+        else if (link_type == 2)
+        {
+            bone_ids[0] = reader.read<u16>();
+            bone_ids[1] = reader.read<u16>();
+            vertex.position = reader.read<Fvector>();
+            vertex.normal = reader.read<Fvector>();
+            vertex.tangent = reader.read<Fvector>();
+            vertex.binormal = reader.read<Fvector>();
+            const float secondary = reader.read<float>();
+            raw_weights[1] = secondary;
+            raw_weights[0] = 1.f - secondary;
+            vertex.uv = reader.read<Fvector2>();
+        }
+        else if (link_type == 3 || link_type == 4)
+        {
+            for (uint32_t influence = 0; influence < link_type; ++influence)
+                bone_ids[influence] = reader.read<u16>();
+
+            vertex.position = reader.read<Fvector>();
+            vertex.normal = reader.read<Fvector>();
+            vertex.tangent = reader.read<Fvector>();
+            vertex.binormal = reader.read<Fvector>();
+
+            float weight_sum = 0.f;
+            for (uint32_t influence = 0; influence < link_type - 1; ++influence)
+            {
+                const float w = reader.read<float>();
+                raw_weights[influence] = w;
+                weight_sum += w;
+            }
+            raw_weights[link_type - 1] = std::max(0.f, 1.f - weight_sum);
+
+            vertex.uv = reader.read<Fvector2>();
+        }
+        else
+        {
+            throw std::runtime_error("unsupported skeleton link type in OGF mesh");
+        }
+
+        finalize_influences(vertex, bone_ids, raw_weights, link_type);
+        vertices.emplace_back(vertex);
+    }
+
+    return vertices;
+}
+
+std::vector<uint16_t> read_mesh_indices(const Chunk& chunk)
+{
+    BinaryReader reader{chunk.data, chunk.size};
+    const uint32_t index_count = reader.read<u32>();
+    std::vector<uint16_t> indices;
+    indices.reserve(index_count);
+    for (uint32_t idx = 0; idx < index_count; ++idx)
+        indices.push_back(reader.read<u16>());
+    return indices;
+}
+
+ozz::sample::Mesh build_mesh(const std::vector<MeshVertex>& vertices,
+                             const std::vector<uint16_t>& indices,
+                             const std::vector<BoneRecord>& bones)
+{
+    std::array<PartData, 5> parts{};
+    for (int influences = 0; influences < 5; ++influences)
+        parts[static_cast<size_t>(influences)].influence_count = influences;
+
+    std::unordered_map<uint16_t, uint16_t> joint_map;
+    std::vector<uint16_t> joint_remaps;
+    std::vector<ozz::math::Float4x4> inverse_bind_poses;
+
+    std::vector<uint32_t> vertex_remap(vertices.size(), 0);
+
+    for (size_t vertex_index = 0; vertex_index < vertices.size(); ++vertex_index)
+    {
+        const MeshVertex& source = vertices[vertex_index];
+        ConvertedVertex converted;
+        converted.original_index = vertex_index;
+
+        const auto position = detail::ConvertVectorXrayToOzz(source.position);
+        const auto normal = detail::Normalize(detail::ConvertVectorXrayToOzz(source.normal));
+        const auto tangent = detail::Normalize(detail::ConvertVectorXrayToOzz(source.tangent));
+        const auto binormal = detail::Normalize(detail::ConvertVectorXrayToOzz(source.binormal));
+
+        converted.position = position;
+        converted.normal = normal;
+
+        const float handedness = detail::Dot(detail::Cross(normal, tangent), binormal) < 0.f ? -1.f : 1.f;
+        converted.tangent = {tangent[0], tangent[1], tangent[2], handedness};
+        const auto uv = detail::ConvertUV(source.uv);
+        converted.uv = uv;
+
+        uint8_t influence_count = std::max<uint8_t>(1, source.influence_count);
+        float weight_sum = 0.f;
+        for (uint8_t influence = 0; influence < influence_count; ++influence)
+        {
+            const uint16_t bone_index = source.bones[influence];
+            const float weight = source.weights[influence];
+            weight_sum += weight;
+
+            const auto [it, inserted] = joint_map.try_emplace(bone_index, static_cast<uint16_t>(joint_remaps.size()));
+            if (inserted)
+            {
+                joint_remaps.push_back(bone_index);
+                const auto global_matrix = detail::ConvertBlenderToOzz(detail::ToColumnMajor(bones[bone_index].global_transform));
+                const auto inverse_matrix = detail::InvertMatrix(global_matrix);
+                inverse_bind_poses.push_back(detail::ToOzzFloat4x4(inverse_matrix));
+            }
+
+            converted.joint_indices[influence] = it->second;
+            converted.joint_weights[influence] = weight;
+        }
+
+        if (weight_sum <= std::numeric_limits<float>::epsilon())
+        {
+            converted.joint_weights[0] = 1.f;
+            influence_count = 1;
+        }
+        else
+        {
+            const float inv_sum = 1.f / weight_sum;
+            for (uint8_t influence = 0; influence < influence_count; ++influence)
+                converted.joint_weights[influence] *= inv_sum;
+        }
+
+        converted.influence_count = std::min<uint8_t>(4, influence_count);
+        const int part_index = std::max<int>(1, converted.influence_count);
+        parts[static_cast<size_t>(part_index)].vertices.emplace_back(converted);
+    }
+
+    ozz::sample::Mesh mesh;
+    uint32_t next_vertex_index = 0;
+
+    for (int influences = 1; influences <= 4; ++influences)
+    {
+        auto& data = parts[static_cast<size_t>(influences)];
+        if (data.vertices.empty())
+            continue;
+
+        ozz::sample::Mesh::Part part;
+        const size_t count = data.vertices.size();
+        part.positions.resize(count * ozz::sample::Mesh::Part::kPositionsCpnts);
+        part.normals.resize(count * ozz::sample::Mesh::Part::kNormalsCpnts);
+        part.tangents.resize(count * ozz::sample::Mesh::Part::kTangentsCpnts);
+        part.uvs.resize(count * ozz::sample::Mesh::Part::kUVsCpnts);
+        part.joint_indices.resize(count * influences);
+        if (influences > 1)
+            part.joint_weights.resize(count * (influences - 1));
+
+        for (size_t local_index = 0; local_index < count; ++local_index)
+        {
+            const ConvertedVertex& v = data.vertices[local_index];
+            vertex_remap[v.original_index] = next_vertex_index + static_cast<uint32_t>(local_index);
+
+            part.positions[local_index * 3 + 0] = v.position[0];
+            part.positions[local_index * 3 + 1] = v.position[1];
+            part.positions[local_index * 3 + 2] = v.position[2];
+
+            part.normals[local_index * 3 + 0] = v.normal[0];
+            part.normals[local_index * 3 + 1] = v.normal[1];
+            part.normals[local_index * 3 + 2] = v.normal[2];
+
+            part.tangents[local_index * 4 + 0] = v.tangent[0];
+            part.tangents[local_index * 4 + 1] = v.tangent[1];
+            part.tangents[local_index * 4 + 2] = v.tangent[2];
+            part.tangents[local_index * 4 + 3] = v.tangent[3];
+
+            part.uvs[local_index * 2 + 0] = v.uv[0];
+            part.uvs[local_index * 2 + 1] = v.uv[1];
+
+            for (int influence = 0; influence < influences; ++influence)
+                part.joint_indices[local_index * influences + influence] = v.joint_indices[influence];
+
+            if (influences > 1)
+            {
+                float accumulated = 0.f;
+                for (int influence = 0; influence < influences - 1; ++influence)
+                {
+                    const float weight = v.joint_weights[influence];
+                    part.joint_weights[local_index * (influences - 1) + influence] = weight;
+                    accumulated += weight;
+                }
+            }
+        }
+
+        mesh.parts.push_back(std::move(part));
+        next_vertex_index += static_cast<uint32_t>(count);
+    }
+
+    mesh.triangle_indices.resize(indices.size());
+    for (size_t idx = 0; idx < indices.size(); ++idx)
+    {
+        const uint16_t original = indices[idx];
+        if (original >= vertex_remap.size())
+            throw std::runtime_error("index references vertex outside range");
+        const uint32_t remapped = vertex_remap[original];
+        if (remapped > std::numeric_limits<uint16_t>::max())
+            throw std::runtime_error("remapped vertex index exceeds 16-bit range");
+        mesh.triangle_indices[idx] = static_cast<uint16_t>(remapped);
+    }
+
+    mesh.joint_remaps.resize(joint_remaps.size());
+    std::copy(joint_remaps.begin(), joint_remaps.end(), mesh.joint_remaps.begin());
+
+    mesh.inverse_bind_poses.resize(inverse_bind_poses.size());
+    std::copy(inverse_bind_poses.begin(), inverse_bind_poses.end(), mesh.inverse_bind_poses.begin());
+
+    return mesh;
 }
 
 void parse_smparams(const Chunk& chunk, const std::vector<BoneRecord>& skeleton_bones, OmfFile& output)
@@ -1083,6 +1492,12 @@ struct AnimationConfig
     std::optional<fs::path> metadata_path;
 };
 
+struct MeshConfig
+{
+    fs::path input_ogf;
+    fs::path output_ozz;
+};
+
 SkeletonConfig parse_skeleton_arguments(int argc, char** argv)
 {
     if (argc < 4)
@@ -1142,6 +1557,18 @@ AnimationConfig parse_animation_arguments(int argc, char** argv)
         }
     }
 
+    return config;
+}
+
+MeshConfig parse_mesh_arguments(int argc, char** argv)
+{
+    if (argc < 4)
+        throw std::runtime_error(
+            "usage: xray_to_ozz_converter mesh <input.ogf> <output.ozz>");
+
+    MeshConfig config;
+    config.input_ogf = fs::path(argv[2]);
+    config.output_ozz = fs::path(argv[3]);
     return config;
 }
 
@@ -1261,6 +1688,106 @@ void convert_animation(const AnimationConfig& config)
     }
 }
 
+void convert_mesh(const MeshConfig& config)
+{
+    auto bones = load_skeleton_bones_from_ogf(config.input_ogf);
+
+    const auto file_data = load_file(config.input_ogf);
+    const auto chunks = parse_chunks(file_data.data(), file_data.size());
+
+    std::vector<MeshVertex> all_vertices;
+    std::vector<uint16_t> all_indices;
+
+    auto children_it = chunks.find(kChunkChildren);
+    if (children_it != chunks.end())
+    {
+        const Chunk& children_chunk = children_it->second;
+        BinaryReader reader{children_chunk.data, children_chunk.size};
+        while (reader.offset + sizeof(u32) * 2 <= children_chunk.size)
+        {
+        reader.read<u32>();
+            const u32 child_size = reader.read<u32>();
+            if (reader.offset + child_size > children_chunk.size)
+                break;
+
+            Chunk child_chunk{children_chunk.data + reader.offset, child_size};
+            reader.offset += child_size;
+
+            size_t section_offset = 0;
+            Chunk vertices_chunk{};
+            Chunk indices_chunk{};
+            bool has_vertices = false;
+            bool has_indices = false;
+
+            while (section_offset + sizeof(u32) * 2 <= child_chunk.size)
+            {
+                u32 section_id;
+                u32 section_size;
+                std::memcpy(&section_id, child_chunk.data + section_offset, sizeof(u32));
+                section_offset += sizeof(u32);
+                std::memcpy(&section_size, child_chunk.data + section_offset, sizeof(u32));
+                section_offset += sizeof(u32);
+                if (section_offset + section_size > child_chunk.size)
+                    break;
+
+                if (section_id == kChunkVertices)
+                {
+                    vertices_chunk.data = child_chunk.data + section_offset;
+                    vertices_chunk.size = section_size;
+                    has_vertices = true;
+                }
+                else if (section_id == kChunkIndices)
+                {
+                    indices_chunk.data = child_chunk.data + section_offset;
+                    indices_chunk.size = section_size;
+                    has_indices = true;
+                }
+
+                section_offset += section_size;
+            }
+
+            if (has_vertices && has_indices)
+            {
+                auto section_vertices = read_mesh_vertices(vertices_chunk);
+                auto section_indices = read_mesh_indices(indices_chunk);
+
+                const uint32_t base = static_cast<uint32_t>(all_vertices.size());
+                all_vertices.insert(all_vertices.end(), section_vertices.begin(), section_vertices.end());
+                all_indices.reserve(all_indices.size() + section_indices.size());
+                for (uint16_t index : section_indices)
+                    all_indices.push_back(static_cast<uint16_t>(base + index));
+            }
+        }
+    }
+
+    if (all_vertices.empty())
+    {
+        auto vertices_it = chunks.find(kChunkVertices);
+        auto indices_it = chunks.find(kChunkIndices);
+        if (vertices_it == chunks.end() || indices_it == chunks.end())
+            throw std::runtime_error("OGF file missing vertices chunk");
+
+        all_vertices = read_mesh_vertices(vertices_it->second);
+        auto base_indices = read_mesh_indices(indices_it->second);
+        all_indices.assign(base_indices.begin(), base_indices.end());
+    }
+
+    auto mesh = build_mesh(all_vertices, all_indices, bones);
+
+    std::error_code ec;
+    if (const auto parent = config.output_ozz.parent_path(); !parent.empty())
+        fs::create_directories(parent, ec);
+
+    ozz::io::File output(config.output_ozz.string().c_str(), "wb");
+    if (!output.opened())
+        throw std::runtime_error("failed to open output mesh file: " + config.output_ozz.string());
+
+    ozz::io::OArchive archive(&output);
+    archive << mesh;
+
+    std::cout << "Converted mesh written to " << config.output_ozz << std::endl;
+}
+
 } // namespace
 
 int main(int argc, char** argv)
@@ -1272,7 +1799,8 @@ int main(int argc, char** argv)
                 "usage: xray_to_ozz_converter <command> ...\n"
                 "Commands:\n"
                 "  skeleton <input.ogf> <output.ozz> [--dump-bind <csv>]\n"
-                "  animation <input.omf> <output.ozz> <skeleton.ogf> [--motion <name>] [--metadata <json>]" );
+                "  animation <input.omf> <output.ozz> <skeleton.ogf> [--motion <name>] [--metadata <json>]\n"
+                "  mesh <input.ogf> <output.ozz>" );
 
         const std::string command = argv[1];
         if (command == "skeleton")
@@ -1282,6 +1810,10 @@ int main(int argc, char** argv)
         else if (command == "animation")
         {
             convert_animation(parse_animation_arguments(argc, argv));
+        }
+        else if (command == "mesh")
+        {
+            convert_mesh(parse_mesh_arguments(argc, argv));
         }
         else
         {

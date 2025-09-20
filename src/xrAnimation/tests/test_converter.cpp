@@ -47,7 +47,7 @@ fs::path ProjectRoot()
 
 fs::path TestArtifactsDir()
 {
-    return ProjectRoot() / "asset_tests" / "test_outputs";
+    return ProjectRoot() / "src" / "xrAnimation" / "tests" / "testdata";
 }
 
 fs::path SkeletonInputPath()

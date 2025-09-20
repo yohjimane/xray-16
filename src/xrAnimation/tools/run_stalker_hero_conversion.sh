@@ -24,4 +24,5 @@ mkdir -p "${TESTDATA_DIR}"
 # Launch the viewer with the converted assets
 "${BUILD_DIR}/ozz_animation_viewer" \
   --skeleton="${TESTDATA_DIR}/stalker_hero_1.ozz" \
-  --animation="${TESTDATA_DIR}/critical_hit_grup_1.ozz"
+  --animation="${TESTDATA_DIR}/critical_hit_grup_1.ozz" \
+  --mesh="${TESTDATA_DIR}/stalker_hero_mesh.ozz"
