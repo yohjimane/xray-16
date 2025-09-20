@@ -31,6 +31,7 @@ mkdir -p "${TESTDATA_DIR}"
 "${BUILD_DIR}/ozz_animation_viewer" \
   --skeleton="${TESTDATA_DIR}/stalker_hero_1.ozz" \
   --mesh="${TESTDATA_DIR}/stalker_hero_mesh.ozz" \
-  --dump_skinning_json="${TESTDATA_DIR}/stalker_hero_mesh_skinning.json" \
-  --render=false \
-  --max_idle_loops=2
+  --animation="${TESTDATA_DIR}/critical_hit_grup_1.ozz" \
+  #--dump_skinning_json="${TESTDATA_DIR}/stalker_hero_mesh_skinning.json" \
+  #--render=false \
+  #--max_idle_loops=2

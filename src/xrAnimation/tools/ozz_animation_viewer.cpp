@@ -169,6 +169,10 @@ std::array<std::array<float, 4>, 4> MatrixToRows(
   return rows;
 }
 
+std::array<float, 3> ConvertOzzToBlender(float x, float y, float z) {
+  return {x, -z, y};
+}
+
 }  // namespace
 
 struct MotionMarkData {
@@ -503,6 +507,8 @@ class PlaybackSampleApplication : public ozz::sample::Application {
   }
 
   virtual bool OnDisplay(ozz::sample::Renderer* _renderer) {
+    bool success = true;
+
     // Calculate ground offset to prevent clipping
     float min_z = std::numeric_limits<float>::max();
     for (int i = 0; i < skeleton_.num_joints(); ++i) {
@@ -512,8 +518,36 @@ class PlaybackSampleApplication : public ozz::sample::Application {
       }
     }
 
-    ozz::math::Float4x4 transform = ozz::math::Float4x4::identity();
-    return _renderer->DrawPosture(skeleton_, make_span(models_), transform);
+    const ozz::math::Float4x4 transform = ozz::math::Float4x4::identity();
+
+    if (draw_skeleton_) {
+      success &=
+          _renderer->DrawPosture(skeleton_, make_span(models_), transform);
+    }
+
+    if (draw_mesh_ && !meshes_.empty()) {
+      for (const ozz::sample::Mesh& mesh : meshes_) {
+        const size_t palette_size = mesh.joint_remaps.size();
+        if (palette_size > skinning_matrices_.size()) {
+          continue;
+        }
+
+        for (size_t palette_index = 0; palette_index < palette_size;
+             ++palette_index) {
+          const uint16_t joint = mesh.joint_remaps[palette_index];
+          skinning_matrices_[palette_index] =
+              models_[joint] * mesh.inverse_bind_poses[palette_index];
+        }
+
+        auto skinning_span = ozz::make_span(skinning_matrices_);
+        skinning_span = skinning_span.first(palette_size);
+
+        success &= _renderer->DrawSkinnedMesh(
+            mesh, skinning_span, transform, renderer_options_);
+      }
+    }
+
+    return success;
   }
 
   virtual bool OnInitialize() {
@@ -592,9 +626,11 @@ class PlaybackSampleApplication : public ozz::sample::Application {
           return false;
         }
       }
+      draw_mesh_ = true;
     } else {
       meshes_.clear();
       skinning_matrices_.clear();
+      draw_mesh_ = false;
     }
 
     if (!ComputeBindPoseModelMatrices()) {
@@ -765,6 +801,26 @@ class PlaybackSampleApplication : public ozz::sample::Application {
       }
     }
 
+    {
+      static bool render_open = true;
+      ozz::sample::ImGui::OpenClose render_oc(_im_gui, "Rendering", &render_open);
+      if (render_open) {
+        _im_gui->DoCheckBox("Draw skeleton", &draw_skeleton_);
+        if (!meshes_.empty()) {
+          _im_gui->DoCheckBox("Draw mesh", &draw_mesh_);
+          _im_gui->DoCheckBox("Show triangles", &renderer_options_.triangles);
+          _im_gui->DoCheckBox("Show texture", &renderer_options_.texture);
+          _im_gui->DoCheckBox("Show vertices", &renderer_options_.vertices);
+          _im_gui->DoCheckBox("Show normals", &renderer_options_.normals);
+          _im_gui->DoCheckBox("Show tangents", &renderer_options_.tangents);
+          _im_gui->DoCheckBox("Show binormals", &renderer_options_.binormals);
+          _im_gui->DoCheckBox("Show colors", &renderer_options_.colors);
+          _im_gui->DoCheckBox("Wireframe", &renderer_options_.wireframe);
+          _im_gui->DoCheckBox("Skip skinning", &renderer_options_.skip_skinning);
+        }
+      }
+    }
+
 
     // Logging options
     {
@@ -927,6 +983,11 @@ class PlaybackSampleApplication : public ozz::sample::Application {
   // Optional dump controls.
   std::string skinning_dump_path_;
   bool skinning_dump_pending_ = false;
+
+  // Rendering toggles and options.
+  bool draw_skeleton_ = true;
+  bool draw_mesh_ = false;
+  ozz::sample::Renderer::Options renderer_options_;
 
   // Debug frame counter
   int debug_frame_count_;
@@ -1144,8 +1205,9 @@ class PlaybackSampleApplication : public ozz::sample::Application {
           const float px = part.positions[pos_offset + 0];
           const float py = part.positions[pos_offset + 1];
           const float pz = part.positions[pos_offset + 2];
-          file << "          \"position\": [" << FormatFloat(px) << ", "
-               << FormatFloat(py) << ", " << FormatFloat(pz) << "],\n";
+          const auto blender_pos = ConvertOzzToBlender(px, py, pz);
+          file << "          \"position\": [" << FormatFloat(blender_pos[0]) << ", "
+               << FormatFloat(blender_pos[1]) << ", " << FormatFloat(blender_pos[2]) << "],\n";
 
           float nx = 0.f;
           float ny = 0.f;
@@ -1156,8 +1218,9 @@ class PlaybackSampleApplication : public ozz::sample::Application {
             nx = part.normals[normal_offset + 0];
             ny = part.normals[normal_offset + 1];
             nz = part.normals[normal_offset + 2];
-            file << "          \"normal\": [" << FormatFloat(nx) << ", "
-                 << FormatFloat(ny) << ", " << FormatFloat(nz) << "],\n";
+            const auto blender_normal = ConvertOzzToBlender(nx, ny, nz);
+            file << "          \"normal\": [" << FormatFloat(blender_normal[0]) << ", "
+                 << FormatFloat(blender_normal[1]) << ", " << FormatFloat(blender_normal[2]) << "],\n";
           }
 
           std::vector<std::pair<uint16_t, float>> weights;
@@ -1240,10 +1303,11 @@ class PlaybackSampleApplication : public ozz::sample::Application {
 
           const bool wrote_skinned = skinning_available && !weights.empty();
           if (wrote_skinned) {
+            const auto blender_skinned = ConvertOzzToBlender(skinned_pos[0], skinned_pos[1], skinned_pos[2]);
             file << "          \"skinned_position\": ["
-                 << FormatFloat(skinned_pos[0]) << ", "
-                 << FormatFloat(skinned_pos[1]) << ", "
-                 << FormatFloat(skinned_pos[2]) << "]";
+                 << FormatFloat(blender_skinned[0]) << ", "
+                 << FormatFloat(blender_skinned[1]) << ", "
+                 << FormatFloat(blender_skinned[2]) << "]";
             if (has_normals) {
               const float length =
                   std::sqrt(skinned_nrm[0] * skinned_nrm[0] +
@@ -1258,21 +1322,23 @@ class PlaybackSampleApplication : public ozz::sample::Application {
                 skinned_nrm[1] = ny;
                 skinned_nrm[2] = nz;
               }
+              const auto blender_skinned_normal = ConvertOzzToBlender(skinned_nrm[0], skinned_nrm[1], skinned_nrm[2]);
               file << ",\n";
               file << "          \"skinned_normal\": ["
-                   << FormatFloat(skinned_nrm[0]) << ", "
-                   << FormatFloat(skinned_nrm[1]) << ", "
-                   << FormatFloat(skinned_nrm[2]) << "]";
+                   << FormatFloat(blender_skinned_normal[0]) << ", "
+                   << FormatFloat(blender_skinned_normal[1]) << ", "
+                   << FormatFloat(blender_skinned_normal[2]) << "]";
             }
             file << ",\n";
           } else {
-            file << "          \"skinned_position\": [" << FormatFloat(px)
-                 << ", " << FormatFloat(py) << ", "
-                 << FormatFloat(pz) << "],\n";
+            file << "          \"skinned_position\": [" << FormatFloat(blender_pos[0])
+                 << ", " << FormatFloat(blender_pos[1]) << ", "
+                 << FormatFloat(blender_pos[2]) << "],\n";
             if (has_normals) {
-              file << "          \"skinned_normal\": [" << FormatFloat(nx)
-                   << ", " << FormatFloat(ny) << ", "
-                   << FormatFloat(nz) << "],\n";
+              const auto blender_normal_fallback = ConvertOzzToBlender(nx, ny, nz);
+              file << "          \"skinned_normal\": [" << FormatFloat(blender_normal_fallback[0])
+                   << ", " << FormatFloat(blender_normal_fallback[1]) << ", "
+                   << FormatFloat(blender_normal_fallback[2]) << "],\n";
             }
           }
 
