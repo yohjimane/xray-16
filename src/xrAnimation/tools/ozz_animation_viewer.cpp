@@ -492,6 +492,13 @@ class PlaybackSampleApplication : public ozz::sample::Application {
       }
     }
 
+    if (skinning_dump_pending_ && !skinning_dump_path_.empty()) {
+      if (!ExportSkinningToJson(skinning_dump_path_.c_str())) {
+        return false;
+      }
+      skinning_dump_pending_ = false;
+    }
+
     return true;
   }
 
@@ -604,11 +611,11 @@ class PlaybackSampleApplication : public ozz::sample::Application {
       }
     }
 
-    if (OPTIONS_dump_skinning_json &&
-        OPTIONS_dump_skinning_json[0] != '\0') {
-      if (!ExportSkinningToJson(OPTIONS_dump_skinning_json)) {
-        return false;
-      }
+    skinning_dump_path_.clear();
+    skinning_dump_pending_ = false;
+    if (OPTIONS_dump_skinning_json && OPTIONS_dump_skinning_json[0] != '\0') {
+      skinning_dump_path_ = OPTIONS_dump_skinning_json;
+      skinning_dump_pending_ = true;
     }
 
     // Optionally set a forced animation time ratio from environment.
@@ -690,6 +697,9 @@ class PlaybackSampleApplication : public ozz::sample::Application {
             current_animation_ = selected_animation;
             controller_.Reset();
             context_.Invalidate();
+            if (!skinning_dump_path_.empty()) {
+              skinning_dump_pending_ = true;
+            }
           }
 
           if (HasAnimationSelected()) {
@@ -914,6 +924,10 @@ class PlaybackSampleApplication : public ozz::sample::Application {
   std::string skeleton_label_;
   std::string mesh_label_;
 
+  // Optional dump controls.
+  std::string skinning_dump_path_;
+  bool skinning_dump_pending_ = false;
+
   // Debug frame counter
   int debug_frame_count_;
 
@@ -964,8 +978,17 @@ class PlaybackSampleApplication : public ozz::sample::Application {
       ozz::log::Err() << "No mesh loaded; cannot export skinning JSON." << std::endl;
       return false;
     }
-    if (!ComputeBindPoseModelMatrices()) {
+
+    const int joint_count = skeleton_.num_joints();
+    if (joint_count == 0) {
+      ozz::log::Err() << "Skeleton has no joints; cannot export skinning JSON." << std::endl;
       return false;
+    }
+
+    if (models_.size() != static_cast<size_t>(joint_count)) {
+      if (!ComputeBindPoseModelMatrices()) {
+        return false;
+      }
     }
 
     std::ofstream file(path, std::ios::binary);
@@ -976,7 +999,6 @@ class PlaybackSampleApplication : public ozz::sample::Application {
     }
     file.imbue(std::locale::classic());
 
-    const int joint_count = skeleton_.num_joints();
     const auto joint_names = skeleton_.joint_names();
 
     file << "{\n";
@@ -1024,6 +1046,36 @@ class PlaybackSampleApplication : public ozz::sample::Application {
 
     for (size_t mesh_index = 0; mesh_index < meshes_.size(); ++mesh_index) {
       const ozz::sample::Mesh& mesh = meshes_[mesh_index];
+
+      const size_t palette_size = mesh.joint_remaps.size();
+      if (palette_size > 0) {
+        skinning_matrices_.resize(palette_size);
+        if (mesh.inverse_bind_poses.size() != palette_size) {
+          ozz::log::Err() << "Mesh palette size mismatch: remaps="
+                          << mesh.joint_remaps.size()
+                          << " inverse_bind_poses="
+                          << mesh.inverse_bind_poses.size() << std::endl;
+        }
+        for (size_t palette_index = 0; palette_index < palette_size;
+             ++palette_index) {
+          const uint16_t joint_index = mesh.joint_remaps[palette_index];
+          if (joint_index >= models_.size()) {
+            ozz::log::Err() << "Palette index " << palette_index
+                            << " references joint " << joint_index
+                            << " beyond loaded skeleton." << std::endl;
+            continue;
+          }
+          if (mesh.inverse_bind_poses.size() > palette_index) {
+            skinning_matrices_[palette_index] =
+                models_[joint_index] * mesh.inverse_bind_poses[palette_index];
+          } else {
+            skinning_matrices_[palette_index] = models_[joint_index];
+          }
+        }
+      } else {
+        skinning_matrices_.clear();
+      }
+
       file << "    {\n";
       file << "      \"name\": \"";
       if (!mesh_label_.empty()) {
@@ -1036,12 +1088,55 @@ class PlaybackSampleApplication : public ozz::sample::Application {
       }
       file << "\",\n";
       file << "      \"vertex_count\": " << mesh.vertex_count() << ",\n";
+      file << "      \"joint_palette\": [\n";
+      for (size_t palette_index = 0; palette_index < palette_size;
+           ++palette_index) {
+        file << "        {\n";
+        file << "          \"palette_index\": " << palette_index << ",\n";
+        file << "          \"joint_index\": "
+             << mesh.joint_remaps[palette_index] << ",\n";
+        if (mesh.inverse_bind_poses.size() > palette_index) {
+          const auto inverse_rows =
+              MatrixToRows(mesh.inverse_bind_poses[palette_index]);
+          file << "          \"inverse_bind_pose\": [\n";
+          for (int row = 0; row < 4; ++row) {
+            file << "            [" << FormatFloat(inverse_rows[row][0]) << ", "
+                 << FormatFloat(inverse_rows[row][1]) << ", "
+                 << FormatFloat(inverse_rows[row][2]) << ", "
+                 << FormatFloat(inverse_rows[row][3]) << "]";
+            file << (row < 3 ? ",\n" : "\n");
+          }
+          file << "          ],\n";
+        } else {
+          file << "          \"inverse_bind_pose\": [],\n";
+        }
+        if (skinning_matrices_.size() > palette_index) {
+          const auto skin_rows = MatrixToRows(skinning_matrices_[palette_index]);
+          file << "          \"skinning_matrix\": [\n";
+          for (int row = 0; row < 4; ++row) {
+            file << "            [" << FormatFloat(skin_rows[row][0]) << ", "
+                 << FormatFloat(skin_rows[row][1]) << ", "
+                 << FormatFloat(skin_rows[row][2]) << ", "
+                 << FormatFloat(skin_rows[row][3]) << "]";
+            file << (row < 3 ? ",\n" : "\n");
+          }
+          file << "          ]\n";
+        } else {
+          file << "          \"skinning_matrix\": []\n";
+        }
+        file << "        }";
+        file << (palette_index + 1 < palette_size ? ",\n" : "\n");
+      }
+      file << "      ],\n";
       file << "      \"vertices\": [\n";
 
       int global_vertex = 0;
       for (const ozz::sample::Mesh::Part& part : mesh.parts) {
         const int influences = part.influences_count();
         const int vertex_count = part.vertex_count();
+        const bool has_normals =
+            part.normals.size() ==
+            static_cast<size_t>(vertex_count * ozz::sample::Mesh::Part::kNormalsCpnts);
         for (int v = 0; v < vertex_count; ++v, ++global_vertex) {
           file << "        {\n";
           file << "          \"index\": " << global_vertex << ",\n";
@@ -1052,10 +1147,32 @@ class PlaybackSampleApplication : public ozz::sample::Application {
           file << "          \"position\": [" << FormatFloat(px) << ", "
                << FormatFloat(py) << ", " << FormatFloat(pz) << "],\n";
 
-          file << "          \"weights\": [";
+          float nx = 0.f;
+          float ny = 0.f;
+          float nz = 0.f;
+          if (has_normals) {
+            const int normal_offset =
+                v * ozz::sample::Mesh::Part::kNormalsCpnts;
+            nx = part.normals[normal_offset + 0];
+            ny = part.normals[normal_offset + 1];
+            nz = part.normals[normal_offset + 2];
+            file << "          \"normal\": [" << FormatFloat(nx) << ", "
+                 << FormatFloat(ny) << ", " << FormatFloat(nz) << "],\n";
+          }
+
+          std::vector<std::pair<uint16_t, float>> weights;
+          weights.reserve(influences > 0 ? influences : 1);
+          const bool skinning_available = !skinning_matrices_.empty();
+          const ozz::math::SimdFloat4 rest_position =
+              ozz::math::simd_float4::Load(px, py, pz, 1.f);
+          const ozz::math::SimdFloat4 rest_normal =
+              has_normals ? ozz::math::simd_float4::Load(nx, ny, nz, 0.f)
+                          : ozz::math::simd_float4::Load(0.f, 0.f, 0.f, 0.f);
+          float skinned_pos[3] = {0.f, 0.f, 0.f};
+          float skinned_nrm[3] = {0.f, 0.f, 0.f};
+          float weight_sum = 0.f;
+
           if (influences > 0) {
-            std::vector<std::pair<uint16_t, float>> weights;
-            weights.reserve(influences);
             const int joint_base = v * influences;
             const int weight_base = v * std::max(0, influences - 1);
             float accum = 0.f;
@@ -1068,7 +1185,6 @@ class PlaybackSampleApplication : public ozz::sample::Application {
                                 << std::endl;
                 continue;
               }
-              const uint16_t joint_index = mesh.joint_remaps[palette_index];
               float weight = 0.f;
               if (influence < influences - 1) {
                 weight = part.joint_weights[weight_base + influence];
@@ -1077,21 +1193,91 @@ class PlaybackSampleApplication : public ozz::sample::Application {
                 weight = std::max(0.f, 1.f - accum);
               }
               weight = std::clamp(weight, 0.f, 1.f);
+              weight_sum += weight;
+
+              const uint16_t joint_index = mesh.joint_remaps[palette_index];
               weights.emplace_back(joint_index, weight);
-            }
-            std::sort(weights.begin(), weights.end(),
-                      [](const auto& lhs, const auto& rhs) {
-                        return lhs.first < rhs.first;
-                      });
-            for (size_t idx = 0; idx < weights.size(); ++idx) {
-              file << "[" << weights[idx].first << ", "
-                   << FormatFloat(weights[idx].second) << "]";
-              if (idx + 1 < weights.size()) {
-                file << ", ";
+
+              if (skinning_available && weight > 0.f &&
+                  palette_index < skinning_matrices_.size()) {
+                const ozz::math::Float4x4& skin_matrix =
+                    skinning_matrices_[palette_index];
+                float transformed_position[4];
+                ozz::math::StorePtrU(
+                    ozz::math::TransformPoint(skin_matrix, rest_position),
+                    transformed_position);
+                skinned_pos[0] += transformed_position[0] * weight;
+                skinned_pos[1] += transformed_position[1] * weight;
+                skinned_pos[2] += transformed_position[2] * weight;
+
+                if (has_normals) {
+                  float transformed_normal[4];
+                  ozz::math::StorePtrU(
+                      ozz::math::TransformVector(skin_matrix, rest_normal),
+                      transformed_normal);
+                  skinned_nrm[0] += transformed_normal[0] * weight;
+                  skinned_nrm[1] += transformed_normal[1] * weight;
+                  skinned_nrm[2] += transformed_normal[2] * weight;
+                }
               }
             }
           }
-          file << "]\n";
+
+          std::sort(weights.begin(), weights.end(),
+                    [](const auto& lhs, const auto& rhs) {
+                      return lhs.first < rhs.first;
+                    });
+
+          file << "          \"weights\": [";
+          for (size_t idx = 0; idx < weights.size(); ++idx) {
+            file << "[" << weights[idx].first << ", "
+                 << FormatFloat(weights[idx].second) << "]";
+            if (idx + 1 < weights.size()) {
+              file << ", ";
+            }
+          }
+          file << "],\n";
+
+          const bool wrote_skinned = skinning_available && !weights.empty();
+          if (wrote_skinned) {
+            file << "          \"skinned_position\": ["
+                 << FormatFloat(skinned_pos[0]) << ", "
+                 << FormatFloat(skinned_pos[1]) << ", "
+                 << FormatFloat(skinned_pos[2]) << "]";
+            if (has_normals) {
+              const float length =
+                  std::sqrt(skinned_nrm[0] * skinned_nrm[0] +
+                            skinned_nrm[1] * skinned_nrm[1] +
+                            skinned_nrm[2] * skinned_nrm[2]);
+              if (length > 0.f) {
+                skinned_nrm[0] /= length;
+                skinned_nrm[1] /= length;
+                skinned_nrm[2] /= length;
+              } else {
+                skinned_nrm[0] = nx;
+                skinned_nrm[1] = ny;
+                skinned_nrm[2] = nz;
+              }
+              file << ",\n";
+              file << "          \"skinned_normal\": ["
+                   << FormatFloat(skinned_nrm[0]) << ", "
+                   << FormatFloat(skinned_nrm[1]) << ", "
+                   << FormatFloat(skinned_nrm[2]) << "]";
+            }
+            file << ",\n";
+          } else {
+            file << "          \"skinned_position\": [" << FormatFloat(px)
+                 << ", " << FormatFloat(py) << ", "
+                 << FormatFloat(pz) << "],\n";
+            if (has_normals) {
+              file << "          \"skinned_normal\": [" << FormatFloat(nx)
+                   << ", " << FormatFloat(ny) << ", "
+                   << FormatFloat(nz) << "],\n";
+            }
+          }
+
+          file << "          \"weight_sum\": " << FormatFloat(weight_sum)
+               << "\n";
           file << "        }";
           if (global_vertex + 1 < mesh.vertex_count()) {
             file << ",";

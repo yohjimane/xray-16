@@ -3,8 +3,10 @@
 #include <cmath>
 #include <cstdlib>
 #include <filesystem>
+#include <fstream>
 #include <iomanip>
 #include <iostream>
+#include <map>
 #include <optional>
 #include <set>
 #include <sstream>
@@ -33,11 +35,15 @@
 #include "ozz/base/maths/soa_transform.h"
 #include "ozz/base/maths/transform.h"
 
+#include "../../../Externals/ozz-animation/src/animation/offline/gltf/extern/json.hpp"
+
 
 namespace fs = std::filesystem;
 
 namespace
 {
+
+using Json = nlohmann::json;
 
 fs::path ProjectRoot()
 {
@@ -70,9 +76,14 @@ fs::path SkeletonCsvPath()
     return TestArtifactsDir() / "stalker_hero_bind_pose.csv";
 }
 
-fs::path BaselineDir()
+[[maybe_unused]] fs::path BaselineDir()
 {
     return ProjectRoot() / "src" / "xrAnimation" / "tests" / "baselines";
+}
+
+fs::path BaselineCasesDir()
+{
+    return ProjectRoot() / "src" / "xrAnimation" / "tests" / "baseline_cases";
 }
 
 fs::path AnimationOutputPath()
@@ -93,6 +104,220 @@ fs::path SingleAnimationOutputPath()
 fs::path MeshOutputPath()
 {
     return TestArtifactsDir() / "stalker_hero_mesh.ozz";
+}
+
+fs::path MeshSkinningOutputPath()
+{
+    return TestArtifactsDir() / "stalker_hero_mesh_skinning.json";
+}
+
+fs::path BlenderRestPoseBaselinePath()
+{
+    return BaselineCasesDir() / "stalker_hero_1_rest_pose.json";
+}
+
+constexpr float kMeshPositionTolerance = 1e-4f;
+constexpr float kMeshWeightTolerance = 5e-4f;
+constexpr float kMatrixTolerance = 1e-4f;
+
+bool LoadJsonFile(const fs::path& path, Json& out)
+{
+    std::ifstream stream(path, std::ios::binary);
+    if (!stream)
+    {
+        std::cerr << "failed to open json file: " << path << std::endl;
+        return false;
+    }
+
+    try
+    {
+        stream >> out;
+    }
+    catch (const std::exception& ex)
+    {
+        std::cerr << "failed to parse json '" << path << "': " << ex.what() << std::endl;
+        return false;
+    }
+
+    return true;
+}
+
+bool NearlyEqual(float a, float b, float tolerance)
+{
+    return std::fabs(a - b) <= tolerance;
+}
+
+bool CompareFloatVector(const Json& actual,
+                        const Json& expected,
+                        float tolerance,
+                        const std::string& context)
+{
+    if (!actual.is_array() || !expected.is_array())
+    {
+        std::cerr << context << ": expected arrays" << std::endl;
+        return false;
+    }
+
+    if (actual.size() != expected.size())
+    {
+        std::cerr << context << ": size mismatch (" << actual.size() << " vs " << expected.size() << ")" << std::endl;
+        return false;
+    }
+
+    bool ok = true;
+    for (size_t i = 0; i < actual.size(); ++i)
+    {
+        const float lhs = static_cast<float>(actual[i].get<double>());
+        const float rhs = static_cast<float>(expected[i].get<double>());
+        if (!NearlyEqual(lhs, rhs, tolerance))
+        {
+            std::cerr << context << " component " << i << " mismatch: "
+                      << lhs << " vs " << rhs << " (tolerance " << tolerance << ")" << std::endl;
+            ok = false;
+        }
+    }
+    return ok;
+}
+
+std::vector<std::pair<int, float>> ExtractWeights(const Json& weights)
+{
+    std::vector<std::pair<int, float>> result;
+    if (!weights.is_array())
+        return result;
+
+    result.reserve(weights.size());
+    for (const auto& entry : weights)
+    {
+        if (!entry.is_array() || entry.size() != 2)
+            continue;
+
+        const int joint_index = entry[0].get<int>();
+        const float weight = static_cast<float>(entry[1].get<double>());
+        result.emplace_back(joint_index, weight);
+    }
+    std::sort(result.begin(), result.end(), [](const auto& lhs, const auto& rhs) {
+        return lhs.first < rhs.first;
+    });
+    return result;
+}
+
+bool CompareWeights(const Json& actual,
+                    const Json& expected,
+                    float tolerance,
+                    const std::string& context)
+{
+    auto lhs = ExtractWeights(actual);
+    auto rhs = ExtractWeights(expected);
+
+    if (lhs.size() != rhs.size())
+    {
+        std::cerr << context << ": weight count mismatch (" << lhs.size()
+                  << " vs " << rhs.size() << ")" << std::endl;
+        return false;
+    }
+
+    bool ok = true;
+    for (size_t i = 0; i < lhs.size(); ++i)
+    {
+        if (lhs[i].first != rhs[i].first)
+        {
+            std::cerr << context << ": joint index mismatch at " << i
+                      << " (" << lhs[i].first << " vs " << rhs[i].first << ")" << std::endl;
+            ok = false;
+            continue;
+        }
+        if (!NearlyEqual(lhs[i].second, rhs[i].second, tolerance))
+        {
+            std::cerr << context << ": weight mismatch for joint " << lhs[i].first
+                      << " (" << lhs[i].second << " vs " << rhs[i].second
+                      << ", tolerance " << tolerance << ")" << std::endl;
+            ok = false;
+        }
+    }
+    return ok;
+}
+
+bool ValidateMatrix4x4(const Json& matrix, const std::string& context)
+{
+    if (!matrix.is_array() || matrix.size() != 4)
+    {
+        std::cerr << context << ": expected 4 rows" << std::endl;
+        return false;
+    }
+
+    bool ok = true;
+    for (size_t row = 0; row < 4; ++row)
+    {
+        const auto& row_data = matrix[row];
+        if (!row_data.is_array() || row_data.size() != 4)
+        {
+            std::cerr << context << ": row " << row << " malformed" << std::endl;
+            ok = false;
+        }
+    }
+    return ok;
+}
+
+bool CompareMatrix4x4(const Json& actual,
+                      const Json& expected,
+                      float tolerance,
+                      const std::string& context)
+{
+    if (!ValidateMatrix4x4(actual, context + ".actual") ||
+        !ValidateMatrix4x4(expected, context + ".expected"))
+    {
+        return false;
+    }
+
+    bool ok = true;
+    for (size_t row = 0; row < 4; ++row)
+    {
+        ok &= CompareFloatVector(actual[row], expected[row], tolerance,
+                                 context + ".row" + std::to_string(row));
+    }
+    return ok;
+}
+
+bool ValidateJointPalette(const Json& palette,
+                          const ozz::animation::Skeleton& skeleton,
+                          const std::string& context)
+{
+    if (!palette.is_array())
+    {
+        std::cerr << context << ": palette not an array" << std::endl;
+        return false;
+    }
+
+    bool ok = true;
+    const int joint_count = skeleton.num_joints();
+    for (size_t idx = 0; idx < palette.size(); ++idx)
+    {
+        const auto& entry = palette[idx];
+        if (!entry.is_object())
+        {
+            std::cerr << context << ": entry " << idx << " not an object" << std::endl;
+            ok = false;
+            continue;
+        }
+
+        const int joint_index = entry.value("joint_index", -1);
+        if (joint_index < 0 || joint_index >= joint_count)
+        {
+            std::cerr << context << ": palette joint index " << joint_index
+                      << " out of bounds" << std::endl;
+            ok = false;
+        }
+
+        if (entry.contains("inverse_bind_pose"))
+        {
+            ok &= ValidateMatrix4x4(entry["inverse_bind_pose"], context + ".inverse_bind_pose");
+        }
+        if (entry.contains("skinning_matrix"))
+        {
+            ok &= ValidateMatrix4x4(entry["skinning_matrix"], context + ".skinning_matrix");
+        }
+    }
+    return ok;
 }
 
 const std::array<const char*, 4> kExpectedMultiMotionNames = {{
@@ -614,6 +839,239 @@ bool TestGenerateMesh()
     return ConvertMesh(true);
 }
 
+bool TestViewerMeshMatchesBaseline()
+{
+    if (!EnsureSkeletonGenerated())
+        return false;
+
+    if (!ConvertMesh(false))
+        return false;
+
+    const fs::path skinning_dump = MeshSkinningOutputPath();
+    std::error_code remove_error;
+    fs::remove(skinning_dump, remove_error);
+
+    std::vector<std::string> args = {
+        std::string("--skeleton=") + SkeletonOutputPath().string(),
+        std::string("--mesh=") + MeshOutputPath().string(),
+        std::string("--dump_skinning_json=") + skinning_dump.string(),
+        "--render=false",
+        "--max_idle_loops=2",
+    };
+
+    const int viewer_exit = ExecuteCommand(ResolveViewerBinary(), args);
+    if (viewer_exit != 0)
+    {
+        std::cerr << "ozz_animation_viewer returned exit code " << viewer_exit << std::endl;
+        return false;
+    }
+
+    if (!fs::exists(skinning_dump))
+    {
+        std::cerr << "viewer did not produce skinning dump: " << skinning_dump << std::endl;
+        return false;
+    }
+
+    Json viewer_json;
+    if (!LoadJsonFile(skinning_dump, viewer_json))
+        return false;
+
+    Json baseline_json;
+    if (!LoadJsonFile(BlenderRestPoseBaselinePath(), baseline_json))
+        return false;
+
+    ozz::animation::Skeleton skeleton;
+    if (!LoadOzz(SkeletonOutputPath(), skeleton))
+        return false;
+
+    bool ok = true;
+
+    if (!viewer_json.contains("armature") || !baseline_json.contains("armature"))
+    {
+        std::cerr << "armature missing from JSON data" << std::endl;
+        return false;
+    }
+
+    const Json& viewer_armature = viewer_json["armature"];
+    const Json& baseline_armature = baseline_json["armature"];
+
+    if (!viewer_armature.contains("bones") || !baseline_armature.contains("bones"))
+    {
+        std::cerr << "bone arrays missing from armature" << std::endl;
+        return false;
+    }
+
+    const Json& viewer_bones = viewer_armature["bones"];
+    const Json& baseline_bones = baseline_armature["bones"];
+
+    if (!viewer_bones.is_array() || !baseline_bones.is_array())
+    {
+        std::cerr << "bone data malformed" << std::endl;
+        return false;
+    }
+
+    if (viewer_bones.size() != baseline_bones.size())
+    {
+        std::cerr << "bone count mismatch between viewer and baseline" << std::endl;
+        ok = false;
+    }
+
+    const size_t bone_count = std::min(viewer_bones.size(), baseline_bones.size());
+    for (size_t bone_index = 0; bone_index < bone_count; ++bone_index)
+    {
+        const Json& viewer_bone = viewer_bones[bone_index];
+        const Json& baseline_bone = baseline_bones[bone_index];
+
+        const std::string viewer_name = viewer_bone.value("name", std::string());
+        const std::string baseline_name = baseline_bone.value("name", std::string());
+        if (viewer_name != baseline_name)
+        {
+            std::cerr << "bone name mismatch at index " << bone_index << ": '"
+                      << viewer_name << "' vs '" << baseline_name << "'" << std::endl;
+            ok = false;
+        }
+
+        if (viewer_bone.contains("matrix_global") && baseline_bone.contains("matrix_global"))
+        {
+            const std::string ctx = "bone[" + std::to_string(bone_index) + "].matrix_global";
+            ok &= CompareMatrix4x4(viewer_bone["matrix_global"],
+                                   baseline_bone["matrix_global"],
+                                   kMatrixTolerance,
+                                   ctx);
+        }
+    }
+
+    if (!viewer_json.contains("meshes") || !baseline_json.contains("meshes"))
+    {
+        std::cerr << "mesh arrays missing from JSON data" << std::endl;
+        return false;
+    }
+
+    const Json& viewer_meshes = viewer_json["meshes"];
+    const Json& baseline_meshes = baseline_json["meshes"];
+
+    if (!viewer_meshes.is_array() || !baseline_meshes.is_array())
+    {
+        std::cerr << "mesh data malformed" << std::endl;
+        return false;
+    }
+
+    if (viewer_meshes.size() != baseline_meshes.size())
+    {
+        std::cerr << "mesh count mismatch between viewer and baseline" << std::endl;
+        ok = false;
+    }
+
+    const size_t mesh_count = std::min(viewer_meshes.size(), baseline_meshes.size());
+    for (size_t mesh_index = 0; mesh_index < mesh_count; ++mesh_index)
+    {
+        const Json& viewer_mesh = viewer_meshes[mesh_index];
+        const Json& baseline_mesh = baseline_meshes[mesh_index];
+        const std::string mesh_ctx = "mesh[" + std::to_string(mesh_index) + "]";
+
+        if (viewer_mesh.contains("joint_palette"))
+        {
+            ok &= ValidateJointPalette(viewer_mesh["joint_palette"], skeleton, mesh_ctx + ".joint_palette");
+        }
+
+        if (!viewer_mesh.contains("vertices") || !baseline_mesh.contains("vertices"))
+        {
+            std::cerr << mesh_ctx << ": vertex arrays missing" << std::endl;
+            return false;
+        }
+
+        const Json& viewer_vertices = viewer_mesh["vertices"];
+        const Json& baseline_vertices = baseline_mesh["vertices"];
+
+        if (!viewer_vertices.is_array() || !baseline_vertices.is_array())
+        {
+            std::cerr << mesh_ctx << ": vertex data malformed" << std::endl;
+            return false;
+        }
+
+        if (viewer_vertices.size() != baseline_vertices.size())
+        {
+            std::cerr << mesh_ctx << ": vertex count mismatch (" << viewer_vertices.size()
+                      << " vs " << baseline_vertices.size() << ")" << std::endl;
+            ok = false;
+        }
+
+        std::map<size_t, size_t> viewer_histogram;
+        std::map<size_t, size_t> baseline_histogram;
+
+        const size_t vertex_count = std::min(viewer_vertices.size(), baseline_vertices.size());
+        for (size_t vertex_index = 0; vertex_index < vertex_count; ++vertex_index)
+        {
+            const Json& viewer_vertex = viewer_vertices[vertex_index];
+            const Json& baseline_vertex = baseline_vertices[vertex_index];
+            const std::string vertex_ctx = mesh_ctx + ".vertex[" + std::to_string(vertex_index) + "]";
+
+            const int viewer_idx = viewer_vertex.value("index", static_cast<int>(vertex_index));
+            const int baseline_idx = baseline_vertex.value("index", static_cast<int>(vertex_index));
+            if (viewer_idx != baseline_idx)
+            {
+                std::cerr << vertex_ctx << ": index mismatch (" << viewer_idx
+                          << " vs " << baseline_idx << ")" << std::endl;
+                ok = false;
+            }
+
+            if (viewer_vertex.contains("position") && baseline_vertex.contains("position"))
+            {
+                ok &= CompareFloatVector(viewer_vertex["position"],
+                                         baseline_vertex["position"],
+                                         kMeshPositionTolerance,
+                                         vertex_ctx + ".position");
+            }
+            else
+            {
+                std::cerr << vertex_ctx << ": missing position data" << std::endl;
+                ok = false;
+            }
+
+            if (viewer_vertex.contains("weights") && baseline_vertex.contains("weights"))
+            {
+                ok &= CompareWeights(viewer_vertex["weights"], baseline_vertex["weights"],
+                                     kMeshWeightTolerance, vertex_ctx + ".weights");
+
+                const auto viewer_weights = ExtractWeights(viewer_vertex["weights"]);
+                const auto baseline_weights = ExtractWeights(baseline_vertex["weights"]);
+                viewer_histogram[viewer_weights.size()]++;
+                baseline_histogram[baseline_weights.size()]++;
+
+                float viewer_sum = 0.f;
+                for (const auto& pair : viewer_weights)
+                    viewer_sum += pair.second;
+                if (!viewer_weights.empty() && !NearlyEqual(viewer_sum, 1.f, 1e-2f))
+                {
+                    std::cerr << vertex_ctx << ": viewer weight sum " << viewer_sum << " deviates from 1.0" << std::endl;
+                    ok = false;
+                }
+            }
+            else
+            {
+                std::cerr << vertex_ctx << ": missing weights" << std::endl;
+                ok = false;
+            }
+
+            if (viewer_vertex.contains("skinned_position") && baseline_vertex.contains("position"))
+            {
+                ok &= CompareFloatVector(viewer_vertex["skinned_position"],
+                                         baseline_vertex["position"],
+                                         1e-2f,
+                                         vertex_ctx + ".skinned_position");
+            }
+        }
+
+        if (viewer_histogram != baseline_histogram)
+        {
+            std::cerr << mesh_ctx << ": influence histogram mismatch" << std::endl;
+            ok = false;
+        }
+    }
+
+    return ok;
+}
+
 bool TestBindPoseMatchesBlender()
 {
     if (!EnsureSkeletonGenerated())
@@ -953,9 +1411,10 @@ struct TestCase
 
 int main()
 {
-    const std::array<TestCase, 8> tests = {{
+    const std::array<TestCase, 9> tests = {{
         {"GenerateSkeleton", &TestGenerateSkeleton, false},
         {"GenerateMesh", &TestGenerateMesh, false},
+        {"ViewerMeshMatchesBaseline", &TestViewerMeshMatchesBaseline, false},
         {"BindPoseMatchesBlender", &TestBindPoseMatchesBlender, false},
         {"ConvertAnimationProducesFile", &TestConvertAnimationProducesFile, false},
         {"AnimationCompatibleWithSkeleton", &TestAnimationCompatibleWithSkeleton, false},

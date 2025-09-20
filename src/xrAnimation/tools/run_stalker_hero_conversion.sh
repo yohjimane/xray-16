@@ -21,8 +21,16 @@ mkdir -p "${TESTDATA_DIR}"
   "${TESTDATA_DIR}/critical_hit_grup_1.ozz" \
   "${ROOT_DIR}/res/testdata/stalker_hero_1.ogf"
 
+# Convert the stalker hero mesh for skinning validation
+"${BUILD_DIR}/xray_to_ozz_converter" \
+  mesh \
+  "${ROOT_DIR}/res/testdata/stalker_hero_1.ogf" \
+  "${TESTDATA_DIR}/stalker_hero_mesh.ozz"
+
 # Launch the viewer with the converted assets
 "${BUILD_DIR}/ozz_animation_viewer" \
   --skeleton="${TESTDATA_DIR}/stalker_hero_1.ozz" \
-  --animation="${TESTDATA_DIR}/critical_hit_grup_1.ozz" \
-  --mesh="${TESTDATA_DIR}/stalker_hero_mesh.ozz"
+  --mesh="${TESTDATA_DIR}/stalker_hero_mesh.ozz" \
+  --dump_skinning_json="${TESTDATA_DIR}/stalker_hero_mesh_skinning.json" \
+  --render=false \
+  --max_idle_loops=2
