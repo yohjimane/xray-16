@@ -465,13 +465,7 @@ class PlaybackSampleApplication : public ozz::sample::Application {
       }
     }
 
-    // Create transform matrix with vertical offset
     ozz::math::Float4x4 transform = ozz::math::Float4x4::identity();
-    if (min_z < 0.0f) {
-      // Offset character up so lowest bone is at ground level
-      transform.cols[3] = ozz::math::simd_float4::Load(0.0f, 0.0f, -min_z + 0.05f, 1.0f); // +0.05 for small buffer
-    }
-
     return _renderer->DrawPosture(skeleton_, make_span(models_), transform);
   }
 
