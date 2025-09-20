@@ -13,6 +13,7 @@ include_directories(
     ${CMAKE_CURRENT_SOURCE_DIR}/../xrEngine
     ${CMAKE_CURRENT_SOURCE_DIR}/../Common
     ${CMAKE_CURRENT_SOURCE_DIR}/../../Externals/ozz-animation/include
+    ${CMAKE_CURRENT_SOURCE_DIR}/../../Externals/ozz-animation/samples
     ${CMAKE_CURRENT_SOURCE_DIR}/../../Externals/imgui
     ${CMAKE_CURRENT_SOURCE_DIR}/../../Externals/imgui-proj
 )

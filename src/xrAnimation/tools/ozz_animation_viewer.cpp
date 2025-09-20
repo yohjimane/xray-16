@@ -772,9 +772,9 @@ class PlaybackSampleApplication : public ozz::sample::Application {
             ozz::math::StorePtrU(quat_simd, quat);
 
             std::array<std::string, 7> value_strings = {
-                FormatFloat(tx, 3), FormatFloat(ty, 3), FormatFloat(tz, 3),
-                FormatFloat(quat[3], 4), FormatFloat(quat[0], 4),
-                FormatFloat(quat[1], 4), FormatFloat(quat[2], 4)};
+                FormatFloat(tx), FormatFloat(ty), FormatFloat(tz),
+                FormatFloat(quat[3]), FormatFloat(quat[0]),
+                FormatFloat(quat[1]), FormatFloat(quat[2])};
 
             std::ostringstream row_stream;
             row_stream.imbue(std::locale::classic());

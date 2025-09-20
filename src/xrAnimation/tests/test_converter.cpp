@@ -14,8 +14,8 @@
 #include <type_traits>
 #include <vector>
 
-#ifndef WORKSPACE_ROOT
-#error "WORKSPACE_ROOT compile definition must be provided"
+#ifndef PROJECT_ROOT
+#error "PROJECT_ROOT compile definition must be provided"
 #endif
 
 #ifdef _WIN32
@@ -33,30 +33,31 @@
 #include "ozz/base/maths/soa_transform.h"
 #include "ozz/base/maths/transform.h"
 
+
 namespace fs = std::filesystem;
 
 namespace
 {
 
-fs::path WorkspaceRoot()
+fs::path ProjectRoot()
 {
-    static const fs::path root = fs::path(WORKSPACE_ROOT);
+    static const fs::path root = fs::path(PROJECT_ROOT);
     return root;
 }
 
 fs::path TestArtifactsDir()
 {
-    return WorkspaceRoot() / "asset_tests" / "test_outputs";
+    return ProjectRoot() / "asset_tests" / "test_outputs";
 }
 
 fs::path SkeletonInputPath()
 {
-    return WorkspaceRoot() / "xray-16" / "res" / "testdata" / "stalker_hero_1.ogf";
+    return ProjectRoot() / "res" / "testdata" / "stalker_hero_1.ogf";
 }
 
 fs::path AnimationInputPath()
 {
-    return WorkspaceRoot() / "xray-16" / "res" / "testdata" / "critical_hit_grup_1.omf";
+    return ProjectRoot() / "res" / "testdata" / "critical_hit_grup_1.omf";
 }
 
 fs::path SkeletonOutputPath()
@@ -67,6 +68,11 @@ fs::path SkeletonOutputPath()
 fs::path SkeletonCsvPath()
 {
     return TestArtifactsDir() / "stalker_hero_bind_pose.csv";
+}
+
+fs::path BaselineDir()
+{
+    return ProjectRoot() / "src" / "xrAnimation" / "tests" / "baselines";
 }
 
 fs::path AnimationOutputPath()
@@ -240,15 +246,9 @@ std::string QuoteForShell(const std::string& value)
 #endif
 }
 
-fs::path ResolveConverterBinary()
+fs::path ResolveBinary(const std::string& executable_name)
 {
-#ifdef _WIN32
-    const std::string executable_name = "xray_to_ozz_converter.exe";
-#else
-    const std::string executable_name = "xray_to_ozz_converter";
-#endif
-
-    const fs::path build_bin = WorkspaceRoot() / "xray-16" / "ozz_utils" / "bin";
+    const fs::path build_bin = ProjectRoot() / "ozz_utils" / "bin";
 
     const std::array<fs::path, 2> candidates = {
         build_bin / "Debug" / executable_name,
@@ -261,19 +261,37 @@ fs::path ResolveConverterBinary()
     }
 
     std::ostringstream oss;
-    oss << "Unable to locate xray_to_ozz_converter binary. Checked:";
+    oss << "Unable to locate binary '" << executable_name << "'. Checked:";
     for (const auto& candidate : candidates)
         oss << '\n' << "  " << candidate.string();
     throw std::runtime_error(oss.str());
 }
 
-std::string BuildCommand(const std::vector<std::string>& args)
+fs::path ResolveConverterBinary()
 {
-    const fs::path converter = ResolveConverterBinary();
-    const fs::path converter_dir = converter.parent_path();
+#ifdef _WIN32
+    return ResolveBinary("xray_to_ozz_converter.exe");
+#else
+    return ResolveBinary("xray_to_ozz_converter");
+#endif
+}
+
+fs::path ResolveViewerBinary()
+{
+#ifdef _WIN32
+    return ResolveBinary("ozz_animation_viewer.exe");
+#else
+    return ResolveBinary("ozz_animation_viewer");
+#endif
+}
+
+std::string BuildCommand(const fs::path& binary,
+                         const std::vector<std::string>& args)
+{
+    const fs::path binary_dir = binary.parent_path();
 
 #ifdef _WIN32
-    std::string command = QuoteForShell(converter.string());
+    std::string command = QuoteForShell(binary.string());
     for (const std::string& arg : args)
     {
         command.push_back(' ');
@@ -282,9 +300,9 @@ std::string BuildCommand(const std::vector<std::string>& args)
     return command;
 #else
     std::string command = "LD_LIBRARY_PATH=";
-    command.append(QuoteForShell(converter_dir.string()));
+    command.append(QuoteForShell(binary_dir.string()));
     command.push_back(' ');
-    command.append(QuoteForShell(converter.string()));
+    command.append(QuoteForShell(binary.string()));
     for (const std::string& arg : args)
     {
         command.push_back(' ');
@@ -294,9 +312,10 @@ std::string BuildCommand(const std::vector<std::string>& args)
 #endif
 }
 
-int ExecuteCommand(const std::vector<std::string>& args)
+int ExecuteCommand(const fs::path& binary,
+                   const std::vector<std::string>& args)
 {
-    const std::string command = BuildCommand(args);
+    const std::string command = BuildCommand(binary, args);
     const int result = std::system(command.c_str());
     if (result == -1)
         return -1;
@@ -310,6 +329,11 @@ int ExecuteCommand(const std::vector<std::string>& args)
         return 128 + WTERMSIG(result);
     return result;
 #endif
+}
+
+int ExecuteConverterCommand(const std::vector<std::string>& args)
+{
+    return ExecuteCommand(ResolveConverterBinary(), args);
 }
 
 bool ConvertSkeleton(bool force)
@@ -333,7 +357,7 @@ bool ConvertSkeleton(bool force)
         "--dump-bind",
         SkeletonCsvPath().string()};
 
-    const int exit_code = ExecuteCommand(args);
+    const int exit_code = ExecuteConverterCommand(args);
     if (exit_code != 0)
     {
         std::cerr << "xray_to_ozz_converter returned exit code " << exit_code << std::endl;
@@ -378,7 +402,7 @@ bool ConvertAnimation(bool force)
         "--metadata",
         AnimationMetadataPath().string()};
 
-    const int exit_code = ExecuteCommand(args);
+    const int exit_code = ExecuteConverterCommand(args);
     if (exit_code != 0)
     {
         std::cerr << "animation conversion failed with exit code " << exit_code << std::endl;
@@ -411,7 +435,7 @@ bool ConvertSpecificMotion(const std::string& motion_name, bool force)
         "--motion",
         motion_name};
 
-    const int exit_code = ExecuteCommand(args);
+    const int exit_code = ExecuteConverterCommand(args);
     if (exit_code != 0)
     {
         std::cerr << "animation conversion for motion '" << motion_name
