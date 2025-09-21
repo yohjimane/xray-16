@@ -3,6 +3,8 @@
 #include <cmath>
 #include <cstdint>
 #include <cstdlib>
+#include <cstddef>
+#include <cstring>
 #include <filesystem>
 #include <fstream>
 #include <iomanip>
@@ -53,6 +55,200 @@ fs::path ProjectRoot()
 {
     static const fs::path root = fs::path(PROJECT_ROOT);
     return root;
+}
+
+struct ChunkView
+{
+    uint32_t id = 0;
+    const uint8_t* data = nullptr;
+    size_t size = 0;
+};
+
+struct OgfSurfaceStats
+{
+    uint32_t vertex_count = 0;
+    uint32_t face_count = 0;
+};
+
+constexpr uint32_t OGF_HEADER = 1;
+constexpr uint32_t OGF_VERTICES = 3;
+constexpr uint32_t OGF_INDICES = 4;
+constexpr uint32_t OGF_CHILDREN = 9;
+
+bool ReadBinaryFile(const fs::path& path, std::vector<uint8_t>& out_buffer)
+{
+    std::ifstream stream(path, std::ios::binary | std::ios::ate);
+    if (!stream)
+    {
+        std::cerr << "failed to open binary file: " << path << std::endl;
+        return false;
+    }
+
+    const auto size = stream.tellg();
+    if (size <= 0)
+    {
+        std::cerr << "binary file empty: " << path << std::endl;
+        return false;
+    }
+
+    out_buffer.resize(static_cast<size_t>(size));
+    stream.seekg(0, std::ios::beg);
+    stream.read(reinterpret_cast<char*>(out_buffer.data()), out_buffer.size());
+    if (!stream)
+    {
+        std::cerr << "failed to read binary file: " << path << std::endl;
+        return false;
+    }
+
+    return true;
+}
+
+bool ParseChunkSequence(const uint8_t* data, size_t size, std::vector<ChunkView>& out_chunks)
+{
+    out_chunks.clear();
+
+    size_t offset = 0;
+    while (offset + sizeof(uint32_t) * 2 <= size)
+    {
+        uint32_t id = 0;
+        uint32_t chunk_size = 0;
+        std::memcpy(&id, data + offset, sizeof(uint32_t));
+        offset += sizeof(uint32_t);
+        std::memcpy(&chunk_size, data + offset, sizeof(uint32_t));
+        offset += sizeof(uint32_t);
+
+        if (offset + chunk_size > size)
+        {
+            std::cerr << "chunk extends beyond parent size" << std::endl;
+            return false;
+        }
+
+        out_chunks.push_back(ChunkView{id, data + offset, static_cast<size_t>(chunk_size)});
+        offset += chunk_size;
+    }
+
+    return true;
+}
+
+bool ExtractSurfaceStatsFromSections(const std::vector<ChunkView>& sections, OgfSurfaceStats& stats)
+{
+    bool has_vertices = false;
+    bool has_indices = false;
+
+    for (const ChunkView& section : sections)
+    {
+        if (section.id == OGF_VERTICES)
+        {
+            size_t offset = 0;
+            if (section.size < sizeof(uint32_t) * 2)
+            {
+                std::cerr << "vertex chunk too small" << std::endl;
+                return false;
+            }
+
+            offset += sizeof(uint32_t); // skip vertex format / type
+            uint32_t vertex_count = 0;
+            std::memcpy(&vertex_count, section.data + offset, sizeof(uint32_t));
+            stats.vertex_count = vertex_count;
+            has_vertices = true;
+        }
+        else if (section.id == OGF_INDICES)
+        {
+            if (section.size < sizeof(uint32_t))
+            {
+                std::cerr << "index chunk too small" << std::endl;
+                return false;
+            }
+
+            uint32_t index_count = 0;
+            std::memcpy(&index_count, section.data, sizeof(uint32_t));
+            if (index_count % 3 != 0)
+            {
+                std::cerr << "index count not divisible by 3" << std::endl;
+                return false;
+            }
+            stats.face_count = index_count / 3;
+            has_indices = true;
+        }
+    }
+
+    return has_vertices && has_indices;
+}
+
+bool LoadOgfSurfaceStats(const fs::path& path, std::vector<OgfSurfaceStats>& surfaces)
+{
+    std::vector<uint8_t> buffer;
+    if (!ReadBinaryFile(path, buffer))
+        return false;
+
+    std::vector<ChunkView> root_chunks;
+    if (!ParseChunkSequence(buffer.data(), buffer.size(), root_chunks))
+        return false;
+
+    surfaces.clear();
+
+    const auto children_it = std::find_if(root_chunks.begin(), root_chunks.end(), [](const ChunkView& chunk) {
+        return chunk.id == OGF_CHILDREN;
+    });
+
+    if (children_it != root_chunks.end())
+    {
+        std::vector<ChunkView> child_chunks;
+        if (!ParseChunkSequence(children_it->data, children_it->size, child_chunks))
+            return false;
+
+        for (const ChunkView& child : child_chunks)
+        {
+            std::vector<ChunkView> sections;
+            if (!ParseChunkSequence(child.data, child.size, sections))
+                return false;
+
+            OgfSurfaceStats stats;
+            if (!ExtractSurfaceStatsFromSections(sections, stats))
+                return false;
+            surfaces.push_back(stats);
+        }
+
+        if (!surfaces.empty())
+            return true;
+    }
+
+    OgfSurfaceStats root_surface;
+    if (ExtractSurfaceStatsFromSections(root_chunks, root_surface))
+    {
+        surfaces.push_back(root_surface);
+        return true;
+    }
+
+    std::cerr << "failed to locate any surfaces in OGF file: " << path << std::endl;
+    return false;
+}
+
+bool LoadMeshArchive(const fs::path& path, std::vector<ozz::sample::Mesh>& meshes)
+{
+    ozz::io::File file(path.string().c_str(), "rb");
+    if (!file.opened())
+    {
+        std::cerr << "failed to open mesh archive: " << path << std::endl;
+        return false;
+    }
+
+    ozz::io::IArchive archive(&file);
+    meshes.clear();
+
+    while (archive.TestTag<ozz::sample::Mesh>())
+    {
+        meshes.emplace_back();
+        archive >> meshes.back();
+    }
+
+    if (meshes.empty())
+    {
+        std::cerr << "mesh archive contained no meshes: " << path << std::endl;
+        return false;
+    }
+
+    return true;
 }
 
 fs::path TestArtifactsDir()
@@ -350,26 +546,6 @@ bool LoadJsonFile(const fs::path& path, Json& out)
         return false;
     }
 
-    return true;
-}
-
-bool LoadMeshFile(const fs::path& path, ozz::sample::Mesh& out_mesh)
-{
-    ozz::io::File file(path.string().c_str(), "rb");
-    if (!file.opened())
-    {
-        std::cerr << "failed to open mesh archive: " << path << std::endl;
-        return false;
-    }
-
-    ozz::io::IArchive archive(&file);
-    if (!archive.TestTag<ozz::sample::Mesh>())
-    {
-        std::cerr << "unexpected mesh archive contents: " << path << std::endl;
-        return false;
-    }
-
-    archive >> out_mesh;
     return true;
 }
 
@@ -1045,7 +1221,7 @@ bool TestGenerateMesh()
 
 bool TestMeshVerticesDeduplicated()
 {
-    if (!ConvertMesh(true))
+    if (!ConvertMesh(false))
         return false;
 
     Json baseline_json;
@@ -1057,14 +1233,23 @@ bool TestMeshVerticesDeduplicated()
     if (!CollectVertexSignatures(baseline_json["meshes"], baseline_total_vertices, baseline_signatures))
         return false;
 
-    ozz::sample::Mesh mesh;
-    if (!LoadMeshFile(MeshOutputPath(), mesh))
+    std::vector<ozz::sample::Mesh> meshes;
+    if (!LoadMeshArchive(MeshOutputPath(), meshes))
         return false;
 
     std::unordered_map<std::string, size_t> mesh_signatures;
     int mesh_vertex_count = 0;
-    if (!CollectMeshSignatures(mesh, mesh_signatures, mesh_vertex_count))
-        return false;
+    for (const ozz::sample::Mesh& mesh : meshes)
+    {
+        std::unordered_map<std::string, size_t> part_signatures;
+        int part_vertex_count = 0;
+        if (!CollectMeshSignatures(mesh, part_signatures, part_vertex_count))
+            return false;
+
+        mesh_vertex_count += part_vertex_count;
+        for (const auto& [signature, count] : part_signatures)
+            mesh_signatures[signature] += count;
+    }
 
     bool ok = true;
 
@@ -1108,6 +1293,93 @@ bool TestMeshVerticesDeduplicated()
         std::cerr << "unique vertex signature count " << mesh_signatures.size()
                   << " does not match reported vertex count " << mesh_vertex_count << std::endl;
         ok = false;
+    }
+
+    return ok;
+}
+
+bool TestMeshSurfaceCountMatchesSource()
+{
+    if (!ConvertMesh(false))
+        return false;
+
+    std::vector<OgfSurfaceStats> ogf_surfaces;
+    if (!LoadOgfSurfaceStats(SkeletonInputPath(), ogf_surfaces))
+        return false;
+
+    std::vector<ozz::sample::Mesh> meshes;
+    if (!LoadMeshArchive(MeshOutputPath(), meshes))
+        return false;
+
+    if (meshes.size() != ogf_surfaces.size())
+    {
+        std::cerr << "exported mesh surface count " << meshes.size()
+                  << " does not match OGF surface count " << ogf_surfaces.size()
+                  << std::endl;
+        return false;
+    }
+
+    return true;
+}
+
+bool TestMeshSurfaceStatsMatchSource()
+{
+    if (!ConvertMesh(false))
+        return false;
+
+    std::vector<OgfSurfaceStats> ogf_surfaces;
+    if (!LoadOgfSurfaceStats(SkeletonInputPath(), ogf_surfaces))
+        return false;
+
+    std::vector<ozz::sample::Mesh> meshes;
+    if (!LoadMeshArchive(MeshOutputPath(), meshes))
+        return false;
+
+    if (meshes.size() != ogf_surfaces.size())
+    {
+        std::cerr << "surface count mismatch before stats comparison" << std::endl;
+        return false;
+    }
+
+    bool ok = true;
+
+    for (size_t i = 0; i < meshes.size(); ++i)
+    {
+        const ozz::sample::Mesh& mesh = meshes[i];
+        const OgfSurfaceStats& source = ogf_surfaces[i];
+        const ozz::sample::XRayMeshMetadata& metadata = mesh.xray_metadata;
+
+        if (metadata.original_vertex_count != source.vertex_count)
+        {
+            std::cerr << "surface " << i << " original vertex count "
+                      << metadata.original_vertex_count << " (metadata) does not match OGF "
+                      << source.vertex_count << std::endl;
+            ok = false;
+        }
+
+        if (metadata.original_face_count != source.face_count)
+        {
+            std::cerr << "surface " << i << " original face count "
+                      << metadata.original_face_count << " (metadata) does not match OGF "
+                      << source.face_count << std::endl;
+            ok = false;
+        }
+
+        const uint32_t mesh_face_count = static_cast<uint32_t>(mesh.triangle_index_count() / 3);
+        if (mesh_face_count != source.face_count)
+        {
+            std::cerr << "surface " << i << " exported triangle count "
+                      << mesh_face_count << " differs from OGF face count "
+                      << source.face_count << std::endl;
+            ok = false;
+        }
+
+        if (mesh.vertex_count() > static_cast<int>(source.vertex_count))
+        {
+            std::cerr << "surface " << i << " exported vertex count " << mesh.vertex_count()
+                      << " exceeds original " << source.vertex_count << std::endl;
+            ok = false;
+        }
     }
 
     return ok;
@@ -1726,10 +1998,12 @@ struct TestCase
 
 int main()
 {
-    const std::array<TestCase, 10> tests = {{
+    const std::array<TestCase, 12> tests = {{
         {"GenerateSkeleton", &TestGenerateSkeleton, false},
         {"GenerateMesh", &TestGenerateMesh, false},
         {"MeshVerticesDeduplicated", &TestMeshVerticesDeduplicated, false},
+        {"MeshSurfaceCountMatchesSource", &TestMeshSurfaceCountMatchesSource, false},
+        {"MeshSurfaceStatsMatchSource", &TestMeshSurfaceStatsMatchSource, false},
         {"ViewerMeshMatchesBaseline", &TestViewerMeshMatchesBaseline, false},
         {"BindPoseMatchesBlender", &TestBindPoseMatchesBlender, false},
         {"ConvertAnimationProducesFile", &TestConvertAnimationProducesFile, false},
