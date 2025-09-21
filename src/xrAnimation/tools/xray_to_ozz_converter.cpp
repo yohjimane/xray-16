@@ -2,46 +2,47 @@
 
 #include "Common/Platform.hpp"
 
-#include "xrCore/xrCore.h"
+#include "xrCore/Animation/Bone.hpp"
+#include "xrCore/Animation/SkeletonMotions.hpp"
 #include "xrCore/FMesh.hpp"
 #include "xrCore/_matrix.h"
 #include "xrCore/_quaternion.h"
 #include "xrCore/_vector3d.h"
-#include "xrCore/Animation/Bone.hpp"
-#include "xrCore/Animation/SkeletonMotions.hpp"
+#include "xrCore/xrCore.h"
 
+#include <ozz/animation/offline/animation_builder.h>
+#include <ozz/animation/offline/raw_animation.h>
 #include <ozz/animation/offline/raw_skeleton.h>
 #include <ozz/animation/offline/skeleton_builder.h>
-#include <ozz/animation/offline/raw_animation.h>
-#include <ozz/animation/offline/animation_builder.h>
-#include <ozz/animation/runtime/skeleton.h>
 #include <ozz/animation/runtime/animation.h>
+#include <ozz/animation/runtime/skeleton.h>
+#include <ozz/base/containers/vector_archive.h>
 #include <ozz/base/io/archive.h>
 #include <ozz/base/io/stream.h>
 #include <ozz/base/log.h>
 #include <ozz/base/maths/quaternion.h>
-#include <ozz/base/maths/vec_float.h>
 #include <ozz/base/maths/soa_transform.h>
-#include <ozz/base/containers/vector_archive.h>
+#include <ozz/base/maths/vec_float.h>
 
 #include "../Externals/ozz-animation/samples/framework/mesh.h"
 
 #include <algorithm>
-#include <chrono>
 #include <array>
 #include <cctype>
+#include <chrono>
+#include <cmath>
 #include <cstddef>
-#include <cstdio>
 #include <cstdint>
+#include <cstdio>
 #include <cstring>
 #include <filesystem>
-#include <cmath>
-#include <functional>
 #include <fstream>
-#include <iostream>
+#include <functional>
 #include <iomanip>
-#include <memory>
+#include <iostream>
 #include <limits>
+#include <map>
+#include <memory>
 #include <optional>
 #include <stdexcept>
 #include <string>
@@ -49,11 +50,12 @@
 #include <system_error>
 #include <unordered_map>
 #include <unordered_set>
-#include <map>
 #include <utility>
 #include <vector>
 
 #include "xrCore/Animation/SkeletonMotionDefs.hpp"
+
+#include "../OzzBundle.h"
 
 namespace fs = std::filesystem;
 
@@ -63,30 +65,27 @@ namespace detail
 {
 using Matrix4 = std::array<std::array<float, 4>, 4>;
 
-constexpr Matrix4 kXrayToBlender =
-{
-    std::array<float, 4>{1.f, 0.f, 0.f, 0.f},
-    std::array<float, 4>{0.f, 0.f, 1.f, 0.f},
-    std::array<float, 4>{0.f, 1.f, 0.f, 0.f},
-    std::array<float, 4>{0.f, 0.f, 0.f, 1.f}
+constexpr Matrix4 kXrayToBlender = {
+    std::array<float, 4>{ 1.f, 0.f, 0.f, 0.f },
+     std::array<float, 4>{ 0.f, 0.f, 1.f, 0.f },
+     std::array<float, 4>{ 0.f, 1.f, 0.f, 0.f },
+    std::array<float, 4>{ 0.f, 0.f, 0.f, 1.f }
 };
 
 constexpr Matrix4 kXrayToBlenderInverse = kXrayToBlender;
 
-constexpr Matrix4 kBlenderToOzz =
-{
-    std::array<float, 4>{1.f, 0.f, 0.f, 0.f},
-    std::array<float, 4>{0.f, 0.f, 1.f, 0.f},
-    std::array<float, 4>{0.f, -1.f, 0.f, 0.f},
-    std::array<float, 4>{0.f, 0.f, 0.f, 1.f}
+constexpr Matrix4 kBlenderToOzz = {
+    std::array<float, 4>{ 1.f,  0.f, 0.f, 0.f },
+     std::array<float, 4>{ 0.f,  0.f, 1.f, 0.f },
+     std::array<float, 4>{ 0.f, -1.f, 0.f, 0.f },
+    std::array<float, 4>{ 0.f,  0.f, 0.f, 1.f }
 };
 
-constexpr Matrix4 kOzzToBlender =
-{
-    std::array<float, 4>{1.f, 0.f, 0.f, 0.f},
-    std::array<float, 4>{0.f, 0.f, -1.f, 0.f},
-    std::array<float, 4>{0.f, 1.f, 0.f, 0.f},
-    std::array<float, 4>{0.f, 0.f, 0.f, 1.f}
+constexpr Matrix4 kOzzToBlender = {
+    std::array<float, 4>{ 1.f, 0.f,  0.f, 0.f },
+     std::array<float, 4>{ 0.f, 0.f, -1.f, 0.f },
+     std::array<float, 4>{ 0.f, 1.f,  0.f, 0.f },
+    std::array<float, 4>{ 0.f, 0.f,  0.f, 1.f }
 };
 
 Matrix4 ToColumnMajor(const Fmatrix& source)
@@ -117,8 +116,7 @@ Matrix4 Multiply(const Matrix4& lhs, const Matrix4& rhs)
         {
             float value = 0.f;
             for (int k = 0; k < 4; ++k)
-                value += lhs[static_cast<size_t>(row)][static_cast<size_t>(k)]
-                    * rhs[static_cast<size_t>(k)][static_cast<size_t>(col)];
+                value += lhs[static_cast<size_t>(row)][static_cast<size_t>(k)] * rhs[static_cast<size_t>(k)][static_cast<size_t>(col)];
             result[static_cast<size_t>(row)][static_cast<size_t>(col)] = value;
         }
     }
@@ -161,16 +159,14 @@ std::array<float, 3> ApplyBasis(const Matrix4& matrix, const std::array<float, 3
     for (int row = 0; row < 3; ++row)
     {
         result[static_cast<size_t>(row)] =
-            matrix[static_cast<size_t>(row)][0] * vector[0] +
-            matrix[static_cast<size_t>(row)][1] * vector[1] +
-            matrix[static_cast<size_t>(row)][2] * vector[2];
+            matrix[static_cast<size_t>(row)][0] * vector[0] + matrix[static_cast<size_t>(row)][1] * vector[1] + matrix[static_cast<size_t>(row)][2] * vector[2];
     }
     return result;
 }
 
 std::array<float, 3> ConvertVectorXrayToOzz(const Fvector& v)
 {
-    const std::array<float, 3> source{v.x, v.y, v.z};
+    const std::array<float, 3> source{ v.x, v.y, v.z };
     const auto blender = ApplyBasis(kXrayToBlender, source);
     const auto ozz_vec = ApplyBasis(kBlenderToOzz, blender);
     return ozz_vec;
@@ -178,7 +174,7 @@ std::array<float, 3> ConvertVectorXrayToOzz(const Fvector& v)
 
 std::array<float, 2> ConvertUV(const Fvector2& uv)
 {
-    return {uv.x, uv.y};
+    return { uv.x, uv.y };
 }
 
 std::array<float, 3> Normalize(const std::array<float, 3>& v)
@@ -187,7 +183,7 @@ std::array<float, 3> Normalize(const std::array<float, 3>& v)
     if (len_sq <= std::numeric_limits<float>::epsilon())
         return v;
     const float inv_len = 1.f / std::sqrt(len_sq);
-    return {v[0] * inv_len, v[1] * inv_len, v[2] * inv_len};
+    return { v[0] * inv_len, v[1] * inv_len, v[2] * inv_len };
 }
 
 float Dot(const std::array<float, 3>& a, const std::array<float, 3>& b)
@@ -230,7 +226,7 @@ ozz::math::Float4x4 ToOzzFloat4x4(const Matrix4& matrix)
 
 ozz::math::Float3 ExtractTranslation(const Matrix4& matrix)
 {
-    return {matrix[0][3], matrix[1][3], matrix[2][3]};
+    return { matrix[0][3], matrix[1][3], matrix[2][3] };
 }
 
 ozz::math::Quaternion ExtractQuaternion(const Matrix4& matrix)
@@ -410,23 +406,26 @@ struct MeshVertex
     Fvector tangent{};
     Fvector binormal{};
     Fvector2 uv{};
-    std::array<uint16_t, 4> bones{0, 0, 0, 0};
-    std::array<float, 4> weights{0.f, 0.f, 0.f, 0.f};
+    std::array<uint16_t, 4> bones{ 0, 0, 0, 0 };
+    std::array<float, 4> weights{ 0.f, 0.f, 0.f, 0.f };
     uint8_t influence_count = 0;
 };
 
 struct VertexDedupKey
 {
-    std::array<int32_t, 3> position{0, 0, 0};
-    std::array<uint16_t, 4> bones{0, 0, 0, 0};
-    std::array<int32_t, 4> weights{0, 0, 0, 0};
+    std::array<int32_t, 3> position{ 0, 0, 0 };
+    std::array<uint16_t, 4> bones{ 0, 0, 0, 0 };
+    std::array<int32_t, 4> weights{ 0, 0, 0, 0 };
     uint8_t influence_count = 0;
     uint8_t back_side = 0;
 
     bool operator==(const VertexDedupKey& other) const noexcept
     {
-        return influence_count == other.influence_count && back_side == other.back_side &&
-               position == other.position && bones == other.bones && weights == other.weights;
+        return influence_count == other.influence_count &&
+            back_side == other.back_side &&
+            position == other.position &&
+            bones == other.bones &&
+            weights == other.weights;
     }
 };
 
@@ -435,7 +434,8 @@ struct VertexDedupKeyHasher
     size_t operator()(const VertexDedupKey& key) const noexcept
     {
         size_t hash = 1469598103934665603ull;
-        auto combine = [&hash](size_t value) {
+        auto combine = [&hash](size_t value)
+        {
             hash ^= value;
             hash *= 1099511628211ull;
         };
@@ -454,7 +454,7 @@ struct VertexDedupKeyHasher
 
 struct PositionQuantizedKey
 {
-    std::array<int32_t, 3> components{0, 0, 0};
+    std::array<int32_t, 3> components{ 0, 0, 0 };
 
     bool operator==(const PositionQuantizedKey& other) const noexcept
     {
@@ -464,7 +464,7 @@ struct PositionQuantizedKey
 
 struct RoundedNormalKey
 {
-    std::array<int32_t, 3> components{0, 0, 0};
+    std::array<int32_t, 3> components{ 0, 0, 0 };
 
     bool operator==(const RoundedNormalKey& other) const noexcept
     {
@@ -477,7 +477,8 @@ struct RoundedNormalHasher
     size_t operator()(const RoundedNormalKey& key) const noexcept
     {
         size_t hash = 1469598103934665603ull;
-        auto combine = [&hash](size_t value) {
+        auto combine = [&hash](size_t value)
+        {
             hash ^= value;
             hash *= 1099511628211ull;
         };
@@ -492,7 +493,8 @@ struct PositionQuantizedHasher
     size_t operator()(const PositionQuantizedKey& key) const noexcept
     {
         size_t hash = 1469598103934665603ull;
-        auto combine = [&hash](size_t value) {
+        auto combine = [&hash](size_t value)
+        {
             hash ^= value;
             hash *= 1099511628211ull;
         };
@@ -504,12 +506,12 @@ struct PositionQuantizedHasher
 
 struct ConvertedVertex
 {
-    std::array<float, 3> position{0.f, 0.f, 0.f};
-    std::array<float, 3> normal{0.f, 0.f, 0.f};
-    std::array<float, 4> tangent{0.f, 0.f, 0.f, 1.f};
-    std::array<float, 2> uv{0.f, 0.f};
-    std::array<uint16_t, 4> joint_indices{0, 0, 0, 0};
-    std::array<float, 4> joint_weights{0.f, 0.f, 0.f, 0.f};
+    std::array<float, 3> position{ 0.f, 0.f, 0.f };
+    std::array<float, 3> normal{ 0.f, 0.f, 0.f };
+    std::array<float, 4> tangent{ 0.f, 0.f, 0.f, 1.f };
+    std::array<float, 2> uv{ 0.f, 0.f };
+    std::array<uint16_t, 4> joint_indices{ 0, 0, 0, 0 };
+    std::array<float, 4> joint_weights{ 0.f, 0.f, 0.f, 0.f };
     uint8_t influence_count = 0;
     size_t original_index = 0;
 };
@@ -587,7 +589,7 @@ std::vector<std::string> parse_lod_strings(const Chunk& chunk)
 
 void parse_texture_chunk(const Chunk& chunk, SurfaceMetadata& metadata)
 {
-    BinaryReader reader{chunk.data, chunk.size};
+    BinaryReader reader{ chunk.data, chunk.size };
     if (reader.offset >= reader.size)
         return;
     metadata.texture_path = reader.read_stringz();
@@ -617,7 +619,7 @@ void parse_children_links_chunk(const Chunk& chunk, SurfaceMetadata& metadata)
 {
     if (chunk.size < sizeof(uint32_t))
         return;
-    BinaryReader reader{chunk.data, chunk.size};
+    BinaryReader reader{ chunk.data, chunk.size };
     const uint32_t count = reader.read<u32>();
     metadata.child_visual_links.reserve(metadata.child_visual_links.size() + count);
     for (uint32_t idx = 0; idx < count && reader.offset + sizeof(uint32_t) <= reader.size; ++idx)
@@ -632,7 +634,7 @@ void parse_progressive_chunk(const Chunk& chunk, SurfaceMetadata& metadata)
     if (chunk.size < sizeof(uint32_t) * 5)
         return;
 
-    BinaryReader reader{chunk.data, chunk.size};
+    BinaryReader reader{ chunk.data, chunk.size };
     reader.skip(sizeof(uint32_t) * 4);
     metadata.progressive_collapse_count = reader.read<u32>();
 }
@@ -650,30 +652,15 @@ std::optional<SurfaceDefinition> build_surface_from_chunk_list(const std::vector
 
         switch (id)
         {
-        case kChunkVertices:
-            vertices_chunk = &chunk;
-            break;
-        case kChunkIndices:
-            indices_chunk = &chunk;
-            break;
-        case kChunkTexture:
-            parse_texture_chunk(chunk, surface.metadata);
-            break;
-        case kChunkHeader:
-            parse_header_chunk(chunk, surface.metadata);
-            break;
+        case kChunkVertices:       vertices_chunk = &chunk; break;
+        case kChunkIndices:        indices_chunk = &chunk; break;
+        case kChunkTexture:        parse_texture_chunk(chunk, surface.metadata); break;
+        case kChunkHeader:         parse_header_chunk(chunk, surface.metadata); break;
         case kChunkLodDefinition:
-        case kChunkLodDefinition2:
-            parse_lod_chunk(chunk, surface.metadata);
-            break;
-        case kChunkChildrenLinks:
-            parse_children_links_chunk(chunk, surface.metadata);
-            break;
-        case kChunkSwidata:
-            parse_progressive_chunk(chunk, surface.metadata);
-            break;
-        default:
-            break;
+        case kChunkLodDefinition2: parse_lod_chunk(chunk, surface.metadata); break;
+        case kChunkChildrenLinks:  parse_children_links_chunk(chunk, surface.metadata); break;
+        case kChunkSwidata:        parse_progressive_chunk(chunk, surface.metadata); break;
+        default:                   break;
         }
     }
 
@@ -729,6 +716,25 @@ std::vector<std::byte> load_file(const fs::path& path)
     return data;
 }
 
+std::vector<std::uint8_t> ReadBinaryFileBytes(const fs::path& path)
+{
+    std::ifstream stream(path, std::ios::binary | std::ios::ate);
+    if (!stream)
+        throw std::runtime_error("failed to open file: " + path.string());
+
+    const auto size = stream.tellg();
+    if (size < 0)
+        throw std::runtime_error("failed to query size of file: " + path.string());
+
+    std::vector<std::uint8_t> data(static_cast<std::size_t>(size));
+    stream.seekg(0, std::ios::beg);
+    stream.read(reinterpret_cast<char*>(data.data()), static_cast<std::streamsize>(data.size()));
+    if (!stream)
+        throw std::runtime_error("failed to read file: " + path.string());
+
+    return data;
+}
+
 std::unordered_map<u32, Chunk> parse_chunks(const std::byte* data, size_t size)
 {
     std::unordered_map<u32, Chunk> chunks;
@@ -746,7 +752,7 @@ std::unordered_map<u32, Chunk> parse_chunks(const std::byte* data, size_t size)
         if (offset + chunk_size > size)
             throw std::runtime_error("chunk extends past end of file");
 
-        chunks[id] = Chunk{data + offset, chunk_size};
+        chunks[id] = Chunk{ data + offset, chunk_size };
         offset += chunk_size;
     }
 
@@ -770,7 +776,7 @@ std::vector<std::pair<u32, Chunk>> parse_subchunks(const Chunk& chunk)
         if (offset + sub_size > chunk.size)
             throw std::runtime_error("sub-chunk extends past end of parent chunk");
 
-        subchunks.emplace_back(id, Chunk{chunk.data + offset, sub_size});
+        subchunks.emplace_back(id, Chunk{ chunk.data + offset, sub_size });
         offset += sub_size;
     }
 
@@ -779,8 +785,11 @@ std::vector<std::pair<u32, Chunk>> parse_subchunks(const Chunk& chunk)
 
 std::string to_lower_copy(std::string value)
 {
-    std::transform(value.begin(), value.end(), value.begin(), [](unsigned char c)
-                   { return static_cast<char>(std::tolower(c)); });
+    std::transform(value.begin(), value.end(), value.begin(),
+        [](unsigned char c)
+        {
+            return static_cast<char>(std::tolower(c));
+        });
     return value;
 }
 
@@ -806,7 +815,7 @@ std::string read_string_crlf(BinaryReader& reader)
 
 std::vector<BoneRecord> read_bone_names(const Chunk& chunk)
 {
-    BinaryReader reader{chunk.data, chunk.size};
+    BinaryReader reader{ chunk.data, chunk.size };
     const u32 bone_count = reader.read<u32>();
 
     std::vector<BoneRecord> bones;
@@ -826,7 +835,7 @@ std::vector<BoneRecord> read_bone_names(const Chunk& chunk)
 
 void read_ik_data(const Chunk& chunk, std::vector<BoneRecord>& bones)
 {
-    BinaryReader reader{chunk.data, chunk.size};
+    BinaryReader reader{ chunk.data, chunk.size };
 
     for (auto& bone : bones)
     {
@@ -846,7 +855,7 @@ void read_ik_data(const Chunk& chunk, std::vector<BoneRecord>& bones)
 
         reader.read<float>(); // spring factor
         reader.read<float>(); // damping factor
-        reader.read<u32>(); // IK flags
+        reader.read<u32>();   // IK flags
         reader.read<float>(); // break force
         reader.read<float>(); // break torque
         if (version > 0)
@@ -951,7 +960,7 @@ ozz::animation::offline::RawSkeleton build_raw_skeleton(const std::vector<BoneRe
         const auto ozz_matrix = detail::ConvertBlenderLocalToOzz(bone.local_transform);
         joint.transform.translation = detail::ExtractTranslation(ozz_matrix);
         joint.transform.rotation = detail::ExtractQuaternion(ozz_matrix);
-        joint.transform.scale = {1.0f, 1.0f, 1.0f};
+        joint.transform.scale = { 1.0f, 1.0f, 1.0f };
 
         const auto& child_indices = children[static_cast<size_t>(index)];
         joint.children.resize(child_indices.size());
@@ -998,9 +1007,12 @@ void finalize_influences(MeshVertex& vertex, const std::array<uint16_t, 4>& bone
     }
 
     std::vector<std::pair<uint16_t, float>> combined(accum.begin(), accum.end());
-    combined.erase(std::remove_if(combined.begin(), combined.end(), [](const auto& entry) {
-        return std::fabs(entry.second) <= std::numeric_limits<float>::epsilon();
-    }), combined.end());
+    combined.erase(std::remove_if(combined.begin(), combined.end(),
+                       [](const auto& entry)
+                       {
+                           return std::fabs(entry.second) <= std::numeric_limits<float>::epsilon();
+                       }),
+        combined.end());
 
     if (combined.empty())
     {
@@ -1009,17 +1021,21 @@ void finalize_influences(MeshVertex& vertex, const std::array<uint16_t, 4>& bone
 
     if (combined.size() > 4)
     {
-        std::stable_sort(combined.begin(), combined.end(), [](const auto& lhs, const auto& rhs) {
-            return lhs.second > rhs.second;
-        });
+        std::stable_sort(combined.begin(), combined.end(),
+            [](const auto& lhs, const auto& rhs)
+            {
+                return lhs.second > rhs.second;
+            });
         combined.resize(4);
     }
 
-    std::sort(combined.begin(), combined.end(), [](const auto& lhs, const auto& rhs) {
-        if (lhs.first != rhs.first)
-            return lhs.first < rhs.first;
-        return lhs.second > rhs.second;
-    });
+    std::sort(combined.begin(), combined.end(),
+        [](const auto& lhs, const auto& rhs)
+        {
+            if (lhs.first != rhs.first)
+                return lhs.first < rhs.first;
+            return lhs.second > rhs.second;
+        });
 
     float sum = 0.f;
     for (const auto& entry : combined)
@@ -1052,7 +1068,7 @@ void finalize_influences(MeshVertex& vertex, const std::array<uint16_t, 4>& bone
 
 std::vector<MeshVertex> read_mesh_vertices(const Chunk& chunk)
 {
-    BinaryReader reader{chunk.data, chunk.size};
+    BinaryReader reader{ chunk.data, chunk.size };
     const uint32_t link_type = reader.read<u32>();
     const uint32_t vertex_count = reader.read<u32>();
 
@@ -1065,8 +1081,8 @@ std::vector<MeshVertex> read_mesh_vertices(const Chunk& chunk)
     for (uint32_t idx = 0; idx < vertex_count; ++idx)
     {
         MeshVertex vertex;
-        std::array<uint16_t, 4> bone_ids{0, 0, 0, 0};
-        std::array<float, 4> raw_weights{0.f, 0.f, 0.f, 0.f};
+        std::array<uint16_t, 4> bone_ids{ 0, 0, 0, 0 };
+        std::array<float, 4> raw_weights{ 0.f, 0.f, 0.f, 0.f };
 
         if (link_type == 1)
         {
@@ -1126,7 +1142,7 @@ std::vector<MeshVertex> read_mesh_vertices(const Chunk& chunk)
 
 std::vector<uint16_t> read_mesh_indices(const Chunk& chunk)
 {
-    BinaryReader reader{chunk.data, chunk.size};
+    BinaryReader reader{ chunk.data, chunk.size };
     const uint32_t index_count = reader.read<u32>();
     std::vector<uint16_t> indices;
     indices.reserve(index_count);
@@ -1223,8 +1239,7 @@ std::vector<uint8_t> compute_back_face_flags(const std::vector<MeshVertex>& vert
     return back_flags;
 }
 
-[[maybe_unused]] void deduplicate_vertices(std::vector<MeshVertex>& vertices,
-                                          std::vector<uint16_t>& indices)
+[[maybe_unused]] void deduplicate_vertices(std::vector<MeshVertex>& vertices, std::vector<uint16_t>& indices)
 {
     if (vertices.empty())
         return;
@@ -1287,9 +1302,7 @@ std::vector<uint8_t> compute_back_face_flags(const std::vector<MeshVertex>& vert
 
     for (auto& vertex : deduplicated)
     {
-        const float normal_length = std::sqrt(vertex.normal.x * vertex.normal.x +
-                                              vertex.normal.y * vertex.normal.y +
-                                              vertex.normal.z * vertex.normal.z);
+        const float normal_length = std::sqrt(vertex.normal.x * vertex.normal.x + vertex.normal.y * vertex.normal.y + vertex.normal.z * vertex.normal.z);
         if (normal_length > std::numeric_limits<float>::epsilon())
         {
             const float inv = 1.f / normal_length;
@@ -1298,9 +1311,7 @@ std::vector<uint8_t> compute_back_face_flags(const std::vector<MeshVertex>& vert
             vertex.normal.z *= inv;
         }
 
-        const float tangent_length = std::sqrt(vertex.tangent.x * vertex.tangent.x +
-                                               vertex.tangent.y * vertex.tangent.y +
-                                               vertex.tangent.z * vertex.tangent.z);
+        const float tangent_length = std::sqrt(vertex.tangent.x * vertex.tangent.x + vertex.tangent.y * vertex.tangent.y + vertex.tangent.z * vertex.tangent.z);
         if (tangent_length > std::numeric_limits<float>::epsilon())
         {
             const float inv = 1.f / tangent_length;
@@ -1309,9 +1320,8 @@ std::vector<uint8_t> compute_back_face_flags(const std::vector<MeshVertex>& vert
             vertex.tangent.z *= inv;
         }
 
-        const float binormal_length = std::sqrt(vertex.binormal.x * vertex.binormal.x +
-                                                vertex.binormal.y * vertex.binormal.y +
-                                                vertex.binormal.z * vertex.binormal.z);
+        const float binormal_length =
+            std::sqrt(vertex.binormal.x * vertex.binormal.x + vertex.binormal.y * vertex.binormal.y + vertex.binormal.z * vertex.binormal.z);
         if (binormal_length > std::numeric_limits<float>::epsilon())
         {
             const float inv = 1.f / binormal_length;
@@ -1332,15 +1342,12 @@ std::vector<uint8_t> compute_back_face_flags(const std::vector<MeshVertex>& vert
 
     if (vertices.size() != original_vertex_count)
     {
-        std::cout << "Deduplicated mesh vertices: " << original_vertex_count << " -> "
-                  << vertices.size() << std::endl;
+        std::cout << "Deduplicated mesh vertices: " << original_vertex_count << " -> " << vertices.size() << std::endl;
     }
 }
 
-ozz::sample::Mesh build_mesh(const std::vector<MeshVertex>& vertices,
-                             const std::vector<uint16_t>& indices,
-                             const std::vector<BoneRecord>& bones,
-                             const SurfaceMetadata& metadata)
+ozz::sample::Mesh build_mesh(const std::vector<MeshVertex>& vertices, const std::vector<uint16_t>& indices, const std::vector<BoneRecord>& bones,
+    const SurfaceMetadata& metadata)
 {
     std::array<PartData, 5> parts{};
     for (int influences = 0; influences < 5; ++influences)
@@ -1367,7 +1374,7 @@ ozz::sample::Mesh build_mesh(const std::vector<MeshVertex>& vertices,
         converted.normal = normal;
 
         const float handedness = detail::Dot(detail::Cross(normal, tangent), binormal) < 0.f ? -1.f : 1.f;
-        converted.tangent = {tangent[0], tangent[1], tangent[2], handedness};
+        converted.tangent = { tangent[0], tangent[1], tangent[2], handedness };
         const auto uv = detail::ConvertUV(source.uv);
         converted.uv = uv;
 
@@ -1509,7 +1516,7 @@ ozz::sample::Mesh build_mesh(const std::vector<MeshVertex>& vertices,
 
 void parse_smparams(const Chunk& chunk, const std::vector<BoneRecord>& skeleton_bones, OmfFile& output)
 {
-    BinaryReader reader{chunk.data, chunk.size};
+    BinaryReader reader{ chunk.data, chunk.size };
 
     const u16 version = reader.read<u16>();
     if (version > xrOGF_SMParamsVersion)
@@ -1602,7 +1609,7 @@ void parse_motions(const Chunk& chunk, const OmfFile& params, OmfFile& output)
     if (count_chunk.first != 0)
         throw std::runtime_error("OMF motion chunk missing count sub-chunk");
 
-    BinaryReader count_reader{count_chunk.second.data, count_chunk.second.size};
+    BinaryReader count_reader{ count_chunk.second.data, count_chunk.second.size };
     const u32 motion_count = count_reader.read<u32>();
     if (motion_count != output.metadata.size())
         throw std::runtime_error("motion metadata count mismatch");
@@ -1617,7 +1624,7 @@ void parse_motions(const Chunk& chunk, const OmfFile& params, OmfFile& output)
     for (u32 motion_idx = 0; motion_idx < motion_count; ++motion_idx)
     {
         const auto& item = motion_chunks[motion_idx];
-        BinaryReader reader{item.second.data, item.second.size};
+        BinaryReader reader{ item.second.data, item.second.size };
 
         OmfMotion motion;
         motion.name = reader.read_stringz();
@@ -1750,10 +1757,7 @@ OmfFile parse_omf_file(const fs::path& path, const std::vector<BoneRecord>& skel
     return result;
 }
 
-ozz::animation::offline::RawAnimation build_raw_animation_from_omf(
-    const OmfMotion& motion,
-    const OmfFile& omf,
-    const std::vector<BoneRecord>& bones)
+ozz::animation::offline::RawAnimation build_raw_animation_from_omf(const OmfMotion& motion, const OmfFile& omf, const std::vector<BoneRecord>& bones)
 {
     const size_t joint_count = bones.size();
     if (joint_count != omf.bone_remap.size())
@@ -1808,7 +1812,7 @@ std::string escape_json(const std::string& value)
     {
         switch (ch)
         {
-        case '"': escaped += "\\\""; break;
+        case '"':  escaped += "\\\""; break;
         case '\\': escaped += "\\\\"; break;
         case '\n': escaped += "\\n"; break;
         case '\r': escaped += "\\r"; break;
@@ -1868,9 +1872,7 @@ void SerializeMotionMetadata(ozz::io::OArchive& archive, const MotionMetadata& m
     SerializeMotionMarks(archive, metadata);
 }
 
-void write_metadata_json(const fs::path& path,
-                         const std::vector<MotionMetadata>& metadata_list,
-                         const fs::path& source_omf)
+void write_metadata_json(const fs::path& path, const std::vector<MotionMetadata>& metadata_list, const fs::path& source_omf)
 {
     std::error_code ec;
     if (const auto parent = path.parent_path(); !parent.empty())
@@ -1936,14 +1938,9 @@ void dump_bind_pose_csv(const fs::path& output, const std::vector<BoneRecord>& b
     stream << "bone,parent,local_tx,local_ty,local_tz,global_tx,global_ty,global_tz\n";
     for (const auto& bone : bones)
     {
-        stream << bone.name << ','
-               << (bone.parent_name.empty() ? "" : bone.parent_name) << ','
-               << bone.local_transform.c.x << ','
-               << bone.local_transform.c.y << ','
-               << bone.local_transform.c.z << ','
-               << bone.global_transform.c.x << ','
-               << bone.global_transform.c.y << ','
-               << bone.global_transform.c.z << '\n';
+        stream << bone.name << ',' << (bone.parent_name.empty() ? "" : bone.parent_name) << ',' << bone.local_transform.c.x << ',' << bone.local_transform.c.y
+               << ',' << bone.local_transform.c.z << ',' << bone.global_transform.c.x << ',' << bone.global_transform.c.y << ',' << bone.global_transform.c.z
+               << '\n';
     }
 }
 
@@ -1967,6 +1964,12 @@ struct MeshConfig
 {
     fs::path input_ogf;
     fs::path output_ozz;
+};
+
+struct BundleConfig
+{
+    fs::path input_ogf;
+    fs::path output_ozzx;
 };
 
 SkeletonConfig parse_skeleton_arguments(int argc, char** argv)
@@ -1999,8 +2002,7 @@ SkeletonConfig parse_skeleton_arguments(int argc, char** argv)
 AnimationConfig parse_animation_arguments(int argc, char** argv)
 {
     if (argc < 5)
-        throw std::runtime_error(
-            "usage: xray_to_ozz_converter animation <input.omf> <output.ozz> <skeleton.ogf> [--motion <name>] [--metadata <json>]" );
+        throw std::runtime_error("usage: xray_to_ozz_converter animation <input.omf> <output.ozz> <skeleton.ogf> [--motion <name>] [--metadata <json>]");
 
     AnimationConfig config;
     config.input_omf = fs::path(argv[2]);
@@ -2034,12 +2036,22 @@ AnimationConfig parse_animation_arguments(int argc, char** argv)
 MeshConfig parse_mesh_arguments(int argc, char** argv)
 {
     if (argc < 4)
-        throw std::runtime_error(
-            "usage: xray_to_ozz_converter mesh <input.ogf> <output.ozz>");
+        throw std::runtime_error("usage: xray_to_ozz_converter mesh <input.ogf> <output.ozz>");
 
     MeshConfig config;
     config.input_ogf = fs::path(argv[2]);
     config.output_ozz = fs::path(argv[3]);
+    return config;
+}
+
+BundleConfig parse_bundle_arguments(int argc, char** argv)
+{
+    if (argc < 4)
+        throw std::runtime_error("usage: xray_to_ozz_converter bundle <input.ogf> <output.ozzx>");
+
+    BundleConfig config;
+    config.input_ogf = fs::path(argv[2]);
+    config.output_ozzx = fs::path(argv[3]);
     return config;
 }
 
@@ -2068,12 +2080,9 @@ void convert_skeleton(const SkeletonConfig& config)
     if (config.dump_csv)
         dump_bind_pose_csv(*config.dump_csv, bones);
 
-    const auto duration_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
-        std::chrono::steady_clock::now() - start_time)
-                               .count();
+    const auto duration_ms = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - start_time).count();
 
-    std::cout << "Converted skeleton written to " << config.output_ozz
-              << " (" << duration_ms << " ms)" << std::endl;
+    std::cout << "Converted skeleton written to " << config.output_ozz << " (" << duration_ms << " ms)" << std::endl;
 }
 
 void convert_animation(const AnimationConfig& config)
@@ -2156,20 +2165,16 @@ void convert_animation(const AnimationConfig& config)
         metadata_path.replace_extension(".json");
     write_metadata_json(metadata_path, metadata_to_write, config.input_omf);
 
-    const auto duration_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
-        std::chrono::steady_clock::now() - start_time)
-                               .count();
+    const auto duration_ms = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - start_time).count();
 
     if (motions_to_export.size() == 1)
     {
-        std::cout << "Converted animation '" << motions_to_export.front()->name
-                  << "' written to " << config.output_ozz
-                  << " (" << duration_ms << " ms)" << std::endl;
+        std::cout << "Converted animation '" << motions_to_export.front()->name << "' written to " << config.output_ozz << " (" << duration_ms << " ms)"
+                  << std::endl;
     }
     else
     {
-        std::cout << "Converted " << motions_to_export.size() << " animations written to "
-                  << config.output_ozz << " (" << duration_ms << " ms)" << std::endl;
+        std::cout << "Converted " << motions_to_export.size() << " animations written to " << config.output_ozz << " (" << duration_ms << " ms)" << std::endl;
     }
 }
 
@@ -2187,7 +2192,7 @@ void convert_mesh(const MeshConfig& config)
     if (const auto children_it = chunks.find(kChunkChildren); children_it != chunks.end())
     {
         const Chunk& children_chunk = children_it->second;
-        BinaryReader reader{children_chunk.data, children_chunk.size};
+        BinaryReader reader{ children_chunk.data, children_chunk.size };
         while (reader.offset + sizeof(u32) * 2 <= children_chunk.size)
         {
             reader.read<u32>();
@@ -2195,7 +2200,7 @@ void convert_mesh(const MeshConfig& config)
             if (reader.offset + child_size > children_chunk.size)
                 break;
 
-            Chunk child_chunk{children_chunk.data + reader.offset, child_size};
+            Chunk child_chunk{ children_chunk.data + reader.offset, child_size };
             reader.offset += child_size;
 
             const auto child_subchunks = parse_subchunks(child_chunk);
@@ -2251,16 +2256,47 @@ void convert_mesh(const MeshConfig& config)
     for (const auto& mesh : meshes)
         archive << mesh;
 
-    const auto duration_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
-        std::chrono::steady_clock::now() - start_time)
-                               .count();
+    const auto duration_ms = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - start_time).count();
 
-    std::cout << "Converted " << meshes.size() << " mesh surface"
-              << (meshes.size() == 1 ? "" : "s")
-              << " written to " << config.output_ozz
-              << " (" << duration_ms << " ms)" << std::endl;
+    std::cout << "Converted " << meshes.size() << " mesh surface" << (meshes.size() == 1 ? "" : "s") << " written to " << config.output_ozz << " ("
+              << duration_ms << " ms)" << std::endl;
 }
 
+void convert_bundle(const BundleConfig& config)
+{
+    const auto start_time = std::chrono::steady_clock::now();
+
+    fs::path skeleton_temp = config.output_ozzx;
+    skeleton_temp += ".skeleton.tmp";
+    fs::path mesh_temp = config.output_ozzx;
+    mesh_temp += ".mesh.tmp";
+
+    SkeletonConfig skeleton_cfg;
+    skeleton_cfg.input_ogf = config.input_ogf;
+    skeleton_cfg.output_ozz = skeleton_temp;
+    convert_skeleton(skeleton_cfg);
+
+    MeshConfig mesh_cfg;
+    mesh_cfg.input_ogf = config.input_ogf;
+    mesh_cfg.output_ozz = mesh_temp;
+    convert_mesh(mesh_cfg);
+
+    XRay::Animation::OzzxBundle bundle;
+    bundle.version = 1u;
+    bundle.skeleton = ReadBinaryFileBytes(skeleton_temp);
+    bundle.mesh = ReadBinaryFileBytes(mesh_temp);
+
+    if (!XRay::Animation::WriteOzzxBundle(config.output_ozzx, bundle))
+        throw std::runtime_error("failed to write .ozzx bundle: " + config.output_ozzx.string());
+
+    std::error_code ec;
+    fs::remove(skeleton_temp, ec);
+    fs::remove(mesh_temp, ec);
+
+    const auto duration_ms = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - start_time).count();
+
+    std::cout << "Converted bundle written to " << config.output_ozzx << " (" << duration_ms << " ms)" << std::endl;
+}
 } // namespace
 
 int main(int argc, char** argv)
@@ -2268,12 +2304,12 @@ int main(int argc, char** argv)
     try
     {
         if (argc < 2)
-            throw std::runtime_error(
-                "usage: xray_to_ozz_converter <command> ...\n"
-                "Commands:\n"
-                "  skeleton <input.ogf> <output.ozz> [--dump-bind <csv>]\n"
-                "  animation <input.omf> <output.ozz> <skeleton.ogf> [--motion <name>] [--metadata <json>]\n"
-                "  mesh <input.ogf> <output.ozz>" );
+            throw std::runtime_error("usage: xray_to_ozz_converter <command> ...\n"
+                                     "Commands:\n"
+                                     "  skeleton <input.ogf> <output.ozz> [--dump-bind <csv>]\n"
+                                     "  animation <input.omf> <output.ozz> <skeleton.ogf> [--motion <name>] [--metadata <json>]\n"
+                                     "  mesh <input.ogf> <output.ozz>\n"
+                                     "  bundle <input.ogf> <output.ozzx>");
 
         const std::string command = argv[1];
         if (command == "skeleton")
@@ -2287,6 +2323,10 @@ int main(int argc, char** argv)
         else if (command == "mesh")
         {
             convert_mesh(parse_mesh_arguments(argc, argv));
+        }
+        else if (command == "bundle")
+        {
+            convert_bundle(parse_bundle_arguments(argc, argv));
         }
         else
         {

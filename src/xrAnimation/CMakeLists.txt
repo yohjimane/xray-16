@@ -24,6 +24,8 @@ set(SOURCES
     stdafx.h
     xrAnimation.cpp
     xrAnimation.h
+    OzzBundle.cpp
+    OzzBundle.h
     OzzKinematics.cpp
     OzzKinematics.h
 )

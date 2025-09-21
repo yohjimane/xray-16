@@ -76,7 +76,10 @@
 #include "../../../Externals/imgui/imgui_internal.h"
 #include "ozz/base/span.h"
 
+#include "../OzzBundle.h"
+
 // Skeleton archive can be specified as an option.
+OZZ_OPTIONS_DECLARE_STRING(bundle, "Path to a combined skeleton/mesh bundle (.ozzx).", "", false)
 OZZ_OPTIONS_DECLARE_STRING(skeleton, "Path to the skeleton (ozz archive format).", "media/skeleton.ozz", false)
 
 // Animation archive can be specified as an option.
@@ -420,6 +423,43 @@ std::array<std::array<float, 4>, 4> MatrixToRows(const ozz::math::Float4x4& matr
         }
     }
     return rows;
+}
+
+bool LoadSkeletonFromBytes(const std::vector<std::uint8_t>& bytes, ozz::animation::Skeleton* skeleton)
+{
+    if (!skeleton)
+        return false;
+
+    ozz::io::MemoryStream stream;
+    if (!bytes.empty() && !stream.Write(bytes.data(), bytes.size()))
+        return false;
+    stream.Seek(0, ozz::io::Stream::kSet);
+
+    ozz::io::IArchive archive(&stream);
+    if (!archive.TestTag<ozz::animation::Skeleton>())
+        return false;
+    archive >> *skeleton;
+    return skeleton->num_joints() > 0;
+}
+
+bool LoadMeshesFromBytes(const std::vector<std::uint8_t>& bytes, ozz::vector<ozz::sample::Mesh>* meshes)
+{
+    if (!meshes)
+        return false;
+
+    ozz::io::MemoryStream stream;
+    if (!bytes.empty() && !stream.Write(bytes.data(), bytes.size()))
+        return false;
+    stream.Seek(0, ozz::io::Stream::kSet);
+
+    ozz::io::IArchive archive(&stream);
+    meshes->clear();
+    while (archive.TestTag<ozz::sample::Mesh>())
+    {
+        meshes->resize(meshes->size() + 1);
+        archive >> meshes->back();
+    }
+    return true;
 }
 
 std::array<float, 3> ConvertOzzToBlender(float x, float y, float z)
@@ -982,12 +1022,52 @@ protected:
             }
         }
 
-        // Reading skeleton.
-        if (!ozz::sample::LoadSkeleton(OPTIONS_skeleton, &skeleton_))
+        const char* bundle_option = OPTIONS_bundle;
+        const bool bundle_requested = bundle_option && bundle_option[0] != '\0';
+        std::string mesh_reference_path;
+        bool mesh_loaded = false;
+
+        if (bundle_requested)
         {
-            return false;
+            XRay::Animation::OzzxBundle bundle;
+            if (!XRay::Animation::ReadOzzxBundle(fs::absolute(fs::path(bundle_option)), bundle))
+            {
+                return false;
+            }
+            if (!LoadSkeletonFromBytes(bundle.skeleton, &skeleton_))
+            {
+                return false;
+            }
+            skeleton_label_ = GetFileStem(bundle_option);
+            if (!LoadMeshesFromBytes(bundle.mesh, &meshes_))
+            {
+                return false;
+            }
+            mesh_loaded = !meshes_.empty();
+            mesh_reference_path = bundle_option;
+            using_bundle_ = true;
+            bundle_source_path_ = bundle_option;
         }
-        skeleton_label_ = GetFileStem(OPTIONS_skeleton);
+        else
+        {
+            if (!ozz::sample::LoadSkeleton(OPTIONS_skeleton, &skeleton_))
+            {
+                return false;
+            }
+            skeleton_label_ = GetFileStem(OPTIONS_skeleton);
+            using_bundle_ = false;
+            bundle_source_path_.clear();
+
+            if (OPTIONS_mesh && OPTIONS_mesh[0] != '\0')
+            {
+                if (!ozz::sample::LoadMeshes(OPTIONS_mesh, &meshes_))
+                {
+                    return false;
+                }
+                mesh_loaded = true;
+                mesh_reference_path = OPTIONS_mesh;
+            }
+        }
 
         // Try reading animation(s), but allow failure for bind pose testing
         bool has_animation = LoadMultipleAnimations(OPTIONS_animation);
@@ -1041,14 +1121,9 @@ protected:
         // Allocates a context that matches animation requirements.
         context_.Resize(num_joints);
 
-        const bool mesh_requested = OPTIONS_mesh && OPTIONS_mesh[0] != '\0';
-        if (mesh_requested)
+        auto finalize_mesh_load = [&](const std::string& reference_path) -> bool
         {
-            if (!ozz::sample::LoadMeshes(OPTIONS_mesh, &meshes_))
-            {
-                return false;
-            }
-            mesh_label_ = GetFileStem(OPTIONS_mesh);
+            mesh_label_ = GetFileStem(reference_path.c_str());
             size_t skinning_count = 0;
             for (const ozz::sample::Mesh& mesh : meshes_)
             {
@@ -1065,8 +1140,17 @@ protected:
                 }
             }
             ui_state_.draw_mesh = true;
-            LoadMeshTextures(OPTIONS_mesh);
+            LoadMeshTextures(reference_path.c_str());
             RefreshMeshDisplayState();
+            return true;
+        };
+
+        if (mesh_loaded)
+        {
+            if (!finalize_mesh_load(mesh_reference_path))
+            {
+                return false;
+            }
         }
         else
         {
@@ -1199,6 +1283,8 @@ private:
 
     // Optional meshes used for skinning validation / rendering.
     ozz::vector<ozz::sample::Mesh> meshes_;
+    bool using_bundle_ = false;
+    std::string bundle_source_path_;
     ozz::vector<ozz::math::Float4x4> skinning_matrices_;
 
     // Cached labels for reporting/exporting.
@@ -2713,7 +2799,8 @@ private:
         const float frame_rate = duration > kEpsilon && frame_count > 1 ? static_cast<float>(frame_count - 1) / std::max(duration, kEpsilon) : 0.f;
 
         file << "{\n";
-        file << "  \"skeleton\": \"" << EscapeJsonString(OPTIONS_skeleton) << "\",\n";
+        const char* skeleton_source = using_bundle_ ? bundle_source_path_.c_str() : OPTIONS_skeleton;
+        file << "  \"skeleton\": \"" << EscapeJsonString(skeleton_source ? skeleton_source : "") << "\",\n";
         file << "  \"animation\": \"" << EscapeJsonString(OPTIONS_animation) << "\",\n";
         file << "  \"duration\": " << FormatFloat(duration) << ",\n";
         file << "  \"frame_rate\": " << FormatFloat(frame_rate) << ",\n";

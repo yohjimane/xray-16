@@ -42,9 +42,14 @@ MESH_OUTPUT="${OUTPUT_DIR}/${SKELETON_BASENAME}_mesh.ozz"
   "${SKELETON_PATH}" \
   "${MESH_OUTPUT}"
 
+BUNDLE_OUTPUT="${OUTPUT_DIR}/${SKELETON_BASENAME}.ozzx"
+"${BUILD_DIR}/xray_to_ozz_converter" \
+  bundle \
+  "${SKELETON_PATH}" \
+  "${BUNDLE_OUTPUT}"
+
 viewer_args=(
-  "--skeleton=${SKELETON_OUTPUT}"
-  "--mesh=${MESH_OUTPUT}"
+  "--bundle=${BUNDLE_OUTPUT}"
   "--texture_root=${TEXTURE_DIR}"
 )
 

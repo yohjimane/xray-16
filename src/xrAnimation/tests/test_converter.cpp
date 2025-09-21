@@ -39,13 +39,14 @@
 #include "ozz/animation/runtime/skeleton.h"
 #include "ozz/animation/runtime/skeleton_utils.h"
 #include "ozz/base/io/archive.h"
-#include "ozz/base/io/memory_stream.h"
 #include "ozz/base/io/stream.h"
 #include "ozz/base/maths/soa_transform.h"
 #include "ozz/base/maths/transform.h"
 
 #include "../../../Externals/ozz-animation/samples/framework/mesh.h"
 #include "../../../Externals/ozz-animation/src/animation/offline/gltf/extern/json.hpp"
+
+#include "OzzBundle.h"
 
 namespace fs = std::filesystem;
 
@@ -70,13 +71,6 @@ struct OgfSurfaceStats
 {
     uint32_t vertex_count = 0;
     uint32_t face_count = 0;
-};
-
-struct BundleData
-{
-    std::uint32_t version = 0;
-    std::vector<std::uint8_t> skeleton;
-    std::vector<std::uint8_t> mesh;
 };
 
 constexpr uint32_t OGF_HEADER = 1;
@@ -110,44 +104,6 @@ bool ReadBinaryFile(const fs::path& path, std::vector<uint8_t>& out_buffer)
     }
 
     return true;
-}
-
-BundleData LoadBundle(const fs::path& path)
-{
-    std::ifstream stream(path, std::ios::binary);
-    if (!stream)
-        throw std::runtime_error("Failed to open bundle: " + path.string());
-
-    char magic[8] = {};
-    stream.read(magic, sizeof(magic));
-    if (stream.gcount() != static_cast<std::streamsize>(sizeof(magic)))
-        throw std::runtime_error("Bundle missing magic header: " + path.string());
-
-    constexpr char kExpectedMagic[] = "OZZBUNDL";
-    if (std::memcmp(magic, kExpectedMagic, sizeof(kExpectedMagic) - 1) != 0)
-        throw std::runtime_error("Unexpected bundle magic in " + path.string());
-
-    std::uint32_t version = 0;
-    std::uint32_t skeleton_size = 0;
-    std::uint32_t mesh_size = 0;
-    stream.read(reinterpret_cast<char*>(&version), sizeof(version));
-    stream.read(reinterpret_cast<char*>(&skeleton_size), sizeof(skeleton_size));
-    stream.read(reinterpret_cast<char*>(&mesh_size), sizeof(mesh_size));
-
-    if (!stream)
-        throw std::runtime_error("Failed to read bundle header: " + path.string());
-
-    BundleData bundle;
-    bundle.version = version;
-    bundle.skeleton.resize(skeleton_size);
-    bundle.mesh.resize(mesh_size);
-
-    stream.read(reinterpret_cast<char*>(bundle.skeleton.data()), static_cast<std::streamsize>(bundle.skeleton.size()));
-    stream.read(reinterpret_cast<char*>(bundle.mesh.data()), static_cast<std::streamsize>(bundle.mesh.size()));
-    if (!stream)
-        throw std::runtime_error("Failed to read bundle payload: " + path.string());
-
-    return bundle;
 }
 
 bool ParseChunkSequence(const uint8_t* data, size_t size, std::vector<ChunkView>& out_chunks)
@@ -358,6 +314,11 @@ fs::path MeshOutputPath()
 fs::path MeshSkinningOutputPath()
 {
     return TestArtifactsDir() / "stalker_hero_mesh_skinning.json";
+}
+
+fs::path BundleOutputPath()
+{
+    return TestArtifactsDir() / "stalker_hero.ozzx";
 }
 
 fs::path BlenderRestPoseBaselinePath()
@@ -1025,6 +986,31 @@ bool ConvertMesh(bool force)
     return fs::exists(output_file);
 }
 
+bool ConvertBundle(bool force)
+{
+    const fs::path output_file = BundleOutputPath();
+
+    std::error_code ec;
+    fs::create_directories(TestArtifactsDir(), ec);
+
+    if (force && fs::exists(output_file))
+        fs::remove(output_file);
+
+    if (!force && fs::exists(output_file))
+        return true;
+
+    std::vector<std::string> args = { "bundle", SkeletonInputPath().string(), output_file.string() };
+
+    const int exit_code = ExecuteConverterCommand(args);
+    if (exit_code != 0)
+    {
+        std::cerr << "bundle conversion failed with exit code " << exit_code << std::endl;
+        return false;
+    }
+
+    return fs::exists(output_file);
+}
+
 bool EnsureSkeletonGenerated()
 {
     static bool cached = false;
@@ -1376,7 +1362,7 @@ bool TestViewerMeshMatchesBaseline()
     if (!EnsureSkeletonGenerated())
         return false;
 
-    if (!ConvertMesh(false))
+    if (!ConvertBundle(true))
         return false;
 
     const fs::path skinning_dump = MeshSkinningOutputPath();
@@ -1384,8 +1370,7 @@ bool TestViewerMeshMatchesBaseline()
     fs::remove(skinning_dump, remove_error);
 
     std::vector<std::string> args = {
-        std::string("--skeleton=") + SkeletonOutputPath().string(),
-        std::string("--mesh=") + MeshOutputPath().string(),
+        std::string("--bundle=") + BundleOutputPath().string(),
         std::string("--dump_skinning_json=") + skinning_dump.string(),
         "--render=false",
         "--max_idle_loops=2",
@@ -1959,23 +1944,15 @@ bool TestAnimationNamesPreserved()
 
 bool TestAssetBundleContainsSkeletonAndMesh()
 {
-    const fs::path bundle_path = ProjectRoot() / "src/xrAnimation/tests/testdata/stalker_hero_bundle.ozzbundle";
-    if (!fs::exists(bundle_path))
-    {
-        std::cerr << "bundle not found at " << bundle_path << std::endl;
+    if (!TestGenerateMesh())
         return false;
-    }
 
-    BundleData bundle;
-    try
-    {
-        bundle = LoadBundle(bundle_path);
-    }
-    catch (const std::exception& ex)
-    {
-        std::cerr << "failed to load bundle: " << ex.what() << std::endl;
+    if (!ConvertBundle(true))
         return false;
-    }
+
+    XRay::Animation::OzzxBundle bundle;
+    if (!XRay::Animation::ReadOzzxBundle(BundleOutputPath(), bundle))
+        return false;
 
     if (bundle.version != 1u)
     {
@@ -1997,22 +1974,20 @@ bool TestAssetBundleContainsSkeletonAndMesh()
 
     ozz::animation::Skeleton skeleton;
     {
-        ozz::io::MemoryStream memory_stream;
-        if (!memory_stream.Write(bundle.skeleton.data(), bundle.skeleton.size()))
+        ozz::io::MemoryStream skeleton_stream;
+        if (!skeleton_stream.Write(bundle.skeleton.data(), bundle.skeleton.size()))
         {
-            std::cerr << "failed to seed memory stream with skeleton payload" << std::endl;
+            std::cerr << "failed to seed skeleton stream" << std::endl;
             return false;
         }
-        memory_stream.Seek(0, ozz::io::Stream::kSet);
-
-        ozz::io::IArchive archive(&memory_stream);
+        skeleton_stream.Seek(0, ozz::io::Stream::kSet);
+        ozz::io::IArchive archive(&skeleton_stream);
         if (!archive.TestTag<ozz::animation::Skeleton>())
         {
             std::cerr << "skeleton payload missing Ozz tag" << std::endl;
             return false;
         }
         archive >> skeleton;
-
         if (skeleton.num_joints() <= 0)
         {
             std::cerr << "skeleton payload contains no joints" << std::endl;
@@ -2021,11 +1996,8 @@ bool TestAssetBundleContainsSkeletonAndMesh()
     }
 
     std::vector<std::uint8_t> reference_mesh;
-    if (!ReadBinaryFile(ProjectRoot() / "src/xrAnimation/tests/testdata/stalker_hero_mesh.ozz", reference_mesh))
-    {
-        std::cerr << "failed to load reference mesh" << std::endl;
+    if (!ReadBinaryFile(MeshOutputPath(), reference_mesh))
         return false;
-    }
 
     if (reference_mesh.empty())
     {
