@@ -55,6 +55,12 @@
 
 ## Tools & Scripts
 - `convert_assets.sh` (workspace root): converts `res/testdata/npc/stalker_hero_1.ogf` and `res/testdata/npc/critical_hit_grup_1.omf` into `.ozz` assets under `asset_tests/`.
+- `run_stalker_hero_conversion.sh`: writes NPC skeleton/animation/mesh outputs to `src/xrAnimation/tests/testdata/npc/` and launches the viewer with the critical hit clip.
+- `run_arms_conversion.sh`: processes `res/testdata/arms` into `src/xrAnimation/tests/testdata/arms/` and previews the first animation in the viewer.
+- `run_arms_gunsl_conversion.sh`: processes `res/testdata/arms_gunsl` into `src/xrAnimation/tests/testdata/arms_gunsl/` and previews in the viewer.
+- `run_monster_conversion.sh`: processes `res/testdata/monster` into `src/xrAnimation/tests/testdata/monster/` and previews in the viewer.
+- `run_weapon_conversion.sh`: processes `res/testdata/weapon` into `src/xrAnimation/tests/testdata/weapon/` and previews in the viewer.
+- `run_weapon_gunsl_conversion.sh`: processes `res/testdata/weapon_gunsl` into `src/xrAnimation/tests/testdata/weapon_gunsl/` and previews in the viewer.
 - CLI converter (`xray_to_ozz_converter`):
   - Skeleton: `xray_to_ozz_converter skeleton <input.ogf> <output_dir>`.
   - Animation: `xray_to_ozz_converter animation <skeleton.ogf> <input.omf> <output_dir> [-optimize]`.

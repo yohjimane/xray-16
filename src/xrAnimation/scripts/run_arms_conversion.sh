@@ -1,11 +1,10 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-CATEGORY="npc"
-SKELETON_BASENAME="stalker_hero_1"
+CATEGORY="arms"
+SKELETON_BASENAME="wpn_hand_01"
 ANIMATION_BASENAMES=(
-  "critical_hit_grup_1"
-  "barman_animation"
+  "wpn_hand_ak74u_hud_animation"
 )
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
