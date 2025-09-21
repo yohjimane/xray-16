@@ -1,9 +1,9 @@
 #include <algorithm>
 #include <array>
 #include <cmath>
+#include <cstddef>
 #include <cstdint>
 #include <cstdlib>
-#include <cstddef>
 #include <cstring>
 #include <filesystem>
 #include <fstream>
@@ -14,6 +14,7 @@
 #include <optional>
 #include <set>
 #include <sstream>
+#include <stdexcept>
 #include <string>
 #include <string_view>
 #include <system_error>
@@ -24,13 +25,13 @@
 #include "gtest/gtest.h"
 
 #ifndef PROJECT_ROOT
-#error "PROJECT_ROOT compile definition must be provided"
+#    error "PROJECT_ROOT compile definition must be provided"
 #endif
 
 #ifdef _WIN32
-#include <windows.h>
+#    include <windows.h>
 #else
-#include <sys/wait.h>
+#    include <sys/wait.h>
 #endif
 
 #include "ozz/animation/runtime/animation.h"
@@ -38,19 +39,18 @@
 #include "ozz/animation/runtime/skeleton.h"
 #include "ozz/animation/runtime/skeleton_utils.h"
 #include "ozz/base/io/archive.h"
+#include "ozz/base/io/memory_stream.h"
 #include "ozz/base/io/stream.h"
 #include "ozz/base/maths/soa_transform.h"
 #include "ozz/base/maths/transform.h"
 
-#include "../../../Externals/ozz-animation/src/animation/offline/gltf/extern/json.hpp"
 #include "../../../Externals/ozz-animation/samples/framework/mesh.h"
-
+#include "../../../Externals/ozz-animation/src/animation/offline/gltf/extern/json.hpp"
 
 namespace fs = std::filesystem;
 
 namespace
 {
-
 using Json = nlohmann::json;
 
 fs::path ProjectRoot()
@@ -70,6 +70,13 @@ struct OgfSurfaceStats
 {
     uint32_t vertex_count = 0;
     uint32_t face_count = 0;
+};
+
+struct BundleData
+{
+    std::uint32_t version = 0;
+    std::vector<std::uint8_t> skeleton;
+    std::vector<std::uint8_t> mesh;
 };
 
 constexpr uint32_t OGF_HEADER = 1;
@@ -105,6 +112,44 @@ bool ReadBinaryFile(const fs::path& path, std::vector<uint8_t>& out_buffer)
     return true;
 }
 
+BundleData LoadBundle(const fs::path& path)
+{
+    std::ifstream stream(path, std::ios::binary);
+    if (!stream)
+        throw std::runtime_error("Failed to open bundle: " + path.string());
+
+    char magic[8] = {};
+    stream.read(magic, sizeof(magic));
+    if (stream.gcount() != static_cast<std::streamsize>(sizeof(magic)))
+        throw std::runtime_error("Bundle missing magic header: " + path.string());
+
+    constexpr char kExpectedMagic[] = "OZZBUNDL";
+    if (std::memcmp(magic, kExpectedMagic, sizeof(kExpectedMagic) - 1) != 0)
+        throw std::runtime_error("Unexpected bundle magic in " + path.string());
+
+    std::uint32_t version = 0;
+    std::uint32_t skeleton_size = 0;
+    std::uint32_t mesh_size = 0;
+    stream.read(reinterpret_cast<char*>(&version), sizeof(version));
+    stream.read(reinterpret_cast<char*>(&skeleton_size), sizeof(skeleton_size));
+    stream.read(reinterpret_cast<char*>(&mesh_size), sizeof(mesh_size));
+
+    if (!stream)
+        throw std::runtime_error("Failed to read bundle header: " + path.string());
+
+    BundleData bundle;
+    bundle.version = version;
+    bundle.skeleton.resize(skeleton_size);
+    bundle.mesh.resize(mesh_size);
+
+    stream.read(reinterpret_cast<char*>(bundle.skeleton.data()), static_cast<std::streamsize>(bundle.skeleton.size()));
+    stream.read(reinterpret_cast<char*>(bundle.mesh.data()), static_cast<std::streamsize>(bundle.mesh.size()));
+    if (!stream)
+        throw std::runtime_error("Failed to read bundle payload: " + path.string());
+
+    return bundle;
+}
+
 bool ParseChunkSequence(const uint8_t* data, size_t size, std::vector<ChunkView>& out_chunks)
 {
     out_chunks.clear();
@@ -125,7 +170,7 @@ bool ParseChunkSequence(const uint8_t* data, size_t size, std::vector<ChunkView>
             return false;
         }
 
-        out_chunks.push_back(ChunkView{id, data + offset, static_cast<size_t>(chunk_size)});
+        out_chunks.push_back(ChunkView{ id, data + offset, static_cast<size_t>(chunk_size) });
         offset += chunk_size;
     }
 
@@ -189,9 +234,11 @@ bool LoadOgfSurfaceStats(const fs::path& path, std::vector<OgfSurfaceStats>& sur
 
     surfaces.clear();
 
-    const auto children_it = std::find_if(root_chunks.begin(), root_chunks.end(), [](const ChunkView& chunk) {
-        return chunk.id == OGF_CHILDREN;
-    });
+    const auto children_it = std::find_if(root_chunks.begin(), root_chunks.end(),
+        [](const ChunkView& chunk)
+        {
+            return chunk.id == OGF_CHILDREN;
+        });
 
     if (children_it != root_chunks.end())
     {
@@ -336,13 +383,9 @@ struct BaselineVertex
 };
 
 bool LoadJsonFile(const fs::path& path, Json& out);
-std::string BuildVertexSignatureFromComponents(double px,
-                                               double py,
-                                               double pz,
-                                               const std::vector<std::pair<int, double>>& weights);
+std::string BuildVertexSignatureFromComponents(double px, double py, double pz, const std::vector<std::pair<int, double>>& weights);
 
-bool LoadCombinedBaselineVertices(const ozz::animation::Skeleton& skeleton,
-                                  std::unordered_map<std::string, std::vector<BaselineVertex>>& out_vertices)
+bool LoadCombinedBaselineVertices(const ozz::animation::Skeleton& skeleton, std::unordered_map<std::string, std::vector<BaselineVertex>>& out_vertices)
 {
     Json combined;
     if (!LoadJsonFile(CombinedBaselinePath(), combined))
@@ -366,10 +409,7 @@ bool LoadCombinedBaselineVertices(const ozz::animation::Skeleton& skeleton,
         if (!co.is_array() || co.size() != 3)
             continue;
 
-        std::array<double, 3> position{
-            co[0].get<double>(),
-            co[1].get<double>(),
-            co[2].get<double>()};
+        std::array<double, 3> position{ co[0].get<double>(), co[1].get<double>(), co[2].get<double>() };
 
         const Json& groups = vertex.value("groups", Json::array());
         std::vector<std::pair<int, double>> weights;
@@ -395,9 +435,11 @@ bool LoadCombinedBaselineVertices(const ozz::animation::Skeleton& skeleton,
         if (weights.empty())
             continue;
 
-        std::stable_sort(weights.begin(), weights.end(), [](const auto& lhs, const auto& rhs) {
-            return lhs.second > rhs.second;
-        });
+        std::stable_sort(weights.begin(), weights.end(),
+            [](const auto& lhs, const auto& rhs)
+            {
+                return lhs.second > rhs.second;
+            });
 
         if (weights.size() > 4)
             weights.resize(4);
@@ -413,17 +455,16 @@ bool LoadCombinedBaselineVertices(const ozz::animation::Skeleton& skeleton,
                 entry.second *= inv_sum;
         }
 
-        std::sort(weights.begin(), weights.end(), [](const auto& lhs, const auto& rhs) {
-            if (lhs.first != rhs.first)
-                return lhs.first < rhs.first;
-            return lhs.second < rhs.second;
-        });
+        std::sort(weights.begin(), weights.end(),
+            [](const auto& lhs, const auto& rhs)
+            {
+                if (lhs.first != rhs.first)
+                    return lhs.first < rhs.first;
+                return lhs.second < rhs.second;
+            });
 
-        const std::string signature = BuildVertexSignatureFromComponents(
-            static_cast<double>(position[0]),
-            static_cast<double>(position[1]),
-            static_cast<double>(position[2]),
-            weights);
+        const std::string signature =
+            BuildVertexSignatureFromComponents(static_cast<double>(position[0]), static_cast<double>(position[1]), static_cast<double>(position[2]), weights);
 
         BaselineVertex baseline_vertex;
         baseline_vertex.position = position;
@@ -441,15 +482,10 @@ int64_t QuantizeToScaledInt(double value, double scale)
     return static_cast<int64_t>(std::llround(value * scale));
 }
 
-std::string BuildVertexSignatureFromComponents(double px,
-                                               double py,
-                                               double pz,
-                                               const std::vector<std::pair<int, double>>& weights)
+std::string BuildVertexSignatureFromComponents(double px, double py, double pz, const std::vector<std::pair<int, double>>& weights)
 {
     std::ostringstream key;
-    key << QuantizeToScaledInt(px, 100000.0) << ','
-        << QuantizeToScaledInt(py, 100000.0) << ','
-        << QuantizeToScaledInt(pz, 100000.0);
+    key << QuantizeToScaledInt(px, 100000.0) << ',' << QuantizeToScaledInt(py, 100000.0) << ',' << QuantizeToScaledInt(pz, 100000.0);
 
     std::vector<std::pair<int, int64_t>> quantized;
     quantized.reserve(weights.size());
@@ -457,11 +493,13 @@ std::string BuildVertexSignatureFromComponents(double px,
     for (const auto& entry : weights)
         quantized.emplace_back(entry.first, QuantizeToScaledInt(entry.second, 1000000.0));
 
-    std::sort(quantized.begin(), quantized.end(), [](const auto& lhs, const auto& rhs) {
-        if (lhs.first != rhs.first)
-            return lhs.first < rhs.first;
-        return lhs.second < rhs.second;
-    });
+    std::sort(quantized.begin(), quantized.end(),
+        [](const auto& lhs, const auto& rhs)
+        {
+            if (lhs.first != rhs.first)
+                return lhs.first < rhs.first;
+            return lhs.second < rhs.second;
+        });
 
     for (const auto& [joint, weight] : quantized)
         key << '|' << joint << ':' << weight;
@@ -489,16 +527,10 @@ std::string BuildVertexSignature(const Json& vertex)
         }
     }
 
-    return BuildVertexSignatureFromComponents(position[0].get<double>(),
-                                              position[1].get<double>(),
-                                              position[2].get<double>(),
-                                              weights);
+    return BuildVertexSignatureFromComponents(position[0].get<double>(), position[1].get<double>(), position[2].get<double>(), weights);
 }
 
-[[maybe_unused]] bool CollectVertexSignatures(
-    const Json& meshes,
-    size_t& total_vertices,
-    std::unordered_map<std::string, size_t>& signatures)
+[[maybe_unused]] bool CollectVertexSignatures(const Json& meshes, size_t& total_vertices, std::unordered_map<std::string, size_t>& signatures)
 {
     total_vertices = 0;
     signatures.clear();
@@ -552,10 +584,7 @@ bool LoadJsonFile(const fs::path& path, Json& out)
     return true;
 }
 
-[[maybe_unused]] bool CollectMeshSignatures(
-    const ozz::sample::Mesh& mesh,
-    std::unordered_map<std::string, size_t>& signatures,
-    int& raw_vertex_count)
+[[maybe_unused]] bool CollectMeshSignatures(const ozz::sample::Mesh& mesh, std::unordered_map<std::string, size_t>& signatures, int& raw_vertex_count)
 {
     signatures.clear();
     raw_vertex_count = 0;
@@ -662,9 +691,7 @@ bool ValidateMatrix4x4(const Json& matrix, const std::string& context)
     return ok;
 }
 
-bool ValidateJointPalette(const Json& palette,
-                          const ozz::animation::Skeleton& skeleton,
-                          const std::string& context)
+bool ValidateJointPalette(const Json& palette, const ozz::animation::Skeleton& skeleton, const std::string& context)
 {
     if (!palette.is_array())
     {
@@ -687,8 +714,7 @@ bool ValidateJointPalette(const Json& palette,
         const int joint_index = entry.value("joint_index", -1);
         if (joint_index < 0 || joint_index >= joint_count)
         {
-            std::cerr << context << ": palette joint index " << joint_index
-                      << " out of bounds" << std::endl;
+            std::cerr << context << ": palette joint index " << joint_index << " out of bounds" << std::endl;
             ok = false;
         }
 
@@ -704,12 +730,12 @@ bool ValidateJointPalette(const Json& palette,
     return ok;
 }
 
-const std::array<const char*, 4> kExpectedMultiMotionNames = {{
-    "norm_2_critical_hit_hend_left_0",
-    "norm_2_critical_hit_hend_right_0",
-    "norm_2_critical_hit_torso_0",
-    "norm_2_critical_hit_torso_1",
-}};
+const std::array<const char*, 4> kExpectedMultiMotionNames = {
+    {
+     "norm_2_critical_hit_hend_left_0", "norm_2_critical_hit_hend_right_0",
+     "norm_2_critical_hit_torso_0", "norm_2_critical_hit_torso_1",
+     }
+};
 
 std::string ReadString(ozz::io::IArchive& archive)
 {
@@ -767,9 +793,7 @@ bool ReadSerializedMotionMetadata(ozz::io::IArchive& archive, std::string* motio
     return true;
 }
 
-bool LoadAnimationByName(const fs::path& path,
-                         const std::string& motion_name,
-                         ozz::animation::Animation& animation_out)
+bool LoadAnimationByName(const fs::path& path, const std::string& motion_name, ozz::animation::Animation& animation_out)
 {
     ozz::io::File file(path.string().c_str(), "rb");
     if (!file.opened())
@@ -788,8 +812,7 @@ bool LoadAnimationByName(const fs::path& path,
         const std::string actual_name = name ? name : std::string();
         if (!motion_name.empty() && actual_name != motion_name)
         {
-            std::cerr << "animation '" << motion_name
-                      << "' not found in single-animation archive" << std::endl;
+            std::cerr << "animation '" << motion_name << "' not found in single-animation archive" << std::endl;
             return false;
         }
 
@@ -864,9 +887,7 @@ fs::path ResolveBinary(const std::string& executable_name)
 {
     const fs::path build_bin = ProjectRoot() / "ozz_utils" / "bin";
 
-    const std::array<fs::path, 2> candidates = {
-        build_bin / "Debug" / executable_name,
-        build_bin / executable_name};
+    const std::array<fs::path, 2> candidates = { build_bin / "Debug" / executable_name, build_bin / executable_name };
 
     for (const auto& path : candidates)
     {
@@ -899,8 +920,7 @@ fs::path ResolveViewerBinary()
 #endif
 }
 
-std::string BuildCommand(const fs::path& binary,
-                         const std::vector<std::string>& args)
+std::string BuildCommand(const fs::path& binary, const std::vector<std::string>& args)
 {
     const fs::path binary_dir = binary.parent_path();
 
@@ -926,8 +946,7 @@ std::string BuildCommand(const fs::path& binary,
 #endif
 }
 
-int ExecuteCommand(const fs::path& binary,
-                   const std::vector<std::string>& args)
+int ExecuteCommand(const fs::path& binary, const std::vector<std::string>& args)
 {
     const std::string command = BuildCommand(binary, args);
     const int result = std::system(command.c_str());
@@ -964,12 +983,7 @@ bool ConvertSkeleton(bool force)
     if (!force && fs::exists(output_file))
         return true;
 
-    std::vector<std::string> args = {
-        "skeleton",
-        SkeletonInputPath().string(),
-        output_file.string(),
-        "--dump-bind",
-        SkeletonCsvPath().string()};
+    std::vector<std::string> args = { "skeleton", SkeletonInputPath().string(), output_file.string(), "--dump-bind", SkeletonCsvPath().string() };
 
     const int exit_code = ExecuteConverterCommand(args);
     if (exit_code != 0)
@@ -1038,13 +1052,8 @@ bool ConvertAnimation(bool force)
     if (!force && fs::exists(output_file))
         return true;
 
-    std::vector<std::string> args = {
-        "animation",
-        AnimationInputPath().string(),
-        output_file.string(),
-        SkeletonInputPath().string(),
-        "--metadata",
-        AnimationMetadataPath().string()};
+    std::vector<std::string> args = { "animation", AnimationInputPath().string(), output_file.string(), SkeletonInputPath().string(), "--metadata",
+        AnimationMetadataPath().string() };
 
     const int exit_code = ExecuteConverterCommand(args);
     if (exit_code != 0)
@@ -1071,19 +1080,12 @@ bool ConvertSpecificMotion(const std::string& motion_name, bool force)
     if (!force && fs::exists(output_file))
         return true;
 
-    std::vector<std::string> args = {
-        "animation",
-        AnimationInputPath().string(),
-        output_file.string(),
-        SkeletonInputPath().string(),
-        "--motion",
-        motion_name};
+    std::vector<std::string> args = { "animation", AnimationInputPath().string(), output_file.string(), SkeletonInputPath().string(), "--motion", motion_name };
 
     const int exit_code = ExecuteConverterCommand(args);
     if (exit_code != 0)
     {
-        std::cerr << "animation conversion for motion '" << motion_name
-                  << "' failed with exit code " << exit_code << std::endl;
+        std::cerr << "animation conversion for motion '" << motion_name << "' failed with exit code " << exit_code << std::endl;
         return false;
     }
 
@@ -1140,10 +1142,7 @@ bool LoadOzz(const fs::path& path, T& object)
     return index;
 }
 
-bool SampleLocals(const ozz::animation::Animation& animation,
-                  const ozz::animation::Skeleton& skeleton,
-                  float time,
-                  std::vector<ozz::math::Transform>& locals)
+bool SampleLocals(const ozz::animation::Animation& animation, const ozz::animation::Skeleton& skeleton, float time, std::vector<ozz::math::Transform>& locals)
 {
     if (animation.duration() <= 0.f)
         return false;
@@ -1200,13 +1199,15 @@ struct ExpectedBindPose
     float tz;
 };
 
-const std::array<ExpectedBindPose, 5> kExpectedBindPose = {{
-    {"root_stalker", 0.0f, 0.0f, 0.0f},
-    {"bip01", 6.96513e-06f, 0.987438f, 4.50560e-06f},
-    {"bip01_pelvis", 0.0f, 0.0f, 0.0f},
-    {"bip01_spine", 0.102435f, 1.76455e-07f, 0.0213843f},
-    {"bip01_head", 0.0559939f, 2.85225e-09f, 1.90456e-08f},
-}};
+const std::array<ExpectedBindPose, 5> kExpectedBindPose = {
+    {
+     { "root_stalker", 0.0f, 0.0f, 0.0f },
+     { "bip01", 6.96513e-06f, 0.987438f, 4.50560e-06f },
+     { "bip01_pelvis", 0.0f, 0.0f, 0.0f },
+     { "bip01_spine", 0.102435f, 1.76455e-07f, 0.0213843f },
+     { "bip01_head", 0.0559939f, 2.85225e-09f, 1.90456e-08f },
+     }
+};
 
 constexpr float kTranslationTolerance = 1e-4f;
 constexpr float kRotationTolerance = 1e-4f;
@@ -1257,15 +1258,14 @@ bool TestMeshVertexCountsMatchSource()
 
         if (mesh.vertex_count() != static_cast<int>(source.vertex_count))
         {
-            std::cerr << "surface " << i << " exported vertex count " << mesh.vertex_count()
-                      << " differs from OGF vertex count " << source.vertex_count << std::endl;
+            std::cerr << "surface " << i << " exported vertex count " << mesh.vertex_count() << " differs from OGF vertex count " << source.vertex_count
+                      << std::endl;
             ok = false;
         }
 
         if (mesh_face_count != source.face_count)
         {
-            std::cerr << "surface " << i << " exported face count " << mesh_face_count
-                      << " differs from OGF face count " << source.face_count << std::endl;
+            std::cerr << "surface " << i << " exported face count " << mesh_face_count << " differs from OGF face count " << source.face_count << std::endl;
             ok = false;
         }
 
@@ -1277,15 +1277,13 @@ bool TestMeshVertexCountsMatchSource()
 
     if (mesh_vertex_total != ogf_vertex_total)
     {
-        std::cerr << "total exported vertices " << mesh_vertex_total
-                  << " differ from OGF vertices " << ogf_vertex_total << std::endl;
+        std::cerr << "total exported vertices " << mesh_vertex_total << " differ from OGF vertices " << ogf_vertex_total << std::endl;
         ok = false;
     }
 
     if (mesh_face_total != ogf_face_total)
     {
-        std::cerr << "total exported faces " << mesh_face_total
-                  << " differ from OGF faces " << ogf_face_total << std::endl;
+        std::cerr << "total exported faces " << mesh_face_total << " differ from OGF faces " << ogf_face_total << std::endl;
         ok = false;
     }
 
@@ -1307,9 +1305,7 @@ bool TestMeshSurfaceCountMatchesSource()
 
     if (meshes.size() != ogf_surfaces.size())
     {
-        std::cerr << "exported mesh surface count " << meshes.size()
-                  << " does not match OGF surface count " << ogf_surfaces.size()
-                  << std::endl;
+        std::cerr << "exported mesh surface count " << meshes.size() << " does not match OGF surface count " << ogf_surfaces.size() << std::endl;
         return false;
     }
 
@@ -1345,33 +1341,29 @@ bool TestMeshSurfaceStatsMatchSource()
 
         if (metadata.original_vertex_count != source.vertex_count)
         {
-            std::cerr << "surface " << i << " original vertex count "
-                      << metadata.original_vertex_count << " (metadata) does not match OGF "
+            std::cerr << "surface " << i << " original vertex count " << metadata.original_vertex_count << " (metadata) does not match OGF "
                       << source.vertex_count << std::endl;
             ok = false;
         }
 
         if (metadata.original_face_count != source.face_count)
         {
-            std::cerr << "surface " << i << " original face count "
-                      << metadata.original_face_count << " (metadata) does not match OGF "
-                      << source.face_count << std::endl;
+            std::cerr << "surface " << i << " original face count " << metadata.original_face_count << " (metadata) does not match OGF " << source.face_count
+                      << std::endl;
             ok = false;
         }
 
         const uint32_t mesh_face_count = static_cast<uint32_t>(mesh.triangle_index_count() / 3);
         if (mesh_face_count != source.face_count)
         {
-            std::cerr << "surface " << i << " exported triangle count "
-                      << mesh_face_count << " differs from OGF face count "
-                      << source.face_count << std::endl;
+            std::cerr << "surface " << i << " exported triangle count " << mesh_face_count << " differs from OGF face count " << source.face_count << std::endl;
             ok = false;
         }
 
         if (mesh.vertex_count() != static_cast<int>(source.vertex_count))
         {
-            std::cerr << "surface " << i << " exported vertex count " << mesh.vertex_count()
-                      << " differs from OGF vertex count " << source.vertex_count << std::endl;
+            std::cerr << "surface " << i << " exported vertex count " << mesh.vertex_count() << " differs from OGF vertex count " << source.vertex_count
+                      << std::endl;
             ok = false;
         }
     }
@@ -1466,11 +1458,9 @@ bool TestViewerMeshMatchesBaseline()
         const std::string baseline_name = baseline_bone.value("name", std::string());
         if (viewer_name != baseline_name)
         {
-            std::cerr << "bone name mismatch at index " << bone_index << ": '"
-                      << viewer_name << "' vs '" << baseline_name << "'" << std::endl;
+            std::cerr << "bone name mismatch at index " << bone_index << ": '" << viewer_name << "' vs '" << baseline_name << "'" << std::endl;
             ok = false;
         }
-
     }
 
     if (!viewer_json.contains("meshes") || !baseline_json.contains("meshes"))
@@ -1515,10 +1505,8 @@ bool TestViewerMeshMatchesBaseline()
         for (size_t vertex_index = 0; vertex_index < viewer_vertices.size(); ++vertex_index)
         {
             const Json& viewer_vertex = viewer_vertices[vertex_index];
-            const std::array<double, 3> viewer_position_ozz{
-                viewer_vertex["position"][0].get<double>(),
-                viewer_vertex["position"][1].get<double>(),
-                viewer_vertex["position"][2].get<double>()};
+            const std::array<double, 3> viewer_position_ozz{ viewer_vertex["position"][0].get<double>(), viewer_vertex["position"][1].get<double>(),
+                viewer_vertex["position"][2].get<double>() };
 
             const Json& weights_json = viewer_vertex.value("weights", Json::array());
             if (!weights_json.is_array() || weights_json.empty())
@@ -1548,9 +1536,11 @@ bool TestViewerMeshMatchesBaseline()
                 continue;
             }
 
-            std::stable_sort(viewer_weights.begin(), viewer_weights.end(), [](const auto& lhs, const auto& rhs) {
-                return lhs.second > rhs.second;
-            });
+            std::stable_sort(viewer_weights.begin(), viewer_weights.end(),
+                [](const auto& lhs, const auto& rhs)
+                {
+                    return lhs.second > rhs.second;
+                });
 
             double viewer_weight_sum = 0.0;
             for (const auto& entry : viewer_weights)
@@ -1562,17 +1552,16 @@ bool TestViewerMeshMatchesBaseline()
                     entry.second *= inv_sum;
             }
 
-            std::sort(viewer_weights.begin(), viewer_weights.end(), [](const auto& lhs, const auto& rhs) {
-                if (lhs.first != rhs.first)
-                    return lhs.first < rhs.first;
-                return lhs.second < rhs.second;
-            });
+            std::sort(viewer_weights.begin(), viewer_weights.end(),
+                [](const auto& lhs, const auto& rhs)
+                {
+                    if (lhs.first != rhs.first)
+                        return lhs.first < rhs.first;
+                    return lhs.second < rhs.second;
+                });
 
-            const std::string signature = BuildVertexSignatureFromComponents(
-                static_cast<double>(viewer_position_ozz[0]),
-                static_cast<double>(viewer_position_ozz[1]),
-                static_cast<double>(viewer_position_ozz[2]),
-                viewer_weights);
+            const std::string signature = BuildVertexSignatureFromComponents(static_cast<double>(viewer_position_ozz[0]),
+                static_cast<double>(viewer_position_ozz[1]), static_cast<double>(viewer_position_ozz[2]), viewer_weights);
 
             auto baseline_it = baseline_vertex_map.find(signature);
             if (baseline_it == baseline_vertex_map.end())
@@ -1580,8 +1569,7 @@ bool TestViewerMeshMatchesBaseline()
                 if (logged_unmatched < 10)
                 {
                     const int vertex_label = viewer_vertex.value("index", static_cast<int>(vertex_index));
-                    std::cerr << "no baseline entry matches viewer vertex signature for vertex "
-                              << vertex_label << ": " << signature << std::endl;
+                    std::cerr << "no baseline entry matches viewer vertex signature for vertex " << vertex_label << ": " << signature << std::endl;
                     ++logged_unmatched;
                 }
                 ok = false;
@@ -1608,8 +1596,8 @@ bool TestViewerMeshMatchesBaseline()
 
             if (viewer_weights.size() != baseline_vertex.weights.size())
             {
-                std::cerr << "vertex weight count mismatch (viewer " << viewer_weights.size()
-                          << " vs baseline " << baseline_vertex.weights.size() << ")" << std::endl;
+                std::cerr << "vertex weight count mismatch (viewer " << viewer_weights.size() << " vs baseline " << baseline_vertex.weights.size() << ")"
+                          << std::endl;
                 ok = false;
             }
             else
@@ -1620,16 +1608,14 @@ bool TestViewerMeshMatchesBaseline()
                     const auto& bw = baseline_vertex.weights[weight_idx];
                     if (vw.first != bw.first)
                     {
-                        std::cerr << "vertex joint index mismatch (viewer " << vw.first
-                                  << " vs baseline " << bw.first << ")" << std::endl;
+                        std::cerr << "vertex joint index mismatch (viewer " << vw.first << " vs baseline " << bw.first << ")" << std::endl;
                         ok = false;
                     }
                     const float diff = std::fabs(vw.second - bw.second);
                     if (diff > kMeshWeightTolerance)
                     {
-                        std::cerr << "vertex weight mismatch for joint " << vw.first
-                                  << " (viewer " << vw.second << " vs baseline "
-                                  << bw.second << ", tol " << kMeshWeightTolerance << ")" << std::endl;
+                        std::cerr << "vertex weight mismatch for joint " << vw.first << " (viewer " << vw.second << " vs baseline " << bw.second << ", tol "
+                                  << kMeshWeightTolerance << ")" << std::endl;
                         ok = false;
                     }
                 }
@@ -1651,8 +1637,7 @@ bool TestViewerMeshMatchesBaseline()
 
     if (matched_vertices != kExpectedStalkerHeroVertexCount)
     {
-        std::cerr << "matched vertex count " << matched_vertices
-                  << " differs from expected " << kExpectedStalkerHeroVertexCount << std::endl;
+        std::cerr << "matched vertex count " << matched_vertices << " differs from expected " << kExpectedStalkerHeroVertexCount << std::endl;
         ok = false;
     }
 
@@ -1717,16 +1702,14 @@ bool TestAnimationCompatibleWithSkeleton()
 
     if (animation.num_tracks() != skeleton.num_joints())
     {
-        std::cerr << "animation track count " << animation.num_tracks()
-                  << " does not match skeleton joints " << skeleton.num_joints() << std::endl;
+        std::cerr << "animation track count " << animation.num_tracks() << " does not match skeleton joints " << skeleton.num_joints() << std::endl;
         return false;
     }
 
     return animation.duration() > 0.f;
 }
 
-bool CompareQuaternion(const ozz::math::Quaternion& actual,
-                       float qx, float qy, float qz, float qw)
+bool CompareQuaternion(const ozz::math::Quaternion& actual, float qx, float qy, float qz, float qw)
 {
     const float dx = std::fabs(actual.x - qx);
     const float dy = std::fabs(actual.y - qy);
@@ -1765,9 +1748,8 @@ bool TestAnimationMatchesReference()
 
     bool ok = true;
 
-    const std::array<int, 3> frames = {0, total_frames / 2, total_frames - 1};
-    const std::array<const char*, 3> tracked_joints = {
-        "bip01_pelvis", "bip01_spine", "bip01_head"};
+    const std::array<int, 3> frames = { 0, total_frames / 2, total_frames - 1 };
+    const std::array<const char*, 3> tracked_joints = { "bip01_pelvis", "bip01_spine", "bip01_head" };
 
     for (const int frame : frames)
     {
@@ -1797,23 +1779,15 @@ bool TestAnimationMatchesReference()
 
             if (dx > kTranslationTolerance || dy > kTranslationTolerance || dz > kTranslationTolerance)
             {
-                std::cerr << "frame " << frame << " joint '" << joint_name
-                          << "' translation mismatch\n"
-                          << "  expected: [" << expected.translation.x << ", "
-                          << expected.translation.y << ", " << expected.translation.z << "]\n"
-                          << "  actual:   [" << actual.translation.x << ", " << actual.translation.y << ", "
-                          << actual.translation.z << "]\n";
+                std::cerr << "frame " << frame << " joint '" << joint_name << "' translation mismatch\n"
+                          << "  expected: [" << expected.translation.x << ", " << expected.translation.y << ", " << expected.translation.z << "]\n"
+                          << "  actual:   [" << actual.translation.x << ", " << actual.translation.y << ", " << actual.translation.z << "]\n";
                 ok = false;
             }
 
-            if (!CompareQuaternion(actual.rotation,
-                                   expected.rotation.x,
-                                   expected.rotation.y,
-                                   expected.rotation.z,
-                                   expected.rotation.w))
+            if (!CompareQuaternion(actual.rotation, expected.rotation.x, expected.rotation.y, expected.rotation.z, expected.rotation.w))
             {
-                std::cerr << "frame " << frame << " joint '" << joint_name
-                          << "' rotation mismatch\n";
+                std::cerr << "frame " << frame << " joint '" << joint_name << "' rotation mismatch\n";
                 ok = false;
             }
         }
@@ -1848,8 +1822,7 @@ bool TestMultipleAnimationConversion()
     archive >> animation_count;
     if (animation_count != kExpectedMultiMotionNames.size())
     {
-        std::cerr << "expected " << kExpectedMultiMotionNames.size() << " animations, found "
-                  << animation_count << std::endl;
+        std::cerr << "expected " << kExpectedMultiMotionNames.size() << " animations, found " << animation_count << std::endl;
         return false;
     }
 
@@ -1875,8 +1848,7 @@ bool TestMultipleAnimationConversion()
         ReadSerializedMotionMetadata(archive, &metadata_name);
         if (metadata_name != name)
         {
-            std::cerr << "metadata name mismatch for animation '" << name
-                      << "', metadata reports '" << metadata_name << "'" << std::endl;
+            std::cerr << "metadata name mismatch for animation '" << name << "', metadata reports '" << metadata_name << "'" << std::endl;
             return false;
         }
 
@@ -1929,8 +1901,7 @@ bool TestAnimationNamesPreserved()
 
     if (animation_count != kExpectedMultiMotionNames.size())
     {
-        std::cerr << "expected " << kExpectedMultiMotionNames.size() << " animations, found "
-                  << animation_count << std::endl;
+        std::cerr << "expected " << kExpectedMultiMotionNames.size() << " animations, found " << animation_count << std::endl;
         return false;
     }
 
@@ -1960,8 +1931,7 @@ bool TestAnimationNamesPreserved()
 
         if (metadata_name != name)
         {
-            std::cerr << "metadata name mismatch for animation index " << i << " ('"
-                      << name << "' vs '" << metadata_name << "')" << std::endl;
+            std::cerr << "metadata name mismatch for animation index " << i << " ('" << name << "' vs '" << metadata_name << "')" << std::endl;
             return false;
         }
 
@@ -1982,6 +1952,97 @@ bool TestAnimationNamesPreserved()
             std::cerr << "missing animation name '" << expected << "'" << std::endl;
             return false;
         }
+    }
+
+    return true;
+}
+
+bool TestAssetBundleContainsSkeletonAndMesh()
+{
+    const fs::path bundle_path = ProjectRoot() / "src/xrAnimation/tests/testdata/stalker_hero_bundle.ozzbundle";
+    if (!fs::exists(bundle_path))
+    {
+        std::cerr << "bundle not found at " << bundle_path << std::endl;
+        return false;
+    }
+
+    BundleData bundle;
+    try
+    {
+        bundle = LoadBundle(bundle_path);
+    }
+    catch (const std::exception& ex)
+    {
+        std::cerr << "failed to load bundle: " << ex.what() << std::endl;
+        return false;
+    }
+
+    if (bundle.version != 1u)
+    {
+        std::cerr << "unexpected bundle version " << bundle.version << std::endl;
+        return false;
+    }
+
+    if (bundle.skeleton.empty())
+    {
+        std::cerr << "bundle missing skeleton payload" << std::endl;
+        return false;
+    }
+
+    if (bundle.mesh.empty())
+    {
+        std::cerr << "bundle missing mesh payload" << std::endl;
+        return false;
+    }
+
+    ozz::animation::Skeleton skeleton;
+    {
+        ozz::io::MemoryStream memory_stream;
+        if (!memory_stream.Write(bundle.skeleton.data(), bundle.skeleton.size()))
+        {
+            std::cerr << "failed to seed memory stream with skeleton payload" << std::endl;
+            return false;
+        }
+        memory_stream.Seek(0, ozz::io::Stream::kSet);
+
+        ozz::io::IArchive archive(&memory_stream);
+        if (!archive.TestTag<ozz::animation::Skeleton>())
+        {
+            std::cerr << "skeleton payload missing Ozz tag" << std::endl;
+            return false;
+        }
+        archive >> skeleton;
+
+        if (skeleton.num_joints() <= 0)
+        {
+            std::cerr << "skeleton payload contains no joints" << std::endl;
+            return false;
+        }
+    }
+
+    std::vector<std::uint8_t> reference_mesh;
+    if (!ReadBinaryFile(ProjectRoot() / "src/xrAnimation/tests/testdata/stalker_hero_mesh.ozz", reference_mesh))
+    {
+        std::cerr << "failed to load reference mesh" << std::endl;
+        return false;
+    }
+
+    if (reference_mesh.empty())
+    {
+        std::cerr << "reference mesh is empty" << std::endl;
+        return false;
+    }
+
+    if (bundle.mesh.size() != reference_mesh.size())
+    {
+        std::cerr << "mesh payload size mismatch (" << bundle.mesh.size() << " vs " << reference_mesh.size() << ")" << std::endl;
+        return false;
+    }
+
+    if (bundle.mesh != reference_mesh)
+    {
+        std::cerr << "mesh payload differs from reference asset" << std::endl;
+        return false;
     }
 
     return true;
@@ -2048,4 +2109,8 @@ TEST(ConverterIntegration, AnimationNamesPreserved)
     EXPECT_TRUE(TestAnimationNamesPreserved());
 }
 
+TEST(ConverterIntegration, AssetBundleContainsSkeletonAndMesh)
+{
+    EXPECT_TRUE(TestAssetBundleContainsSkeletonAndMesh());
+}
 } // namespace

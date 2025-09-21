@@ -2,13 +2,15 @@
 
 #include "Include/xrRender/Kinematics.h"
 #include "xrCore/_fbox.h"
+
+#include "ozz/animation/runtime/sampling_job.h"
 #include "ozz/animation/runtime/skeleton.h"
+#include "ozz/base/maths/soa_transform.h"
 
 namespace XRay
 {
 namespace Animation
 {
-
 class OzzKinematics final : public IKinematics
 {
 public:
@@ -22,8 +24,7 @@ public:
     void Bone_Calculate(CBoneData* bd, Fmatrix* parent) override;
     void Bone_GetAnimPos(Fmatrix& pos, u16 id, u8 channel_mask, bool ignore_callbacks) override;
 
-    bool PickBone(const Fmatrix& parent_xform, pick_result& r, float dist, const Fvector& start,
-        const Fvector& dir, u16 bone_id) override;
+    bool PickBone(const Fmatrix& parent_xform, pick_result& r, float dist, const Fvector& start, const Fvector& dir, u16 bone_id) override;
     void EnumBoneVertices(SEnumVerticesCallback& C, u16 bone_id) override;
 
     u16 LL_BoneID(LPCSTR B) override;
@@ -95,7 +96,9 @@ private:
     s32 visibility_counter_;
     Fbox cached_box_;
     ozz::animation::Skeleton skeleton_;
+    xr_vector<ozz::math::SoaTransform> sampled_locals_;
+    xr_vector<ozz::math::Float4x4> model_transforms_;
+    ozz::animation::SamplingJob::Context sampling_context_;
 };
-
 } // namespace Animation
 } // namespace XRay

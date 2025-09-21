@@ -105,6 +105,10 @@ bool OzzKinematics::InitializeFromOzz(pcstr skeleton_path)
 
     bones_.assign(joint_count, nullptr);
 
+    model_transforms_.clear();
+    model_transforms_.shrink_to_fit();
+    model_transforms_.resize(static_cast<size_t>(joint_count));
+
     bone_map_by_name_.clear();
     bone_map_by_ptr_.clear();
     const auto joint_names = skeleton_.joint_names();
@@ -357,6 +361,19 @@ void OzzKinematics::LL_SetBoneVisible(u16 bone_id, BOOL val, BOOL /*bRecursive*/
         visible_mask_ |= mask;
     else
         visible_mask_ &= ~mask;
+
+    if (bone_id < bone_instances_.size())
+    {
+        if (val)
+        {
+            CalculateBones_Invalidate();
+        }
+        else
+        {
+            bone_instances_[bone_id].mTransform.scale(0.f, 0.f, 0.f);
+            bone_instances_[bone_id].mRenderTransform.scale(0.f, 0.f, 0.f);
+        }
+    }
 }
 
 u64 OzzKinematics::LL_GetBonesVisible()
@@ -367,6 +384,18 @@ u64 OzzKinematics::LL_GetBonesVisible()
 void OzzKinematics::LL_SetBonesVisible(u64 mask)
 {
     visible_mask_ = mask;
+
+    const size_t count = bone_instances_.size();
+    for (size_t idx = 0; idx < count && idx < 64; ++idx)
+    {
+        const u64 bit = u64(1) << idx;
+        if ((visible_mask_ & bit) == 0)
+        {
+            bone_instances_[idx].mTransform.scale(0.f, 0.f, 0.f);
+            bone_instances_[idx].mRenderTransform.scale(0.f, 0.f, 0.f);
+        }
+    }
+    CalculateBones_Invalidate();
 }
 
 void OzzKinematics::LL_AddTransformToBone(KinematicsABT::additional_bone_transform& /*offset*/)
@@ -384,11 +413,17 @@ void OzzKinematics::CalculateBones(BOOL /*bForceExact*/)
     if (skeleton_.num_joints() == 0 || bone_instances_.empty())
         return;
 
-    std::vector<ozz::math::Float4x4> model_matrices(bone_instances_.size());
+    if (model_transforms_.size() != bone_instances_.size())
+        model_transforms_.resize(bone_instances_.size());
 
     ozz::animation::LocalToModelJob job;
-    job.input = skeleton_.joint_rest_poses();
-    job.output = ozz::span<ozz::math::Float4x4>(model_matrices.data(), model_matrices.size());
+    const bool has_sampled_pose = sampled_locals_.size() == static_cast<size_t>(skeleton_.num_soa_joints());
+    if (has_sampled_pose)
+        job.input = ozz::span<const ozz::math::SoaTransform>(sampled_locals_.data(), sampled_locals_.size());
+    else
+        job.input = skeleton_.joint_rest_poses();
+
+    job.output = ozz::span<ozz::math::Float4x4>(model_transforms_.data(), model_transforms_.size());
     job.skeleton = &skeleton_;
 
     if (!job.Run())
@@ -400,10 +435,40 @@ void OzzKinematics::CalculateBones(BOOL /*bForceExact*/)
     const size_t bone_count = bone_instances_.size();
     for (size_t i = 0; i < bone_count; ++i)
     {
-        const Fmatrix transform = ConvertOzzMatrixToXRay(model_matrices[i]);
+        const Fmatrix transform = ConvertOzzMatrixToXRay(model_transforms_[i]);
         bone_instances_[i].mTransform = transform;
-        bone_instances_[i].mRenderTransform = transform;
+
+        if (i < 64)
+        {
+            const u64 bit = u64(1) << i;
+            if ((visible_mask_ & bit) == 0)
+                bone_instances_[i].mTransform.scale(0.f, 0.f, 0.f);
+        }
+
+        if (i < bones_.size() && bones_[i])
+            bone_instances_[i].mRenderTransform.mul_43(bone_instances_[i].mTransform, bones_[i]->m2b_transform);
+        else
+            bone_instances_[i].mRenderTransform = bone_instances_[i].mTransform;
     }
+
+    Fbox box;
+    box.invalidate();
+    for (size_t i = 0; i < bone_count; ++i)
+    {
+        if (i < 64)
+        {
+            const u64 bit = u64(1) << i;
+            if ((visible_mask_ & bit) == 0)
+                continue;
+        }
+
+        box.modify(bone_instances_[i].mTransform.c);
+    }
+
+    cached_box_ = box;
+
+    if (update_callback_)
+        update_callback_(this);
 }
 
 void OzzKinematics::CalculateBones_Invalidate()
