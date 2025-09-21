@@ -27,6 +27,7 @@
 #include "../Externals/ozz-animation/samples/framework/mesh.h"
 
 #include <algorithm>
+#include <chrono>
 #include <array>
 #include <cctype>
 #include <cstddef>
@@ -2044,6 +2045,8 @@ MeshConfig parse_mesh_arguments(int argc, char** argv)
 
 void convert_skeleton(const SkeletonConfig& config)
 {
+    const auto start_time = std::chrono::steady_clock::now();
+
     auto bones = load_skeleton_bones_from_ogf(config.input_ogf);
     const auto raw = build_raw_skeleton(bones);
     ozz::animation::offline::SkeletonBuilder builder;
@@ -2065,11 +2068,18 @@ void convert_skeleton(const SkeletonConfig& config)
     if (config.dump_csv)
         dump_bind_pose_csv(*config.dump_csv, bones);
 
-    std::cout << "Converted skeleton written to " << config.output_ozz << std::endl;
+    const auto duration_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
+        std::chrono::steady_clock::now() - start_time)
+                               .count();
+
+    std::cout << "Converted skeleton written to " << config.output_ozz
+              << " (" << duration_ms << " ms)" << std::endl;
 }
 
 void convert_animation(const AnimationConfig& config)
 {
+    const auto start_time = std::chrono::steady_clock::now();
+
     auto bones = load_skeleton_bones_from_ogf(config.skeleton_ogf);
     const auto raw_skeleton = build_raw_skeleton(bones);
     ozz::animation::offline::SkeletonBuilder skeleton_builder;
@@ -2146,20 +2156,27 @@ void convert_animation(const AnimationConfig& config)
         metadata_path.replace_extension(".json");
     write_metadata_json(metadata_path, metadata_to_write, config.input_omf);
 
+    const auto duration_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
+        std::chrono::steady_clock::now() - start_time)
+                               .count();
+
     if (motions_to_export.size() == 1)
     {
         std::cout << "Converted animation '" << motions_to_export.front()->name
-                  << "' written to " << config.output_ozz << std::endl;
+                  << "' written to " << config.output_ozz
+                  << " (" << duration_ms << " ms)" << std::endl;
     }
     else
     {
         std::cout << "Converted " << motions_to_export.size() << " animations written to "
-                  << config.output_ozz << std::endl;
+                  << config.output_ozz << " (" << duration_ms << " ms)" << std::endl;
     }
 }
 
 void convert_mesh(const MeshConfig& config)
 {
+    const auto start_time = std::chrono::steady_clock::now();
+
     auto bones = load_skeleton_bones_from_ogf(config.input_ogf);
 
     const auto file_data = load_file(config.input_ogf);
@@ -2234,9 +2251,14 @@ void convert_mesh(const MeshConfig& config)
     for (const auto& mesh : meshes)
         archive << mesh;
 
+    const auto duration_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
+        std::chrono::steady_clock::now() - start_time)
+                               .count();
+
     std::cout << "Converted " << meshes.size() << " mesh surface"
               << (meshes.size() == 1 ? "" : "s")
-              << " written to " << config.output_ozz << std::endl;
+              << " written to " << config.output_ozz
+              << " (" << duration_ms << " ms)" << std::endl;
 }
 
 } // namespace

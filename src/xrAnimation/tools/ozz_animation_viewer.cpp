@@ -511,7 +511,7 @@ class PlaybackSampleApplication : public ozz::sample::Application {
     uint32_t anim_count = 0;
     archive >> anim_count;
 
-    if (anim_count == 0 || anim_count > 100) { // Sanity check
+    if (anim_count == 0) {
       ozz::log::Err() << "Invalid animation count: " << anim_count << std::endl;
       return false;
     }
