@@ -38,6 +38,7 @@
 #include "ozz/base/maths/transform.h"
 
 #include "../../../Externals/ozz-animation/src/animation/offline/gltf/extern/json.hpp"
+#include "../../../Externals/ozz-animation/samples/framework/mesh.h"
 
 
 namespace fs = std::filesystem;
@@ -128,6 +129,34 @@ int64_t QuantizeToScaledInt(double value, double scale)
     return static_cast<int64_t>(std::llround(value * scale));
 }
 
+std::string BuildVertexSignatureFromComponents(double px,
+                                               double py,
+                                               double pz,
+                                               const std::vector<std::pair<int, double>>& weights)
+{
+    std::ostringstream key;
+    key << QuantizeToScaledInt(px, 100000.0) << ','
+        << QuantizeToScaledInt(py, 100000.0) << ','
+        << QuantizeToScaledInt(pz, 100000.0);
+
+    std::vector<std::pair<int, int64_t>> quantized;
+    quantized.reserve(weights.size());
+
+    for (const auto& entry : weights)
+        quantized.emplace_back(entry.first, QuantizeToScaledInt(entry.second, 1000000.0));
+
+    std::sort(quantized.begin(), quantized.end(), [](const auto& lhs, const auto& rhs) {
+        if (lhs.first != rhs.first)
+            return lhs.first < rhs.first;
+        return lhs.second < rhs.second;
+    });
+
+    for (const auto& [joint, weight] : quantized)
+        key << '|' << joint << ':' << weight;
+
+    return key.str();
+}
+
 std::string BuildVertexSignature(const Json& vertex)
 {
     if (!vertex.contains("position"))
@@ -137,39 +166,21 @@ std::string BuildVertexSignature(const Json& vertex)
     if (!position.is_array() || position.size() != 3)
         return {};
 
-    std::ostringstream key;
-    key << QuantizeToScaledInt(position[0].get<double>(), 100000.0) << ','
-        << QuantizeToScaledInt(position[1].get<double>(), 100000.0) << ','
-        << QuantizeToScaledInt(position[2].get<double>(), 100000.0);
-
+    std::vector<std::pair<int, double>> weights;
     if (vertex.contains("weights") && vertex["weights"].is_array())
     {
-        std::vector<std::pair<int, int64_t>> weights;
-        weights.reserve(vertex["weights"].size());
-
         for (const auto& entry : vertex["weights"])
         {
             if (!entry.is_array() || entry.size() < 2)
                 continue;
-
-            const int joint_index = entry[0].get<int>();
-            const double weight_value = entry[1].get<double>();
-            weights.emplace_back(joint_index, QuantizeToScaledInt(weight_value, 1000000.0));
-        }
-
-        std::sort(weights.begin(), weights.end(), [](const auto& lhs, const auto& rhs) {
-            if (lhs.first != rhs.first)
-                return lhs.first < rhs.first;
-            return lhs.second < rhs.second;
-        });
-
-        for (const auto& [joint, weight] : weights)
-        {
-            key << '|' << joint << ':' << weight;
+            weights.emplace_back(entry[0].get<int>(), entry[1].get<double>());
         }
     }
 
-    return key.str();
+    return BuildVertexSignatureFromComponents(position[0].get<double>(),
+                                              position[1].get<double>(),
+                                              position[2].get<double>(),
+                                              weights);
 }
 
 bool CollectVertexSignatures(const Json& meshes,
@@ -223,6 +234,114 @@ bool LoadJsonFile(const fs::path& path, Json& out)
     {
         std::cerr << "failed to parse json '" << path << "': " << ex.what() << std::endl;
         return false;
+    }
+
+    return true;
+}
+
+bool LoadMeshFile(const fs::path& path, ozz::sample::Mesh& out_mesh)
+{
+    ozz::io::File file(path.string().c_str(), "rb");
+    if (!file.opened())
+    {
+        std::cerr << "failed to open mesh archive: " << path << std::endl;
+        return false;
+    }
+
+    ozz::io::IArchive archive(&file);
+    if (!archive.TestTag<ozz::sample::Mesh>())
+    {
+        std::cerr << "unexpected mesh archive contents: " << path << std::endl;
+        return false;
+    }
+
+    archive >> out_mesh;
+    return true;
+}
+
+bool CollectMeshSignatures(const ozz::sample::Mesh& mesh,
+                           std::unordered_map<std::string, size_t>& signatures,
+                           int& raw_vertex_count)
+{
+    signatures.clear();
+    raw_vertex_count = 0;
+
+    for (const ozz::sample::Mesh::Part& part : mesh.parts)
+    {
+        const int vertex_count = part.vertex_count();
+        const int influences = part.influences_count();
+        raw_vertex_count += vertex_count;
+
+        for (int vertex_index = 0; vertex_index < vertex_count; ++vertex_index)
+        {
+            const int position_offset = vertex_index * ozz::sample::Mesh::Part::kPositionsCpnts;
+            if (position_offset + 2 >= static_cast<int>(part.positions.size()))
+            {
+                std::cerr << "mesh positions array truncated" << std::endl;
+                return false;
+            }
+
+            const double px = part.positions[position_offset + 0];
+            const double py = part.positions[position_offset + 1];
+            const double pz = part.positions[position_offset + 2];
+
+            std::vector<std::pair<int, double>> weights;
+            if (influences <= 0)
+            {
+                weights.emplace_back(0, 1.0);
+            }
+            else
+            {
+                const int joint_offset = vertex_index * influences;
+                if (joint_offset + influences > static_cast<int>(part.joint_indices.size()))
+                {
+                    std::cerr << "joint indices array truncated" << std::endl;
+                    return false;
+                }
+
+                double partial_sum = 0.0;
+                for (int influence = 0; influence < influences; ++influence)
+                {
+                    const uint16_t palette_index = part.joint_indices[joint_offset + influence];
+                    int skeleton_joint = palette_index;
+                    if (!mesh.joint_remaps.empty())
+                    {
+                        if (palette_index >= mesh.joint_remaps.size())
+                        {
+                            std::cerr << "joint remap index out of bounds" << std::endl;
+                            return false;
+                        }
+                        skeleton_joint = mesh.joint_remaps[palette_index];
+                    }
+
+                    double weight = 1.0;
+                    if (influences > 1)
+                    {
+                        if (influence < influences - 1)
+                        {
+                            const int weight_offset = vertex_index * (influences - 1) + influence;
+                            if (weight_offset >= static_cast<int>(part.joint_weights.size()))
+                            {
+                                std::cerr << "joint weights array truncated" << std::endl;
+                                return false;
+                            }
+                            weight = part.joint_weights[weight_offset];
+                            partial_sum += weight;
+                        }
+                        else
+                        {
+                            weight = std::max(0.0, 1.0 - partial_sum);
+                        }
+                    }
+
+                    weights.emplace_back(skeleton_joint, weight);
+                }
+            }
+
+            const std::string signature = BuildVertexSignatureFromComponents(px, py, pz, weights);
+            if (!signature.empty())
+                signatures[signature]++;
+        }
     }
 
     return true;
@@ -925,6 +1044,76 @@ bool TestGenerateMesh()
     return ConvertMesh(true);
 }
 
+bool TestMeshVerticesDeduplicated()
+{
+    if (!ConvertMesh(true))
+        return false;
+
+    Json baseline_json;
+    if (!LoadJsonFile(BlenderRestPoseBaselinePath(), baseline_json))
+        return false;
+
+    size_t baseline_total_vertices = 0;
+    std::unordered_map<std::string, size_t> baseline_signatures;
+    if (!CollectVertexSignatures(baseline_json["meshes"], baseline_total_vertices, baseline_signatures))
+        return false;
+
+    ozz::sample::Mesh mesh;
+    if (!LoadMeshFile(MeshOutputPath(), mesh))
+        return false;
+
+    std::unordered_map<std::string, size_t> mesh_signatures;
+    int mesh_vertex_count = 0;
+    if (!CollectMeshSignatures(mesh, mesh_signatures, mesh_vertex_count))
+        return false;
+
+    bool ok = true;
+
+    if (baseline_total_vertices != static_cast<size_t>(kExpectedStalkerHeroVertexCount))
+    {
+        std::cerr << "baseline mesh vertex total " << baseline_total_vertices
+                  << " differs from expected " << kExpectedStalkerHeroVertexCount << std::endl;
+        ok = false;
+    }
+
+    if (baseline_signatures.size() != baseline_total_vertices)
+    {
+        std::cerr << "baseline signature count " << baseline_signatures.size()
+                  << " does not match vertex total " << baseline_total_vertices << std::endl;
+        ok = false;
+    }
+
+    if (mesh_vertex_count != kExpectedStalkerHeroVertexCount)
+    {
+        std::cerr << "converter mesh contains " << mesh_vertex_count
+                  << " vertices, expected " << kExpectedStalkerHeroVertexCount << std::endl;
+        ok = false;
+    }
+
+    size_t duplicate_instances = 0;
+    for (const auto& [_, count] : mesh_signatures)
+    {
+        if (count > 1)
+            duplicate_instances += count - 1;
+    }
+
+    if (duplicate_instances > 0)
+    {
+        std::cerr << "converter mesh still contains " << duplicate_instances
+                  << " duplicate vertex instances" << std::endl;
+        ok = false;
+    }
+
+    if (mesh_signatures.size() != static_cast<size_t>(mesh_vertex_count))
+    {
+        std::cerr << "unique vertex signature count " << mesh_signatures.size()
+                  << " does not match reported vertex count " << mesh_vertex_count << std::endl;
+        ok = false;
+    }
+
+    return ok;
+}
+
 bool TestViewerMeshMatchesBaseline()
 {
     if (!EnsureSkeletonGenerated())
@@ -1568,9 +1757,10 @@ struct TestCase
 
 int main()
 {
-    const std::array<TestCase, 9> tests = {{
+    const std::array<TestCase, 10> tests = {{
         {"GenerateSkeleton", &TestGenerateSkeleton, false},
         {"GenerateMesh", &TestGenerateMesh, false},
+        {"MeshVerticesDeduplicated", &TestMeshVerticesDeduplicated, false},
         {"ViewerMeshMatchesBaseline", &TestViewerMeshMatchesBaseline, false},
         {"BindPoseMatchesBlender", &TestBindPoseMatchesBlender, false},
         {"ConvertAnimationProducesFile", &TestConvertAnimationProducesFile, false},

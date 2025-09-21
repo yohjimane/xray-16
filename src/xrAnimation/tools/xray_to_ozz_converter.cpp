@@ -413,6 +413,68 @@ struct MeshVertex
     uint8_t influence_count = 0;
 };
 
+struct VertexDedupKey
+{
+    std::array<int32_t, 3> position{0, 0, 0};
+    std::array<uint16_t, 4> bones{0, 0, 0, 0};
+    std::array<int32_t, 4> weights{0, 0, 0, 0};
+    uint8_t influence_count = 0;
+    uint8_t back_side = 0;
+
+    bool operator==(const VertexDedupKey& other) const noexcept
+    {
+        return influence_count == other.influence_count && back_side == other.back_side &&
+               position == other.position && bones == other.bones && weights == other.weights;
+    }
+};
+
+struct VertexDedupKeyHasher
+{
+    size_t operator()(const VertexDedupKey& key) const noexcept
+    {
+        size_t hash = 1469598103934665603ull;
+        auto combine = [&hash](size_t value) {
+            hash ^= value;
+            hash *= 1099511628211ull;
+        };
+
+        combine(std::hash<uint8_t>{}(key.influence_count));
+        combine(std::hash<uint8_t>{}(key.back_side));
+        for (int32_t component : key.position)
+            combine(std::hash<int32_t>{}(component));
+        for (uint16_t bone : key.bones)
+            combine(std::hash<uint16_t>{}(bone));
+        for (int32_t weight : key.weights)
+            combine(std::hash<int32_t>{}(weight));
+        return hash;
+    }
+};
+
+struct PositionQuantizedKey
+{
+    std::array<int32_t, 3> components{0, 0, 0};
+
+    bool operator==(const PositionQuantizedKey& other) const noexcept
+    {
+        return components == other.components;
+    }
+};
+
+struct PositionQuantizedHasher
+{
+    size_t operator()(const PositionQuantizedKey& key) const noexcept
+    {
+        size_t hash = 1469598103934665603ull;
+        auto combine = [&hash](size_t value) {
+            hash ^= value;
+            hash *= 1099511628211ull;
+        };
+        for (int32_t component : key.components)
+            combine(std::hash<int32_t>{}(component));
+        return hash;
+    }
+};
+
 struct ConvertedVertex
 {
     std::array<float, 3> position{0.f, 0.f, 0.f};
@@ -883,6 +945,202 @@ std::vector<uint16_t> read_mesh_indices(const Chunk& chunk)
     for (uint32_t idx = 0; idx < index_count; ++idx)
         indices.push_back(reader.read<u16>());
     return indices;
+}
+
+constexpr float kPositionQuantizeScale = 100000.f;
+constexpr float kWeightQuantizeScale = 1000000.f;
+
+PositionQuantizedKey quantize_position(const Fvector& position)
+{
+    PositionQuantizedKey key;
+    key.components[0] = static_cast<int32_t>(std::llround(position.x * kPositionQuantizeScale));
+    key.components[1] = static_cast<int32_t>(std::llround(position.y * kPositionQuantizeScale));
+    key.components[2] = static_cast<int32_t>(std::llround(position.z * kPositionQuantizeScale));
+    return key;
+}
+
+VertexDedupKey make_dedup_key(const MeshVertex& vertex, uint8_t back_side_flag)
+{
+    VertexDedupKey key;
+    key.position = quantize_position(vertex.position).components;
+    key.influence_count = vertex.influence_count;
+    key.back_side = back_side_flag;
+
+    for (size_t idx = 0; idx < key.bones.size(); ++idx)
+    {
+        if (idx < vertex.influence_count)
+        {
+            key.bones[idx] = vertex.bones[idx];
+            key.weights[idx] = static_cast<int32_t>(std::llround(vertex.weights[idx] * kWeightQuantizeScale));
+        }
+        else
+        {
+            key.bones[idx] = 0;
+            key.weights[idx] = 0;
+        }
+    }
+
+    return key;
+}
+
+std::vector<uint8_t> compute_back_face_flags(const std::vector<MeshVertex>& vertices)
+{
+    std::unordered_map<PositionQuantizedKey, std::vector<size_t>, PositionQuantizedHasher> position_groups;
+    position_groups.reserve(vertices.size());
+
+    for (size_t index = 0; index < vertices.size(); ++index)
+    {
+        position_groups[quantize_position(vertices[index].position)].push_back(index);
+    }
+
+    std::vector<uint8_t> back_flags(vertices.size(), 0);
+
+    for (const auto& group : position_groups)
+    {
+        const auto& indices = group.second;
+        std::vector<Fvector> reference_normals;
+        reference_normals.reserve(indices.size());
+
+        for (size_t vertex_index : indices)
+        {
+            const Fvector& normal = vertices[vertex_index].normal;
+            bool is_back_side = false;
+
+            for (const Fvector& reference : reference_normals)
+            {
+                const float dot = normal.x * reference.x + normal.y * reference.y + normal.z * reference.z;
+                if (dot <= -0.999f)
+                {
+                    is_back_side = true;
+                    break;
+                }
+            }
+
+            if (is_back_side)
+            {
+                back_flags[vertex_index] = 1;
+            }
+            else
+            {
+                reference_normals.push_back(normal);
+            }
+        }
+    }
+
+    return back_flags;
+}
+
+void deduplicate_vertices(std::vector<MeshVertex>& vertices, std::vector<uint16_t>& indices)
+{
+    if (vertices.empty())
+        return;
+
+    const size_t original_vertex_count = vertices.size();
+
+    const std::vector<uint8_t> back_flags = compute_back_face_flags(vertices);
+
+    std::unordered_map<VertexDedupKey, uint32_t, VertexDedupKeyHasher> map;
+    map.reserve(vertices.size());
+
+    std::vector<MeshVertex> deduplicated;
+    deduplicated.reserve(vertices.size());
+
+    std::vector<uint16_t> remap(vertices.size(), 0);
+    std::vector<uint32_t> merge_counts;
+    merge_counts.reserve(vertices.size());
+
+    for (size_t idx = 0; idx < vertices.size(); ++idx)
+    {
+        const VertexDedupKey key = make_dedup_key(vertices[idx], back_flags[idx]);
+        const auto [it, inserted] = map.emplace(key, static_cast<uint32_t>(deduplicated.size()));
+
+        if (inserted)
+        {
+            deduplicated.push_back(vertices[idx]);
+            merge_counts.push_back(1);
+        }
+        else
+        {
+            const uint32_t target = it->second;
+            MeshVertex& existing = deduplicated[target];
+            const uint32_t count = ++merge_counts[target];
+
+            const float inv = 1.f / static_cast<float>(count);
+            const float prev = static_cast<float>(count - 1);
+
+            existing.position.x = (existing.position.x * prev + vertices[idx].position.x) * inv;
+            existing.position.y = (existing.position.y * prev + vertices[idx].position.y) * inv;
+            existing.position.z = (existing.position.z * prev + vertices[idx].position.z) * inv;
+
+            existing.normal.x = (existing.normal.x * prev + vertices[idx].normal.x) * inv;
+            existing.normal.y = (existing.normal.y * prev + vertices[idx].normal.y) * inv;
+            existing.normal.z = (existing.normal.z * prev + vertices[idx].normal.z) * inv;
+
+            existing.tangent.x = (existing.tangent.x * prev + vertices[idx].tangent.x) * inv;
+            existing.tangent.y = (existing.tangent.y * prev + vertices[idx].tangent.y) * inv;
+            existing.tangent.z = (existing.tangent.z * prev + vertices[idx].tangent.z) * inv;
+
+            existing.binormal.x = (existing.binormal.x * prev + vertices[idx].binormal.x) * inv;
+            existing.binormal.y = (existing.binormal.y * prev + vertices[idx].binormal.y) * inv;
+            existing.binormal.z = (existing.binormal.z * prev + vertices[idx].binormal.z) * inv;
+
+            existing.uv.x = (existing.uv.x * prev + vertices[idx].uv.x) * inv;
+            existing.uv.y = (existing.uv.y * prev + vertices[idx].uv.y) * inv;
+        }
+
+        remap[idx] = it->second;
+    }
+
+    for (auto& vertex : deduplicated)
+    {
+        const float normal_length = std::sqrt(vertex.normal.x * vertex.normal.x +
+                                              vertex.normal.y * vertex.normal.y +
+                                              vertex.normal.z * vertex.normal.z);
+        if (normal_length > std::numeric_limits<float>::epsilon())
+        {
+            const float inv = 1.f / normal_length;
+            vertex.normal.x *= inv;
+            vertex.normal.y *= inv;
+            vertex.normal.z *= inv;
+        }
+
+        const float tangent_length = std::sqrt(vertex.tangent.x * vertex.tangent.x +
+                                               vertex.tangent.y * vertex.tangent.y +
+                                               vertex.tangent.z * vertex.tangent.z);
+        if (tangent_length > std::numeric_limits<float>::epsilon())
+        {
+            const float inv = 1.f / tangent_length;
+            vertex.tangent.x *= inv;
+            vertex.tangent.y *= inv;
+            vertex.tangent.z *= inv;
+        }
+
+        const float binormal_length = std::sqrt(vertex.binormal.x * vertex.binormal.x +
+                                                vertex.binormal.y * vertex.binormal.y +
+                                                vertex.binormal.z * vertex.binormal.z);
+        if (binormal_length > std::numeric_limits<float>::epsilon())
+        {
+            const float inv = 1.f / binormal_length;
+            vertex.binormal.x *= inv;
+            vertex.binormal.y *= inv;
+            vertex.binormal.z *= inv;
+        }
+    }
+
+    for (uint16_t& index : indices)
+    {
+        if (index >= remap.size())
+            throw std::runtime_error("index references vertex outside range during deduplication");
+        index = remap[index];
+    }
+
+    vertices.swap(deduplicated);
+
+    if (vertices.size() != original_vertex_count)
+    {
+        std::cout << "Deduplicated mesh vertices: " << original_vertex_count << " -> "
+                  << vertices.size() << std::endl;
+    }
 }
 
 ozz::sample::Mesh build_mesh(const std::vector<MeshVertex>& vertices,
@@ -1774,6 +2032,8 @@ void convert_mesh(const MeshConfig& config)
         auto base_indices = read_mesh_indices(indices_it->second);
         all_indices.assign(base_indices.begin(), base_indices.end());
     }
+
+    deduplicate_vertices(all_vertices, all_indices);
 
     auto mesh = build_mesh(all_vertices, all_indices, bones);
 

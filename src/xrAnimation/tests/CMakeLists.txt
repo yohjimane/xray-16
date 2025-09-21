@@ -17,6 +17,7 @@ target_link_libraries(xrAnimation_converter_tests PRIVATE
     ozz_animation
     ozz_animation_offline
     ozz_base
+    sample_framework
     xrEngine
     xrScriptEngine)
 
