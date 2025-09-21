@@ -1059,18 +1059,14 @@ TEST(OzzKinematicsPose, MatchesLegacyBindPoseTranslations)
 
     ASSERT_EQ(legacy_sample->world_space_transforms.size(), static_cast<size_t>(kinematics.LL_BoneCount()));
 
-    const std::vector<std::string> sentinel_bones = { "bip01", "bip01_pelvis", "bip01_spine", "bip01_head", "bip01_l_hand", "bip01_r_hand" };
-
-    for (const auto& bone_name : sentinel_bones)
+    for (const auto& [bone_name, expected] : legacy_sample->world_space_transforms)
     {
-        const auto legacy_it = legacy_sample->world_space_transforms.find(bone_name);
-        ASSERT_NE(legacy_it, legacy_sample->world_space_transforms.end()) << "Legacy skeleton missing " << bone_name;
-
         const u16 bone_id = kinematics.LL_BoneID(bone_name.c_str());
         ASSERT_NE(bone_id, BI_NONE) << "OzzKinematics missing bone: " << bone_name;
 
         const Fmatrix& transform = kinematics.LL_GetTransform(bone_id);
-        const Fmatrix& expected = legacy_it->second;
+
+        SCOPED_TRACE(::testing::Message() << "bone=" << bone_name);
 
         EXPECT_NEAR(transform.c.x, expected.c.x, 1e-4f) << "Bone: " << bone_name;
         EXPECT_NEAR(transform.c.y, expected.c.y, 1e-4f) << "Bone: " << bone_name;
@@ -1133,18 +1129,13 @@ TEST(OzzKinematicsParity, AnimationPoseMatchesLegacySkeleton)
 
     ASSERT_EQ(legacy_sample->world_space_transforms.size(), ozz_sample->world_space_transforms.size()) << "Bone count mismatch between sampled poses";
 
-    const std::vector<std::string> sentinel_bones = { "bip01", "bip01_spine", "bip01_head", "bip01_l_hand", "bip01_r_hand" };
     constexpr float kAnimationTolerance = 5e-4f; // Conversion quantization + basis changes introduce ~2e-4 deltas.
 
-    for (const auto& bone_name : sentinel_bones)
+    for (const auto& [bone_name, legacy_transform] : legacy_sample->world_space_transforms)
     {
-        const auto legacy_it = legacy_sample->world_space_transforms.find(bone_name);
-        ASSERT_NE(legacy_it, legacy_sample->world_space_transforms.end()) << "Legacy sample missing bone " << bone_name;
-
         const auto ozz_it = ozz_sample->world_space_transforms.find(bone_name);
         ASSERT_NE(ozz_it, ozz_sample->world_space_transforms.end()) << "Ozz sample missing bone " << bone_name;
 
-        const Fmatrix& legacy_transform = legacy_it->second;
         const Fmatrix& ozz_transform = ozz_it->second;
 
         const float dx = legacy_transform.c.x - ozz_transform.c.x;
