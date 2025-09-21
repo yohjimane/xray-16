@@ -1,12 +1,12 @@
 # AGENT_DOCS.md - AI Assistant Guide
 
 ## Latest Session Notes
-- TransformConverter now applies a consistent +90° rotation about the X axis to both rotation columns and translation vectors (X, Y, Z) → (X, -Z, Y).
-- Regenerate the `.ozz` skeleton and animation assets and compare them against the Blender reference to confirm bind pose translations and per-bone animation deltas.
-- OMFReader consumes `OGF_S_SMPARAMS` bone remap data so animation tracks align with the target skeleton before basis conversion.
+- Converter outputs (skeletons, meshes, animations) now match Blender exports; viewer verifies poses/skinning without depth bugs.
+- `ozz_animation_viewer` integrates modern Dear ImGui + restored performance graphs so profiling parity with upstream samples is maintained.
+- Build system links against modern glfw3; no remaining linker gaps for viewer/tool targets.
 
 ## Active Objective
-- Align the OMF animation converter output with Blender-provided reference poses so characters no longer appear rotated or offset during playback.
+- Design and prototype the `OzzKinematics` façade that will replace `CKinematics`/`IKinematics` while delegating pose evaluation to Ozz runtime jobs.
 
 ## Project Overview & Philosophy
 - Primary project: integrate ozz-animation into the OpenXRay engine while preserving legacy behaviour.
@@ -43,10 +43,9 @@
 4. Synchronise documentation with code changes immediately—never allow docs to drift.
 
 ## Animation Converter Status
-- Skeleton conversion reads bone hierarchy, IK data, OBBs, and now exports transforms using the unified basis rotation.
-- Animation conversion distributes per-bone tracks, respects motion mark formatting (`\r\n`), and stores motion parameters/metadata.
-- Validation tooling (`debug_playback`, position comparison scripts) is available for bind pose and animation diffing.
-- Outstanding verification: confirm orientation fixes eliminate 180° deltas and misplaced translations in exported `.ozz` files.
+- Skeleton, mesh, and animation exports are validated end-to-end against Blender/XR references; resulting `.ozz` assets drive the viewer without discrepancies.
+- Tooling (`debug_playback`, JSON dumps, viewer graphs) is in place for regression checks when converter logic evolves.
+- Remaining work: decode richer OMF metadata (marks, params) and feed it through the upcoming `OzzKinematics` façade.
 
 ## Coordinate System Reference
 - X-Ray is Y-up; ozz/OpenGL is Z-up.

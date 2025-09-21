@@ -22,6 +22,10 @@ include_directories(
 set(SOURCES
     stdafx.cpp
     stdafx.h
+    xrAnimation.cpp
+    xrAnimation.h
+    OzzKinematics.cpp
+    OzzKinematics.h
 )
 
 # Create static library
