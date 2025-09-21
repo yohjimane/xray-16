@@ -1222,7 +1222,8 @@ std::vector<uint8_t> compute_back_face_flags(const std::vector<MeshVertex>& vert
     return back_flags;
 }
 
-void deduplicate_vertices(std::vector<MeshVertex>& vertices, std::vector<uint16_t>& indices)
+[[maybe_unused]] void deduplicate_vertices(std::vector<MeshVertex>& vertices,
+                                          std::vector<uint16_t>& indices)
 {
     if (vertices.empty())
         return;
@@ -2218,7 +2219,6 @@ void convert_mesh(const MeshConfig& config)
     for (size_t surface_index = 0; surface_index < surfaces.size(); ++surface_index)
     {
         auto& surface = surfaces[surface_index];
-        deduplicate_vertices(surface.vertices, surface.indices);
         meshes.push_back(build_mesh(surface.vertices, surface.indices, bones, surface.metadata));
     }
 

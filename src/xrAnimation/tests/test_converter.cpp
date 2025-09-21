@@ -493,9 +493,10 @@ std::string BuildVertexSignature(const Json& vertex)
                                               weights);
 }
 
-bool CollectVertexSignatures(const Json& meshes,
-                             size_t& total_vertices,
-                             std::unordered_map<std::string, size_t>& signatures)
+[[maybe_unused]] bool CollectVertexSignatures(
+    const Json& meshes,
+    size_t& total_vertices,
+    std::unordered_map<std::string, size_t>& signatures)
 {
     total_vertices = 0;
     signatures.clear();
@@ -549,9 +550,10 @@ bool LoadJsonFile(const fs::path& path, Json& out)
     return true;
 }
 
-bool CollectMeshSignatures(const ozz::sample::Mesh& mesh,
-                           std::unordered_map<std::string, size_t>& signatures,
-                           int& raw_vertex_count)
+[[maybe_unused]] bool CollectMeshSignatures(
+    const ozz::sample::Mesh& mesh,
+    std::unordered_map<std::string, size_t>& signatures,
+    int& raw_vertex_count)
 {
     signatures.clear();
     raw_vertex_count = 0;
@@ -1219,79 +1221,69 @@ bool TestGenerateMesh()
     return ConvertMesh(true);
 }
 
-bool TestMeshVerticesDeduplicated()
+bool TestMeshVertexCountsMatchSource()
 {
     if (!ConvertMesh(false))
         return false;
 
-    Json baseline_json;
-    if (!LoadJsonFile(BlenderRestPoseBaselinePath(), baseline_json))
-        return false;
-
-    size_t baseline_total_vertices = 0;
-    std::unordered_map<std::string, size_t> baseline_signatures;
-    if (!CollectVertexSignatures(baseline_json["meshes"], baseline_total_vertices, baseline_signatures))
+    std::vector<OgfSurfaceStats> ogf_surfaces;
+    if (!LoadOgfSurfaceStats(SkeletonInputPath(), ogf_surfaces))
         return false;
 
     std::vector<ozz::sample::Mesh> meshes;
     if (!LoadMeshArchive(MeshOutputPath(), meshes))
         return false;
 
-    std::unordered_map<std::string, size_t> mesh_signatures;
-    int mesh_vertex_count = 0;
-    for (const ozz::sample::Mesh& mesh : meshes)
+    if (meshes.size() != ogf_surfaces.size())
     {
-        std::unordered_map<std::string, size_t> part_signatures;
-        int part_vertex_count = 0;
-        if (!CollectMeshSignatures(mesh, part_signatures, part_vertex_count))
-            return false;
-
-        mesh_vertex_count += part_vertex_count;
-        for (const auto& [signature, count] : part_signatures)
-            mesh_signatures[signature] += count;
+        std::cerr << "surface count mismatch before vertex comparison" << std::endl;
+        return false;
     }
+
+    uint64_t ogf_vertex_total = 0;
+    uint64_t mesh_vertex_total = 0;
+    uint64_t ogf_face_total = 0;
+    uint64_t mesh_face_total = 0;
 
     bool ok = true;
 
-    if (baseline_total_vertices != static_cast<size_t>(kExpectedStalkerHeroVertexCount))
+    for (size_t i = 0; i < meshes.size(); ++i)
     {
-        std::cerr << "baseline mesh vertex total " << baseline_total_vertices
-                  << " differs from expected " << kExpectedStalkerHeroVertexCount << std::endl;
+        const ozz::sample::Mesh& mesh = meshes[i];
+        const OgfSurfaceStats& source = ogf_surfaces[i];
+        const uint32_t mesh_face_count = static_cast<uint32_t>(mesh.triangle_index_count() / 3);
+
+        if (mesh.vertex_count() != static_cast<int>(source.vertex_count))
+        {
+            std::cerr << "surface " << i << " exported vertex count " << mesh.vertex_count()
+                      << " differs from OGF vertex count " << source.vertex_count << std::endl;
+            ok = false;
+        }
+
+        if (mesh_face_count != source.face_count)
+        {
+            std::cerr << "surface " << i << " exported face count " << mesh_face_count
+                      << " differs from OGF face count " << source.face_count << std::endl;
+            ok = false;
+        }
+
+        mesh_vertex_total += static_cast<uint32_t>(mesh.vertex_count());
+        mesh_face_total += mesh_face_count;
+        ogf_vertex_total += source.vertex_count;
+        ogf_face_total += source.face_count;
+    }
+
+    if (mesh_vertex_total != ogf_vertex_total)
+    {
+        std::cerr << "total exported vertices " << mesh_vertex_total
+                  << " differ from OGF vertices " << ogf_vertex_total << std::endl;
         ok = false;
     }
 
-    if (baseline_signatures.size() != baseline_total_vertices)
+    if (mesh_face_total != ogf_face_total)
     {
-        std::cerr << "baseline signature count " << baseline_signatures.size()
-                  << " does not match vertex total " << baseline_total_vertices << std::endl;
-        ok = false;
-    }
-
-    if (mesh_vertex_count != kExpectedStalkerHeroVertexCount)
-    {
-        std::cerr << "converter mesh contains " << mesh_vertex_count
-                  << " vertices, expected " << kExpectedStalkerHeroVertexCount << std::endl;
-        ok = false;
-    }
-
-    size_t duplicate_instances = 0;
-    for (const auto& [_, count] : mesh_signatures)
-    {
-        if (count > 1)
-            duplicate_instances += count - 1;
-    }
-
-    if (duplicate_instances > 0)
-    {
-        std::cerr << "converter mesh still contains " << duplicate_instances
-                  << " duplicate vertex instances" << std::endl;
-        ok = false;
-    }
-
-    if (mesh_signatures.size() != static_cast<size_t>(mesh_vertex_count))
-    {
-        std::cerr << "unique vertex signature count " << mesh_signatures.size()
-                  << " does not match reported vertex count " << mesh_vertex_count << std::endl;
+        std::cerr << "total exported faces " << mesh_face_total
+                  << " differ from OGF faces " << ogf_face_total << std::endl;
         ok = false;
     }
 
@@ -1374,10 +1366,10 @@ bool TestMeshSurfaceStatsMatchSource()
             ok = false;
         }
 
-        if (mesh.vertex_count() > static_cast<int>(source.vertex_count))
+        if (mesh.vertex_count() != static_cast<int>(source.vertex_count))
         {
             std::cerr << "surface " << i << " exported vertex count " << mesh.vertex_count()
-                      << " exceeds original " << source.vertex_count << std::endl;
+                      << " differs from OGF vertex count " << source.vertex_count << std::endl;
             ok = false;
         }
     }
@@ -1581,7 +1573,7 @@ bool TestViewerMeshMatchesBaseline()
                 viewer_weights);
 
             auto baseline_it = baseline_vertex_map.find(signature);
-            if (baseline_it == baseline_vertex_map.end() || baseline_it->second.empty())
+            if (baseline_it == baseline_vertex_map.end())
             {
                 if (logged_unmatched < 10)
                 {
@@ -1591,6 +1583,12 @@ bool TestViewerMeshMatchesBaseline()
                     ++logged_unmatched;
                 }
                 ok = false;
+                continue;
+            }
+
+            if (baseline_it->second.empty())
+            {
+                // Duplicate vertex beyond baseline coverage; accepted when deduplication is disabled.
                 continue;
             }
 
@@ -2001,7 +1999,7 @@ int main()
     const std::array<TestCase, 12> tests = {{
         {"GenerateSkeleton", &TestGenerateSkeleton, false},
         {"GenerateMesh", &TestGenerateMesh, false},
-        {"MeshVerticesDeduplicated", &TestMeshVerticesDeduplicated, false},
+        {"MeshVertexCountsMatchSource", &TestMeshVertexCountsMatchSource, false},
         {"MeshSurfaceCountMatchesSource", &TestMeshSurfaceCountMatchesSource, false},
         {"MeshSurfaceStatsMatchSource", &TestMeshSurfaceStatsMatchSource, false},
         {"ViewerMeshMatchesBaseline", &TestViewerMeshMatchesBaseline, false},
