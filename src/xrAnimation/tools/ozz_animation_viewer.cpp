@@ -173,6 +173,23 @@ std::array<float, 3> ConvertOzzToBlender(float x, float y, float z) {
   return {x, -z, y};
 }
 
+std::string BuildMeshDisplayName(const std::string& base_label,
+                                 size_t mesh_index,
+                                 size_t mesh_count) {
+  std::ostringstream oss;
+  oss.imbue(std::locale::classic());
+  if (!base_label.empty()) {
+    oss << base_label;
+    if (mesh_count > 1) {
+      oss << '_' << mesh_index;
+    }
+    return oss.str();
+  }
+
+  oss << "mesh_" << mesh_index;
+  return oss.str();
+}
+
 }  // namespace
 
 struct MotionMarkData {
@@ -479,7 +496,12 @@ class PlaybackSampleApplication : public ozz::sample::Application {
     }
 
     if (draw_mesh_ && !meshes_.empty()) {
-      for (const ozz::sample::Mesh& mesh : meshes_) {
+      const bool visibility_missing = mesh_visibility_.size() != meshes_.size();
+      for (size_t mesh_index = 0; mesh_index < meshes_.size(); ++mesh_index) {
+        if (!visibility_missing && mesh_visibility_[mesh_index] == 0) {
+          continue;
+        }
+        const ozz::sample::Mesh& mesh = meshes_[mesh_index];
         const size_t palette_size = mesh.joint_remaps.size();
         if (palette_size > skinning_matrices_.size()) {
           continue;
@@ -577,10 +599,13 @@ class PlaybackSampleApplication : public ozz::sample::Application {
         }
       }
       draw_mesh_ = true;
+      RefreshMeshDisplayState();
     } else {
       meshes_.clear();
       skinning_matrices_.clear();
       draw_mesh_ = false;
+      mesh_names_.clear();
+      mesh_visibility_.clear();
     }
 
     if (!ComputeBindPoseModelMatrices()) {
@@ -767,6 +792,23 @@ class PlaybackSampleApplication : public ozz::sample::Application {
           _im_gui->DoCheckBox("Show colors", &renderer_options_.colors);
           _im_gui->DoCheckBox("Wireframe", &renderer_options_.wireframe);
           _im_gui->DoCheckBox("Skip skinning", &renderer_options_.skip_skinning);
+
+          if (mesh_names_.size() != meshes_.size() ||
+              mesh_visibility_.size() != meshes_.size()) {
+            RefreshMeshDisplayState();
+          }
+
+          if (!meshes_.empty()) {
+            _im_gui->DoLabel("Mesh visibility:");
+          }
+
+          for (size_t mesh_index = 0; mesh_index < meshes_.size(); ++mesh_index) {
+            const std::string& mesh_name = mesh_names_[mesh_index];
+            bool visible = mesh_visibility_[mesh_index] != 0;
+            if (_im_gui->DoCheckBox(mesh_name.c_str(), &visible)) {
+              mesh_visibility_[mesh_index] = visible ? 1 : 0;
+            }
+          }
         }
       }
     }
@@ -929,6 +971,8 @@ class PlaybackSampleApplication : public ozz::sample::Application {
   // Cached labels for reporting/exporting.
   std::string skeleton_label_;
   std::string mesh_label_;
+  std::vector<std::string> mesh_names_;
+  std::vector<uint8_t> mesh_visibility_;
 
   // Optional dump controls.
   std::string skinning_dump_path_;
@@ -948,6 +992,35 @@ class PlaybackSampleApplication : public ozz::sample::Application {
   bool show_bone_debug_ = true;
   int bone_display_limit_ = 16;
   bool space_was_down_ = false;
+
+  void RefreshMeshDisplayState() {
+    mesh_names_.clear();
+    mesh_visibility_.assign(meshes_.size(), 1);
+
+    mesh_names_.reserve(meshes_.size());
+    const size_t mesh_count = meshes_.size();
+    for (size_t mesh_index = 0; mesh_index < mesh_count; ++mesh_index) {
+      const ozz::sample::Mesh& mesh = meshes_[mesh_index];
+      const ozz::sample::XRayMeshMetadata& metadata = mesh.xray_metadata;
+
+      std::string display_name;
+      if (!metadata.texture_path.empty()) {
+        display_name = metadata.texture_path;
+      } else if (!metadata.shader_name.empty()) {
+        display_name = metadata.shader_name;
+      }
+
+      if (!display_name.empty()) {
+        if (mesh_count > 1) {
+          display_name += "_" + std::to_string(mesh_index);
+        }
+      } else {
+        display_name = BuildMeshDisplayName(mesh_label_, mesh_index, mesh_count);
+      }
+
+      mesh_names_.push_back(std::move(display_name));
+    }
+  }
 
   bool ComputeBindPoseModelMatrices() {
     if (skeleton_.num_joints() == 0) {
@@ -1085,17 +1158,65 @@ class PlaybackSampleApplication : public ozz::sample::Application {
       }
 
       file << "    {\n";
-      file << "      \"name\": \"";
-      if (!mesh_label_.empty()) {
-        file << EscapeJsonString(mesh_label_.c_str());
-        if (meshes_.size() > 1) {
-          file << "_" << mesh_index;
-        }
-      } else {
-        file << "mesh_" << mesh_index;
-      }
-      file << "\",\n";
+      const std::string mesh_name =
+          mesh_names_.size() > mesh_index
+              ? mesh_names_[mesh_index]
+              : BuildMeshDisplayName(mesh_label_, mesh_index, meshes_.size());
+      file << "      \"name\": \""
+           << EscapeJsonString(mesh_name.c_str()) << "\",\n";
       file << "      \"vertex_count\": " << mesh.vertex_count() << ",\n";
+      const ozz::sample::XRayMeshMetadata& xray = mesh.xray_metadata;
+      file << "      \"xray\": {\n";
+      file << "        \"ogf_type\": " << static_cast<int>(xray.ogf_type) << ",\n";
+      file << "        \"original_vertex_count\": " << xray.original_vertex_count << ",\n";
+      file << "        \"original_face_count\": " << xray.original_face_count << ",\n";
+      file << "        \"texture_path\": ";
+      if (!xray.texture_path.empty()) {
+        file << "\"" << EscapeJsonString(xray.texture_path.c_str()) << "\"";
+      } else {
+        file << "null";
+      }
+      file << ",\n";
+      file << "        \"shader_name\": ";
+      if (!xray.shader_name.empty()) {
+        file << "\"" << EscapeJsonString(xray.shader_name.c_str()) << "\"";
+      } else {
+        file << "null";
+      }
+      file << ",\n";
+      file << "        \"texture_link\": ";
+      if (xray.texture_link_present) {
+        file << xray.texture_link;
+      } else {
+        file << "null";
+      }
+      file << ",\n";
+      file << "        \"shader_link\": ";
+      if (xray.shader_link_present) {
+        file << xray.shader_link;
+      } else {
+        file << "null";
+      }
+      file << ",\n";
+      file << "        \"lod_visuals\": [";
+      for (size_t lod_index = 0; lod_index < xray.lod_visuals.size(); ++lod_index) {
+        file << (lod_index == 0 ? "" : ", ")
+             << "\"" << EscapeJsonString(xray.lod_visuals[lod_index].c_str())
+             << "\"";
+      }
+      file << "],\n";
+      file << "        \"lod_data_bytes\": " << xray.lod_data.size() << ",\n";
+      file << "        \"progressive_collapse_count\": "
+           << xray.progressive_collapse_count << ",\n";
+      file << "        \"progressive_data_bytes\": "
+           << xray.progressive_data.size() << ",\n";
+      file << "        \"child_links\": [";
+      for (size_t link_index = 0; link_index < xray.child_visual_links.size();
+           ++link_index) {
+        file << (link_index == 0 ? "" : ", ") << xray.child_visual_links[link_index];
+      }
+      file << "]\n";
+      file << "      },\n";
       file << "      \"joint_palette\": [\n";
       for (size_t palette_index = 0; palette_index < palette_size;
            ++palette_index) {

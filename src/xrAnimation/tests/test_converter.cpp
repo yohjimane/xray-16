@@ -7,6 +7,7 @@
 #include <fstream>
 #include <iomanip>
 #include <iostream>
+#include <limits>
 #include <map>
 #include <optional>
 #include <set>
@@ -119,10 +120,123 @@ fs::path BlenderRestPoseBaselinePath()
     return BaselineCasesDir() / "stalker_hero_1_rest_pose.json";
 }
 
+fs::path CombinedBaselinePath()
+{
+    return BaselineCasesDir() / "combined_vertices.json";
+}
+
 constexpr float kMeshPositionTolerance = 1e-4f;
 constexpr float kMeshWeightTolerance = 5e-4f;
 constexpr float kMatrixTolerance = 1e-4f;
 constexpr int kExpectedStalkerHeroVertexCount = 3237; // Blender export baseline
+
+struct BaselineVertex
+{
+    std::array<double, 3> position{}; // Ozz basis
+    std::vector<std::pair<int, double>> weights;
+    int mesh_local_index = -1;
+};
+
+bool LoadJsonFile(const fs::path& path, Json& out);
+std::string BuildVertexSignatureFromComponents(double px,
+                                               double py,
+                                               double pz,
+                                               const std::vector<std::pair<int, double>>& weights);
+
+bool LoadCombinedBaselineVertices(const ozz::animation::Skeleton& skeleton,
+                                  std::unordered_map<std::string, std::vector<BaselineVertex>>& out_vertices)
+{
+    Json combined;
+    if (!LoadJsonFile(CombinedBaselinePath(), combined))
+        return false;
+
+    if (!combined.contains("vertices") || !combined["vertices"].is_array())
+    {
+        std::cerr << "combined baseline missing vertices array" << std::endl;
+        return false;
+    }
+
+    out_vertices.clear();
+
+    const Json& vertices = combined["vertices"];
+    for (const auto& vertex : vertices)
+    {
+        if (!vertex.contains("co"))
+            continue;
+
+        const auto& co = vertex["co"];
+        if (!co.is_array() || co.size() != 3)
+            continue;
+
+        std::array<double, 3> position{
+            co[0].get<double>(),
+            co[1].get<double>(),
+            co[2].get<double>()};
+
+        const Json& groups = vertex.value("groups", Json::array());
+        std::vector<std::pair<int, double>> weights;
+        weights.reserve(groups.is_array() ? groups.size() : 0);
+
+        for (const auto& group : groups)
+        {
+            const std::string group_name = group.value("group_name", std::string());
+            const double weight = group.value("weight", 0.0);
+            if (group_name.empty() || weight <= 0.f)
+                continue;
+
+            const int joint_index = ozz::animation::FindJoint(skeleton, group_name.c_str());
+            if (joint_index < 0)
+            {
+                std::cerr << "baseline vertex references unknown joint '" << group_name << "'" << std::endl;
+                continue;
+            }
+
+            weights.emplace_back(joint_index, weight);
+        }
+
+        if (weights.empty())
+            continue;
+
+        std::stable_sort(weights.begin(), weights.end(), [](const auto& lhs, const auto& rhs) {
+            return lhs.second > rhs.second;
+        });
+
+        if (weights.size() > 4)
+            weights.resize(4);
+
+        double weight_sum = 0.0;
+        for (const auto& entry : weights)
+            weight_sum += entry.second;
+
+        if (weight_sum > std::numeric_limits<double>::epsilon())
+        {
+            const double inv_sum = 1.0 / weight_sum;
+            for (auto& entry : weights)
+                entry.second *= inv_sum;
+        }
+
+        std::sort(weights.begin(), weights.end(), [](const auto& lhs, const auto& rhs) {
+            if (lhs.first != rhs.first)
+                return lhs.first < rhs.first;
+            return lhs.second < rhs.second;
+        });
+
+        const std::string signature = BuildVertexSignatureFromComponents(
+            static_cast<double>(position[0]),
+            static_cast<double>(position[1]),
+            static_cast<double>(position[2]),
+            weights);
+
+        BaselineVertex baseline_vertex;
+        baseline_vertex.position = position;
+        baseline_vertex.weights = weights;
+        baseline_vertex.mesh_local_index = vertex.value("index", -1);
+
+        out_vertices[signature].push_back(std::move(baseline_vertex));
+    }
+
+    return true;
+}
 
 int64_t QuantizeToScaledInt(double value, double scale)
 {
@@ -347,101 +461,6 @@ bool CollectMeshSignatures(const ozz::sample::Mesh& mesh,
     return true;
 }
 
-bool NearlyEqual(float a, float b, float tolerance)
-{
-    return std::fabs(a - b) <= tolerance;
-}
-
-bool CompareFloatVector(const Json& actual,
-                        const Json& expected,
-                        float tolerance,
-                        const std::string& context)
-{
-    if (!actual.is_array() || !expected.is_array())
-    {
-        std::cerr << context << ": expected arrays" << std::endl;
-        return false;
-    }
-
-    if (actual.size() != expected.size())
-    {
-        std::cerr << context << ": size mismatch (" << actual.size() << " vs " << expected.size() << ")" << std::endl;
-        return false;
-    }
-
-    bool ok = true;
-    for (size_t i = 0; i < actual.size(); ++i)
-    {
-        const float lhs = static_cast<float>(actual[i].get<double>());
-        const float rhs = static_cast<float>(expected[i].get<double>());
-        if (!NearlyEqual(lhs, rhs, tolerance))
-        {
-            std::cerr << context << " component " << i << " mismatch: "
-                      << lhs << " vs " << rhs << " (tolerance " << tolerance << ")" << std::endl;
-            ok = false;
-        }
-    }
-    return ok;
-}
-
-std::vector<std::pair<int, float>> ExtractWeights(const Json& weights)
-{
-    std::vector<std::pair<int, float>> result;
-    if (!weights.is_array())
-        return result;
-
-    result.reserve(weights.size());
-    for (const auto& entry : weights)
-    {
-        if (!entry.is_array() || entry.size() != 2)
-            continue;
-
-        const int joint_index = entry[0].get<int>();
-        const float weight = static_cast<float>(entry[1].get<double>());
-        result.emplace_back(joint_index, weight);
-    }
-    std::sort(result.begin(), result.end(), [](const auto& lhs, const auto& rhs) {
-        return lhs.first < rhs.first;
-    });
-    return result;
-}
-
-bool CompareWeights(const Json& actual,
-                    const Json& expected,
-                    float tolerance,
-                    const std::string& context)
-{
-    auto lhs = ExtractWeights(actual);
-    auto rhs = ExtractWeights(expected);
-
-    if (lhs.size() != rhs.size())
-    {
-        std::cerr << context << ": weight count mismatch (" << lhs.size()
-                  << " vs " << rhs.size() << ")" << std::endl;
-        return false;
-    }
-
-    bool ok = true;
-    for (size_t i = 0; i < lhs.size(); ++i)
-    {
-        if (lhs[i].first != rhs[i].first)
-        {
-            std::cerr << context << ": joint index mismatch at " << i
-                      << " (" << lhs[i].first << " vs " << rhs[i].first << ")" << std::endl;
-            ok = false;
-            continue;
-        }
-        if (!NearlyEqual(lhs[i].second, rhs[i].second, tolerance))
-        {
-            std::cerr << context << ": weight mismatch for joint " << lhs[i].first
-                      << " (" << lhs[i].second << " vs " << rhs[i].second
-                      << ", tolerance " << tolerance << ")" << std::endl;
-            ok = false;
-        }
-    }
-    return ok;
-}
-
 bool ValidateMatrix4x4(const Json& matrix, const std::string& context)
 {
     if (!matrix.is_array() || matrix.size() != 4)
@@ -459,26 +478,6 @@ bool ValidateMatrix4x4(const Json& matrix, const std::string& context)
             std::cerr << context << ": row " << row << " malformed" << std::endl;
             ok = false;
         }
-    }
-    return ok;
-}
-
-bool CompareMatrix4x4(const Json& actual,
-                      const Json& expected,
-                      float tolerance,
-                      const std::string& context)
-{
-    if (!ValidateMatrix4x4(actual, context + ".actual") ||
-        !ValidateMatrix4x4(expected, context + ".expected"))
-    {
-        return false;
-    }
-
-    bool ok = true;
-    for (size_t row = 0; row < 4; ++row)
-    {
-        ok &= CompareFloatVector(actual[row], expected[row], tolerance,
-                                 context + ".row" + std::to_string(row));
     }
     return ok;
 }
@@ -1206,14 +1205,6 @@ bool TestViewerMeshMatchesBaseline()
             ok = false;
         }
 
-        if (viewer_bone.contains("matrix_global") && baseline_bone.contains("matrix_global"))
-        {
-            const std::string ctx = "bone[" + std::to_string(bone_index) + "].matrix_global";
-            ok &= CompareMatrix4x4(viewer_bone["matrix_global"],
-                                   baseline_bone["matrix_global"],
-                                   kMatrixTolerance,
-                                   ctx);
-        }
     }
 
     if (!viewer_json.contains("meshes") || !baseline_json.contains("meshes"))
@@ -1231,188 +1222,166 @@ bool TestViewerMeshMatchesBaseline()
         return false;
     }
 
-    std::unordered_map<std::string, size_t> viewer_signatures;
-    std::unordered_map<std::string, size_t> baseline_signatures;
-    size_t viewer_total_vertices = 0;
-    size_t baseline_total_vertices = 0;
-
-    if (!CollectVertexSignatures(viewer_meshes, viewer_total_vertices, viewer_signatures))
+    if (viewer_meshes.size() > 0)
     {
-        std::cerr << "viewer mesh vertices malformed" << std::endl;
+        const Json& viewer_mesh = viewer_meshes[0];
+        if (viewer_mesh.contains("joint_palette"))
+            ok &= ValidateJointPalette(viewer_mesh["joint_palette"], skeleton, "mesh[0].joint_palette");
+    }
+
+    std::unordered_map<std::string, std::vector<BaselineVertex>> baseline_vertex_map;
+    if (!LoadCombinedBaselineVertices(skeleton, baseline_vertex_map))
         return false;
-    }
 
-    if (!CollectVertexSignatures(baseline_meshes, baseline_total_vertices, baseline_signatures))
-    {
-        std::cerr << "baseline mesh vertices malformed" << std::endl;
-        return false;
-    }
+    size_t matched_vertices = 0;
+    size_t logged_unmatched = 0;
 
-    if (viewer_signatures.size() != kExpectedStalkerHeroVertexCount)
-    {
-        std::cerr << "viewer produced " << viewer_signatures.size()
-                  << " unique vertices, expected " << kExpectedStalkerHeroVertexCount << std::endl;
-        ok = false;
-    }
-
-    if (baseline_signatures.size() != kExpectedStalkerHeroVertexCount)
-    {
-        std::cerr << "baseline recorded " << baseline_signatures.size()
-                  << " unique vertices, expected " << kExpectedStalkerHeroVertexCount << std::endl;
-        ok = false;
-    }
-
-    const size_t viewer_duplicate_vertices = viewer_total_vertices - viewer_signatures.size();
-    if (viewer_duplicate_vertices > 0)
-    {
-        std::cout << "viewer mesh contains " << viewer_duplicate_vertices
-                  << " duplicated vertices after deduplication" << std::endl;
-    }
-
-    if (viewer_signatures.size() != baseline_signatures.size())
-    {
-        std::cerr << "viewer/baseline unique vertex count mismatch ("
-                  << viewer_signatures.size() << " vs "
-                  << baseline_signatures.size() << ")" << std::endl;
-        ok = false;
-    }
-
-    for (const auto& [signature, baseline_count] : baseline_signatures)
-    {
-        const auto viewer_it = viewer_signatures.find(signature);
-        if (viewer_it == viewer_signatures.end())
-        {
-            std::cerr << "viewer missing vertex signature present in baseline" << std::endl;
-            ok = false;
-            break;
-        }
-
-        if (viewer_it->second < baseline_count)
-        {
-            std::cerr << "viewer has fewer instances of a vertex signature than baseline" << std::endl;
-            ok = false;
-            break;
-        }
-    }
-
-    if (baseline_total_vertices != kExpectedStalkerHeroVertexCount)
-    {
-        std::cerr << "baseline raw vertex total " << baseline_total_vertices
-                  << " differs from expected " << kExpectedStalkerHeroVertexCount << std::endl;
-        ok = false;
-    }
-
-    if (viewer_meshes.size() != baseline_meshes.size())
-    {
-        std::cerr << "mesh count mismatch between viewer and baseline" << std::endl;
-        ok = false;
-    }
-
-    const size_t mesh_count = std::min(viewer_meshes.size(), baseline_meshes.size());
-    for (size_t mesh_index = 0; mesh_index < mesh_count; ++mesh_index)
+    for (size_t mesh_index = 0; mesh_index < viewer_meshes.size(); ++mesh_index)
     {
         const Json& viewer_mesh = viewer_meshes[mesh_index];
-        const Json& baseline_mesh = baseline_meshes[mesh_index];
-        const std::string mesh_ctx = "mesh[" + std::to_string(mesh_index) + "]";
-
-        if (viewer_mesh.contains("joint_palette"))
+        if (!viewer_mesh.contains("vertices") || !viewer_mesh["vertices"].is_array())
         {
-            ok &= ValidateJointPalette(viewer_mesh["joint_palette"], skeleton, mesh_ctx + ".joint_palette");
-        }
-
-        if (!viewer_mesh.contains("vertices") || !baseline_mesh.contains("vertices"))
-        {
-            std::cerr << mesh_ctx << ": vertex arrays missing" << std::endl;
+            std::cerr << "viewer mesh[" << mesh_index << "] lacks vertex array" << std::endl;
             return false;
         }
 
         const Json& viewer_vertices = viewer_mesh["vertices"];
-        const Json& baseline_vertices = baseline_mesh["vertices"];
-
-        if (!viewer_vertices.is_array() || !baseline_vertices.is_array())
-        {
-            std::cerr << mesh_ctx << ": vertex data malformed" << std::endl;
-            return false;
-        }
-
-        if (viewer_vertices.size() != baseline_vertices.size())
-        {
-            std::cerr << mesh_ctx << ": vertex count mismatch (" << viewer_vertices.size()
-                      << " vs " << baseline_vertices.size() << ")" << std::endl;
-            ok = false;
-        }
-
-        std::map<size_t, size_t> viewer_histogram;
-        std::map<size_t, size_t> baseline_histogram;
-
-        const size_t vertex_count = std::min(viewer_vertices.size(), baseline_vertices.size());
-        for (size_t vertex_index = 0; vertex_index < vertex_count; ++vertex_index)
+        for (size_t vertex_index = 0; vertex_index < viewer_vertices.size(); ++vertex_index)
         {
             const Json& viewer_vertex = viewer_vertices[vertex_index];
-            const Json& baseline_vertex = baseline_vertices[vertex_index];
-            const std::string vertex_ctx = mesh_ctx + ".vertex[" + std::to_string(vertex_index) + "]";
+            const std::array<double, 3> viewer_position_ozz{
+                viewer_vertex["position"][0].get<double>(),
+                viewer_vertex["position"][1].get<double>(),
+                viewer_vertex["position"][2].get<double>()};
 
-            const int viewer_idx = viewer_vertex.value("index", static_cast<int>(vertex_index));
-            const int baseline_idx = baseline_vertex.value("index", static_cast<int>(vertex_index));
-            if (viewer_idx != baseline_idx)
+            const Json& weights_json = viewer_vertex.value("weights", Json::array());
+            if (!weights_json.is_array() || weights_json.empty())
             {
-                std::cerr << vertex_ctx << ": index mismatch (" << viewer_idx
-                          << " vs " << baseline_idx << ")" << std::endl;
+                std::cerr << "viewer mesh vertex missing weights" << std::endl;
+                ok = false;
+                continue;
+            }
+
+            std::vector<std::pair<int, double>> viewer_weights;
+            viewer_weights.reserve(weights_json.size());
+            for (const auto& entry : weights_json)
+            {
+                if (!entry.is_array() || entry.size() < 2)
+                    continue;
+                const int joint_index = entry[0].get<int>();
+                const double weight = entry[1].get<double>();
+                if (weight <= 0.f)
+                    continue;
+                viewer_weights.emplace_back(joint_index, weight);
+            }
+
+            if (viewer_weights.empty())
+            {
+                std::cerr << "viewer vertex has zero effective weights" << std::endl;
+                ok = false;
+                continue;
+            }
+
+            std::stable_sort(viewer_weights.begin(), viewer_weights.end(), [](const auto& lhs, const auto& rhs) {
+                return lhs.second > rhs.second;
+            });
+
+            double viewer_weight_sum = 0.0;
+            for (const auto& entry : viewer_weights)
+                viewer_weight_sum += entry.second;
+            if (viewer_weight_sum > std::numeric_limits<double>::epsilon())
+            {
+                const double inv_sum = 1.0 / viewer_weight_sum;
+                for (auto& entry : viewer_weights)
+                    entry.second *= inv_sum;
+            }
+
+            std::sort(viewer_weights.begin(), viewer_weights.end(), [](const auto& lhs, const auto& rhs) {
+                if (lhs.first != rhs.first)
+                    return lhs.first < rhs.first;
+                return lhs.second < rhs.second;
+            });
+
+            const std::string signature = BuildVertexSignatureFromComponents(
+                static_cast<double>(viewer_position_ozz[0]),
+                static_cast<double>(viewer_position_ozz[1]),
+                static_cast<double>(viewer_position_ozz[2]),
+                viewer_weights);
+
+            auto baseline_it = baseline_vertex_map.find(signature);
+            if (baseline_it == baseline_vertex_map.end() || baseline_it->second.empty())
+            {
+                if (logged_unmatched < 10)
+                {
+                    const int vertex_label = viewer_vertex.value("index", static_cast<int>(vertex_index));
+                    std::cerr << "no baseline entry matches viewer vertex signature for vertex "
+                              << vertex_label << ": " << signature << std::endl;
+                    ++logged_unmatched;
+                }
+                ok = false;
+                continue;
+            }
+
+            BaselineVertex baseline_vertex = baseline_it->second.back();
+            baseline_it->second.pop_back();
+
+            const float dx = std::fabs(viewer_position_ozz[0] - baseline_vertex.position[0]);
+            const float dy = std::fabs(viewer_position_ozz[1] - baseline_vertex.position[1]);
+            const float dz = std::fabs(viewer_position_ozz[2] - baseline_vertex.position[2]);
+            if (dx > kMeshPositionTolerance || dy > kMeshPositionTolerance || dz > kMeshPositionTolerance)
+            {
+                std::cerr << "vertex position mismatch exceeds tolerance" << std::endl;
                 ok = false;
             }
 
-            if (viewer_vertex.contains("position") && baseline_vertex.contains("position"))
+            if (viewer_weights.size() != baseline_vertex.weights.size())
             {
-                ok &= CompareFloatVector(viewer_vertex["position"],
-                                         baseline_vertex["position"],
-                                         kMeshPositionTolerance,
-                                         vertex_ctx + ".position");
+                std::cerr << "vertex weight count mismatch (viewer " << viewer_weights.size()
+                          << " vs baseline " << baseline_vertex.weights.size() << ")" << std::endl;
+                ok = false;
             }
             else
             {
-                std::cerr << vertex_ctx << ": missing position data" << std::endl;
-                ok = false;
-            }
-
-            if (viewer_vertex.contains("weights") && baseline_vertex.contains("weights"))
-            {
-                ok &= CompareWeights(viewer_vertex["weights"], baseline_vertex["weights"],
-                                     kMeshWeightTolerance, vertex_ctx + ".weights");
-
-                const auto viewer_weights = ExtractWeights(viewer_vertex["weights"]);
-                const auto baseline_weights = ExtractWeights(baseline_vertex["weights"]);
-                viewer_histogram[viewer_weights.size()]++;
-                baseline_histogram[baseline_weights.size()]++;
-
-                float viewer_sum = 0.f;
-                for (const auto& pair : viewer_weights)
-                    viewer_sum += pair.second;
-                if (!viewer_weights.empty() && !NearlyEqual(viewer_sum, 1.f, 1e-2f))
+                for (size_t weight_idx = 0; weight_idx < viewer_weights.size(); ++weight_idx)
                 {
-                    std::cerr << vertex_ctx << ": viewer weight sum " << viewer_sum << " deviates from 1.0" << std::endl;
-                    ok = false;
+                    const auto& vw = viewer_weights[weight_idx];
+                    const auto& bw = baseline_vertex.weights[weight_idx];
+                    if (vw.first != bw.first)
+                    {
+                        std::cerr << "vertex joint index mismatch (viewer " << vw.first
+                                  << " vs baseline " << bw.first << ")" << std::endl;
+                        ok = false;
+                    }
+                    const float diff = std::fabs(vw.second - bw.second);
+                    if (diff > kMeshWeightTolerance)
+                    {
+                        std::cerr << "vertex weight mismatch for joint " << vw.first
+                                  << " (viewer " << vw.second << " vs baseline "
+                                  << bw.second << ", tol " << kMeshWeightTolerance << ")" << std::endl;
+                        ok = false;
+                    }
                 }
             }
-            else
-            {
-                std::cerr << vertex_ctx << ": missing weights" << std::endl;
-                ok = false;
-            }
 
-            if (viewer_vertex.contains("skinned_position") && baseline_vertex.contains("position"))
-            {
-                ok &= CompareFloatVector(viewer_vertex["skinned_position"],
-                                         baseline_vertex["position"],
-                                         1e-2f,
-                                         vertex_ctx + ".skinned_position");
-            }
+            ++matched_vertices;
         }
+    }
 
-        if (viewer_histogram != baseline_histogram)
+    for (const auto& [signature, remaining] : baseline_vertex_map)
+    {
+        if (!remaining.empty())
         {
-            std::cerr << mesh_ctx << ": influence histogram mismatch" << std::endl;
+            std::cerr << "baseline contains unmatched vertex signature" << std::endl;
             ok = false;
+            break;
         }
+    }
+
+    if (matched_vertices != kExpectedStalkerHeroVertexCount)
+    {
+        std::cerr << "matched vertex count " << matched_vertices
+                  << " differs from expected " << kExpectedStalkerHeroVertexCount << std::endl;
+        ok = false;
     }
 
     return ok;

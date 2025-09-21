@@ -47,6 +47,7 @@
 #include <string_view>
 #include <system_error>
 #include <unordered_map>
+#include <unordered_set>
 #include <map>
 #include <utility>
 #include <vector>
@@ -460,6 +461,31 @@ struct PositionQuantizedKey
     }
 };
 
+struct RoundedNormalKey
+{
+    std::array<int32_t, 3> components{0, 0, 0};
+
+    bool operator==(const RoundedNormalKey& other) const noexcept
+    {
+        return components == other.components;
+    }
+};
+
+struct RoundedNormalHasher
+{
+    size_t operator()(const RoundedNormalKey& key) const noexcept
+    {
+        size_t hash = 1469598103934665603ull;
+        auto combine = [&hash](size_t value) {
+            hash ^= value;
+            hash *= 1099511628211ull;
+        };
+        for (int32_t component : key.components)
+            combine(std::hash<int32_t>{}(component));
+        return hash;
+    }
+};
+
 struct PositionQuantizedHasher
 {
     size_t operator()(const PositionQuantizedKey& key) const noexcept
@@ -493,6 +519,174 @@ struct PartData
     std::vector<ConvertedVertex> vertices;
 };
 
+constexpr u32 kChunkHeader = OGF_HEADER;
+constexpr u32 kChunkBoneNames = OGF_S_BONE_NAMES;
+constexpr u32 kChunkIkData = OGF_S_IKDATA;
+constexpr u32 kChunkVertices = OGF_VERTICES;
+constexpr u32 kChunkIndices = OGF_INDICES;
+constexpr u32 kChunkChildren = OGF_CHILDREN;
+constexpr u32 kChunkTexture = OGF_TEXTURE;
+constexpr u32 kChunkChildrenLinks = OGF_CHILDREN_L;
+constexpr u32 kChunkLodDefinition = OGF_S_LODS;
+constexpr u32 kChunkLodDefinition2 = OGF_LODDEF2;
+constexpr u32 kChunkSwidata = OGF_SWIDATA;
+
+std::vector<MeshVertex> read_mesh_vertices(const Chunk& chunk);
+std::vector<uint16_t> read_mesh_indices(const Chunk& chunk);
+
+struct SurfaceMetadata
+{
+    std::string texture_path;
+    std::string shader_name;
+    uint32_t original_vertex_count = 0;
+    uint32_t original_face_count = 0;
+    uint8_t ogf_type = 0;
+    std::vector<std::string> lod_visuals;
+    std::vector<uint8_t> lod_data;
+    uint32_t progressive_collapse_count = 0;
+    std::vector<uint8_t> progressive_data;
+    std::vector<uint32_t> child_visual_links;
+};
+
+struct SurfaceDefinition
+{
+    std::vector<MeshVertex> vertices;
+    std::vector<uint16_t> indices;
+    SurfaceMetadata metadata;
+};
+
+std::vector<std::string> parse_lod_strings(const Chunk& chunk)
+{
+    std::vector<std::string> results;
+    std::string current;
+    current.reserve(chunk.size);
+
+    for (size_t idx = 0; idx < chunk.size; ++idx)
+    {
+        const char ch = static_cast<char>(chunk.data[idx]);
+        if (ch == '\0' || ch == '\n' || ch == '\r')
+        {
+            if (!current.empty())
+            {
+                results.push_back(current);
+                current.clear();
+            }
+        }
+        else
+        {
+            current.push_back(ch);
+        }
+    }
+
+    if (!current.empty())
+        results.push_back(current);
+
+    return results;
+}
+
+void parse_texture_chunk(const Chunk& chunk, SurfaceMetadata& metadata)
+{
+    BinaryReader reader{chunk.data, chunk.size};
+    if (reader.offset >= reader.size)
+        return;
+    metadata.texture_path = reader.read_stringz();
+    if (reader.offset < reader.size)
+        metadata.shader_name = reader.read_stringz();
+}
+
+void parse_header_chunk(const Chunk& chunk, SurfaceMetadata& metadata)
+{
+    if (chunk.size < sizeof(ogf_header))
+        return;
+    ogf_header header{};
+    std::memcpy(&header, chunk.data, sizeof(header));
+    metadata.ogf_type = header.type;
+}
+
+void parse_lod_chunk(const Chunk& chunk, SurfaceMetadata& metadata)
+{
+    const auto* bytes = reinterpret_cast<const uint8_t*>(chunk.data);
+    metadata.lod_data.assign(bytes, bytes + chunk.size);
+
+    auto strings = parse_lod_strings(chunk);
+    metadata.lod_visuals.insert(metadata.lod_visuals.end(), strings.begin(), strings.end());
+}
+
+void parse_children_links_chunk(const Chunk& chunk, SurfaceMetadata& metadata)
+{
+    if (chunk.size < sizeof(uint32_t))
+        return;
+    BinaryReader reader{chunk.data, chunk.size};
+    const uint32_t count = reader.read<u32>();
+    metadata.child_visual_links.reserve(metadata.child_visual_links.size() + count);
+    for (uint32_t idx = 0; idx < count && reader.offset + sizeof(uint32_t) <= reader.size; ++idx)
+        metadata.child_visual_links.push_back(reader.read<u32>());
+}
+
+void parse_progressive_chunk(const Chunk& chunk, SurfaceMetadata& metadata)
+{
+    const auto* bytes = reinterpret_cast<const uint8_t*>(chunk.data);
+    metadata.progressive_data.assign(bytes, bytes + chunk.size);
+
+    if (chunk.size < sizeof(uint32_t) * 5)
+        return;
+
+    BinaryReader reader{chunk.data, chunk.size};
+    reader.skip(sizeof(uint32_t) * 4);
+    metadata.progressive_collapse_count = reader.read<u32>();
+}
+
+std::optional<SurfaceDefinition> build_surface_from_chunk_list(const std::vector<std::pair<u32, Chunk>>& chunk_list)
+{
+    SurfaceDefinition surface;
+    const Chunk* vertices_chunk = nullptr;
+    const Chunk* indices_chunk = nullptr;
+
+    for (const auto& entry : chunk_list)
+    {
+        const u32 id = entry.first;
+        const Chunk& chunk = entry.second;
+
+        switch (id)
+        {
+        case kChunkVertices:
+            vertices_chunk = &chunk;
+            break;
+        case kChunkIndices:
+            indices_chunk = &chunk;
+            break;
+        case kChunkTexture:
+            parse_texture_chunk(chunk, surface.metadata);
+            break;
+        case kChunkHeader:
+            parse_header_chunk(chunk, surface.metadata);
+            break;
+        case kChunkLodDefinition:
+        case kChunkLodDefinition2:
+            parse_lod_chunk(chunk, surface.metadata);
+            break;
+        case kChunkChildrenLinks:
+            parse_children_links_chunk(chunk, surface.metadata);
+            break;
+        case kChunkSwidata:
+            parse_progressive_chunk(chunk, surface.metadata);
+            break;
+        default:
+            break;
+        }
+    }
+
+    if (!vertices_chunk || !indices_chunk)
+        return std::nullopt;
+
+    surface.vertices = read_mesh_vertices(*vertices_chunk);
+    surface.metadata.original_vertex_count = static_cast<uint32_t>(surface.vertices.size());
+    surface.indices = read_mesh_indices(*indices_chunk);
+    surface.metadata.original_face_count = static_cast<uint32_t>(surface.indices.size() / 3);
+
+    return surface;
+}
+
 struct BoneTrack
 {
     std::vector<Fquaternion> rotations;
@@ -514,13 +708,6 @@ struct OmfFile
     std::vector<MotionMetadata> metadata;
     std::vector<OmfMotion> motions;
 };
-
-constexpr u32 kChunkHeader = OGF_HEADER;
-constexpr u32 kChunkBoneNames = OGF_S_BONE_NAMES;
-constexpr u32 kChunkIkData = OGF_S_IKDATA;
-constexpr u32 kChunkVertices = OGF_VERTICES;
-constexpr u32 kChunkIndices = OGF_INDICES;
-constexpr u32 kChunkChildren = OGF_CHILDREN;
 
 std::vector<std::byte> load_file(const fs::path& path)
 {
@@ -949,6 +1136,7 @@ std::vector<uint16_t> read_mesh_indices(const Chunk& chunk)
 
 constexpr float kPositionQuantizeScale = 100000.f;
 constexpr float kWeightQuantizeScale = 1000000.f;
+constexpr float kNormalQuantizeScale = 1000.f;
 
 PositionQuantizedKey quantize_position(const Fvector& position)
 {
@@ -983,6 +1171,15 @@ VertexDedupKey make_dedup_key(const MeshVertex& vertex, uint8_t back_side_flag)
     return key;
 }
 
+RoundedNormalKey round_normal(const Fvector& normal)
+{
+    RoundedNormalKey key;
+    key.components[0] = static_cast<int32_t>(std::llround(normal.x * kNormalQuantizeScale));
+    key.components[1] = static_cast<int32_t>(std::llround(normal.y * kNormalQuantizeScale));
+    key.components[2] = static_cast<int32_t>(std::llround(normal.z * kNormalQuantizeScale));
+    return key;
+}
+
 std::vector<uint8_t> compute_back_face_flags(const std::vector<MeshVertex>& vertices)
 {
     std::unordered_map<PositionQuantizedKey, std::vector<size_t>, PositionQuantizedHasher> position_groups;
@@ -998,31 +1195,26 @@ std::vector<uint8_t> compute_back_face_flags(const std::vector<MeshVertex>& vert
     for (const auto& group : position_groups)
     {
         const auto& indices = group.second;
-        std::vector<Fvector> reference_normals;
+        std::unordered_set<RoundedNormalKey, RoundedNormalHasher> reference_normals;
         reference_normals.reserve(indices.size());
 
         for (size_t vertex_index : indices)
         {
             const Fvector& normal = vertices[vertex_index].normal;
-            bool is_back_side = false;
+            const RoundedNormalKey rounded = round_normal(normal);
+            RoundedNormalKey opposite = rounded;
+            opposite.components[0] = -opposite.components[0];
+            opposite.components[1] = -opposite.components[1];
+            opposite.components[2] = -opposite.components[2];
 
-            for (const Fvector& reference : reference_normals)
-            {
-                const float dot = normal.x * reference.x + normal.y * reference.y + normal.z * reference.z;
-                if (dot <= -0.999f)
-                {
-                    is_back_side = true;
-                    break;
-                }
-            }
-
-            if (is_back_side)
+            if (reference_normals.find(opposite) != reference_normals.end())
             {
                 back_flags[vertex_index] = 1;
             }
             else
             {
-                reference_normals.push_back(normal);
+                back_flags[vertex_index] = 0;
+                reference_normals.insert(rounded);
             }
         }
     }
@@ -1145,7 +1337,8 @@ void deduplicate_vertices(std::vector<MeshVertex>& vertices, std::vector<uint16_
 
 ozz::sample::Mesh build_mesh(const std::vector<MeshVertex>& vertices,
                              const std::vector<uint16_t>& indices,
-                             const std::vector<BoneRecord>& bones)
+                             const std::vector<BoneRecord>& bones,
+                             const SurfaceMetadata& metadata)
 {
     std::array<PartData, 5> parts{};
     for (int influences = 0; influences < 5; ++influences)
@@ -1293,6 +1486,21 @@ ozz::sample::Mesh build_mesh(const std::vector<MeshVertex>& vertices,
 
     mesh.inverse_bind_poses.resize(inverse_bind_poses.size());
     std::copy(inverse_bind_poses.begin(), inverse_bind_poses.end(), mesh.inverse_bind_poses.begin());
+
+    mesh.xray_metadata.texture_path = metadata.texture_path;
+    mesh.xray_metadata.shader_name = metadata.shader_name;
+    mesh.xray_metadata.texture_link_present = false;
+    mesh.xray_metadata.texture_link = 0;
+    mesh.xray_metadata.shader_link_present = false;
+    mesh.xray_metadata.shader_link = 0;
+    mesh.xray_metadata.original_vertex_count = metadata.original_vertex_count;
+    mesh.xray_metadata.original_face_count = metadata.original_face_count;
+    mesh.xray_metadata.ogf_type = metadata.ogf_type;
+    mesh.xray_metadata.lod_visuals = metadata.lod_visuals;
+    mesh.xray_metadata.lod_data = metadata.lod_data;
+    mesh.xray_metadata.progressive_collapse_count = metadata.progressive_collapse_count;
+    mesh.xray_metadata.progressive_data = metadata.progressive_data;
+    mesh.xray_metadata.child_visual_links = metadata.child_visual_links;
 
     return mesh;
 }
@@ -1956,17 +2164,15 @@ void convert_mesh(const MeshConfig& config)
     const auto file_data = load_file(config.input_ogf);
     const auto chunks = parse_chunks(file_data.data(), file_data.size());
 
-    std::vector<MeshVertex> all_vertices;
-    std::vector<uint16_t> all_indices;
+    std::vector<SurfaceDefinition> surfaces;
 
-    auto children_it = chunks.find(kChunkChildren);
-    if (children_it != chunks.end())
+    if (const auto children_it = chunks.find(kChunkChildren); children_it != chunks.end())
     {
         const Chunk& children_chunk = children_it->second;
         BinaryReader reader{children_chunk.data, children_chunk.size};
         while (reader.offset + sizeof(u32) * 2 <= children_chunk.size)
         {
-        reader.read<u32>();
+            reader.read<u32>();
             const u32 child_size = reader.read<u32>();
             if (reader.offset + child_size > children_chunk.size)
                 break;
@@ -1974,68 +2180,47 @@ void convert_mesh(const MeshConfig& config)
             Chunk child_chunk{children_chunk.data + reader.offset, child_size};
             reader.offset += child_size;
 
-            size_t section_offset = 0;
-            Chunk vertices_chunk{};
-            Chunk indices_chunk{};
-            bool has_vertices = false;
-            bool has_indices = false;
-
-            while (section_offset + sizeof(u32) * 2 <= child_chunk.size)
-            {
-                u32 section_id;
-                u32 section_size;
-                std::memcpy(&section_id, child_chunk.data + section_offset, sizeof(u32));
-                section_offset += sizeof(u32);
-                std::memcpy(&section_size, child_chunk.data + section_offset, sizeof(u32));
-                section_offset += sizeof(u32);
-                if (section_offset + section_size > child_chunk.size)
-                    break;
-
-                if (section_id == kChunkVertices)
-                {
-                    vertices_chunk.data = child_chunk.data + section_offset;
-                    vertices_chunk.size = section_size;
-                    has_vertices = true;
-                }
-                else if (section_id == kChunkIndices)
-                {
-                    indices_chunk.data = child_chunk.data + section_offset;
-                    indices_chunk.size = section_size;
-                    has_indices = true;
-                }
-
-                section_offset += section_size;
-            }
-
-            if (has_vertices && has_indices)
-            {
-                auto section_vertices = read_mesh_vertices(vertices_chunk);
-                auto section_indices = read_mesh_indices(indices_chunk);
-
-                const uint32_t base = static_cast<uint32_t>(all_vertices.size());
-                all_vertices.insert(all_vertices.end(), section_vertices.begin(), section_vertices.end());
-                all_indices.reserve(all_indices.size() + section_indices.size());
-                for (uint16_t index : section_indices)
-                    all_indices.push_back(static_cast<uint16_t>(base + index));
-            }
+            const auto child_subchunks = parse_subchunks(child_chunk);
+            if (auto surface = build_surface_from_chunk_list(child_subchunks))
+                surfaces.push_back(std::move(*surface));
         }
     }
 
-    if (all_vertices.empty())
+    if (surfaces.empty())
     {
-        auto vertices_it = chunks.find(kChunkVertices);
-        auto indices_it = chunks.find(kChunkIndices);
-        if (vertices_it == chunks.end() || indices_it == chunks.end())
-            throw std::runtime_error("OGF file missing vertices chunk");
+        std::vector<std::pair<u32, Chunk>> root_chunks;
+        const auto add_if_present = [&](u32 id)
+        {
+            const auto it = chunks.find(id);
+            if (it != chunks.end())
+                root_chunks.emplace_back(id, it->second);
+        };
 
-        all_vertices = read_mesh_vertices(vertices_it->second);
-        auto base_indices = read_mesh_indices(indices_it->second);
-        all_indices.assign(base_indices.begin(), base_indices.end());
+        add_if_present(kChunkHeader);
+        add_if_present(kChunkTexture);
+        add_if_present(kChunkLodDefinition);
+        add_if_present(kChunkLodDefinition2);
+        add_if_present(kChunkChildrenLinks);
+        add_if_present(kChunkSwidata);
+        add_if_present(kChunkVertices);
+        add_if_present(kChunkIndices);
+
+        if (auto surface = build_surface_from_chunk_list(root_chunks))
+            surfaces.push_back(std::move(*surface));
     }
 
-    deduplicate_vertices(all_vertices, all_indices);
+    if (surfaces.empty())
+        throw std::runtime_error("OGF file does not contain any mesh surfaces");
 
-    auto mesh = build_mesh(all_vertices, all_indices, bones);
+    std::vector<ozz::sample::Mesh> meshes;
+    meshes.reserve(surfaces.size());
+
+    for (size_t surface_index = 0; surface_index < surfaces.size(); ++surface_index)
+    {
+        auto& surface = surfaces[surface_index];
+        deduplicate_vertices(surface.vertices, surface.indices);
+        meshes.push_back(build_mesh(surface.vertices, surface.indices, bones, surface.metadata));
+    }
 
     std::error_code ec;
     if (const auto parent = config.output_ozz.parent_path(); !parent.empty())
@@ -2046,9 +2231,12 @@ void convert_mesh(const MeshConfig& config)
         throw std::runtime_error("failed to open output mesh file: " + config.output_ozz.string());
 
     ozz::io::OArchive archive(&output);
-    archive << mesh;
+    for (const auto& mesh : meshes)
+        archive << mesh;
 
-    std::cout << "Converted mesh written to " << config.output_ozz << std::endl;
+    std::cout << "Converted " << meshes.size() << " mesh surface"
+              << (meshes.size() == 1 ? "" : "s")
+              << " written to " << config.output_ozz << std::endl;
 }
 
 } // namespace
