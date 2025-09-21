@@ -1,12 +1,21 @@
+// clang-format off
 #include "Common/Platform.hpp"
-#include "xrCore/Animation/Bone.hpp"
 #include "xrCore/xrCore.h"
+#include "xrCore/FMesh.hpp"
+#include "xrCore/Animation/Bone.hpp"
+// clang-format on
 
 #include "gtest/gtest.h"
 
+#include <algorithm>
+#include <array>
+#include <cstddef>
+#include <cstring>
 #include <filesystem>
 #include <fstream>
+#include <functional>
 #include <optional>
+#include <stdexcept>
 #include <string>
 #include <string_view>
 #include <unordered_map>
@@ -33,13 +42,274 @@ struct BindPoseSample
     std::unordered_map<std::string, Fmatrix> world_space_transforms;
 };
 
+struct LegacyChunk
+{
+    const std::byte* data = nullptr;
+    size_t size = 0;
+};
+
+struct LegacyBinaryReader
+{
+    const std::byte* data = nullptr;
+    size_t size = 0;
+    size_t offset = 0;
+
+    template <class T>
+    T Read()
+    {
+        if (offset + sizeof(T) > size)
+            throw std::runtime_error("unexpected end of chunk while reading typed data");
+
+        T value{};
+        std::memcpy(&value, data + offset, sizeof(T));
+        offset += sizeof(T);
+        return value;
+    }
+
+    template <class T>
+    T ReadStruct()
+    {
+        return Read<T>();
+    }
+
+    std::string ReadStringZ()
+    {
+        const auto* begin = data + offset;
+        const auto* end = data + size;
+        const auto* cursor = begin;
+        while (cursor < end && *reinterpret_cast<const char*>(cursor) != '\0')
+            ++cursor;
+
+        if (cursor == end)
+            throw std::runtime_error("unterminated string in chunk");
+
+        std::string value(reinterpret_cast<const char*>(begin), static_cast<size_t>(cursor - begin));
+        offset += static_cast<size_t>(cursor - begin) + 1;
+        return value;
+    }
+
+    Fvector ReadFvector3()
+    {
+        Fvector v{};
+        v.x = Read<float>();
+        v.y = Read<float>();
+        v.z = Read<float>();
+        return v;
+    }
+
+    void Skip(size_t count)
+    {
+        if (offset + count > size)
+            throw std::runtime_error("attempted to skip past end of chunk");
+        offset += count;
+    }
+};
+
+using LegacyChunkMap = std::unordered_map<u32, LegacyChunk>;
+
+std::vector<std::byte> LoadBinaryFile(const std::filesystem::path& path)
+{
+    std::ifstream stream(path, std::ios::binary | std::ios::ate);
+    if (!stream)
+        throw std::runtime_error("failed to open input file: " + path.string());
+
+    const auto size = stream.tellg();
+    if (size <= 0)
+        throw std::runtime_error("input file is empty: " + path.string());
+
+    std::vector<std::byte> data(static_cast<size_t>(size));
+    stream.seekg(0, std::ios::beg);
+    stream.read(reinterpret_cast<char*>(data.data()), data.size());
+    if (!stream)
+        throw std::runtime_error("failed to read input file: " + path.string());
+
+    return data;
+}
+
+LegacyChunkMap ParseChunks(const std::byte* data, size_t size)
+{
+    LegacyChunkMap chunks;
+
+    size_t offset = 0;
+    while (offset + sizeof(u32) * 2 <= size)
+    {
+        u32 id = 0;
+        u32 chunk_size = 0;
+        std::memcpy(&id, data + offset, sizeof(u32));
+        offset += sizeof(u32);
+        std::memcpy(&chunk_size, data + offset, sizeof(u32));
+        offset += sizeof(u32);
+
+        if (offset + chunk_size > size)
+            throw std::runtime_error("chunk extends past end of file");
+
+        chunks[id] = LegacyChunk{ data + offset, chunk_size };
+        offset += chunk_size;
+    }
+
+    return chunks;
+}
+
+struct LegacyBoneRecord
+{
+    std::string name;
+    std::string parent_name;
+    int parent_index = -1;
+    Fvector rest_translation{};
+    Fvector rest_rotation{};
+    Fmatrix local_transform{};
+    Fmatrix global_transform{};
+};
+
+std::vector<LegacyBoneRecord> ReadBoneNames(const LegacyChunk& chunk)
+{
+    LegacyBinaryReader reader{ chunk.data, chunk.size, 0 };
+    const u32 bone_count = reader.Read<u32>();
+
+    std::vector<LegacyBoneRecord> bones;
+    bones.reserve(bone_count);
+
+    for (u32 idx = 0; idx < bone_count; ++idx)
+    {
+        LegacyBoneRecord record;
+        record.name = reader.ReadStringZ();
+        record.parent_name = reader.ReadStringZ();
+        reader.Skip(sizeof(Fobb));
+        bones.emplace_back(std::move(record));
+    }
+
+    return bones;
+}
+
+void ReadIkData(const LegacyChunk& chunk, std::vector<LegacyBoneRecord>& bones)
+{
+    LegacyBinaryReader reader{ chunk.data, chunk.size, 0 };
+
+    for (auto& bone : bones)
+    {
+        const u32 version = reader.Read<u32>();
+        reader.ReadStringZ();
+        (void)reader.ReadStruct<SBoneShape>();
+
+        reader.Read<u32>();
+        for (int axis = 0; axis < 3; ++axis)
+        {
+            reader.Read<float>();
+            reader.Read<float>();
+            reader.Read<float>();
+            reader.Read<float>();
+        }
+
+        reader.Read<float>();
+        reader.Read<float>();
+        reader.Read<u32>();
+        reader.Read<float>();
+        reader.Read<float>();
+        if (version > 0)
+            reader.Read<float>();
+
+        bone.rest_rotation = reader.ReadFvector3();
+        bone.rest_translation = reader.ReadFvector3();
+        reader.Read<float>();
+        reader.ReadFvector3();
+    }
+}
+
+void ResolveHierarchy(std::vector<LegacyBoneRecord>& bones)
+{
+    std::unordered_map<std::string, int> index_by_name;
+    index_by_name.reserve(bones.size());
+
+    for (size_t idx = 0; idx < bones.size(); ++idx)
+        index_by_name[bones[idx].name] = static_cast<int>(idx);
+
+    for (auto& bone : bones)
+    {
+        if (bone.parent_name.empty())
+        {
+            bone.parent_index = -1;
+            continue;
+        }
+
+        const auto it = index_by_name.find(bone.parent_name);
+        if (it == index_by_name.end())
+            throw std::runtime_error("bone parent not found: " + bone.parent_name + " for bone " + bone.name);
+        bone.parent_index = it->second;
+    }
+}
+
+void BuildLocalTransforms(std::vector<LegacyBoneRecord>& bones)
+{
+    for (auto& bone : bones)
+    {
+        Fmatrix matrix;
+        matrix.identity();
+        matrix.setXYZi(bone.rest_rotation);
+        matrix.translate_over(bone.rest_translation);
+        bone.local_transform = matrix;
+        bone.global_transform.identity();
+    }
+}
+
+void BuildGlobalTransforms(std::vector<LegacyBoneRecord>& bones)
+{
+    std::vector<std::vector<int>> children(bones.size());
+    for (size_t idx = 0; idx < bones.size(); ++idx)
+        if (bones[idx].parent_index >= 0)
+            children[static_cast<size_t>(bones[idx].parent_index)].push_back(static_cast<int>(idx));
+
+    std::function<void(int, const Fmatrix&)> visit;
+    visit = [&](int index, const Fmatrix& parent_matrix)
+    {
+        auto& bone = bones[static_cast<size_t>(index)];
+        bone.global_transform.mul_43(parent_matrix, bone.local_transform);
+        for (int child : children[static_cast<size_t>(index)])
+            visit(child, bone.global_transform);
+    };
+
+    Fmatrix identity;
+    identity.identity();
+
+    for (size_t idx = 0; idx < bones.size(); ++idx)
+        if (bones[idx].parent_index < 0)
+            visit(static_cast<int>(idx), identity);
+}
+
 std::optional<BindPoseSample> LoadLegacyBindPoseSample(const std::filesystem::path& ogf_path, const std::filesystem::path& omf_path)
 {
-    (void)ogf_path;
     (void)omf_path;
 
-    // TODO: Hook up CKinematics/IKinematics sampling for legacy `.ogf/.omf` assets.
-    return std::nullopt;
+    try
+    {
+        const auto data = LoadBinaryFile(ogf_path);
+        const auto chunks = ParseChunks(data.data(), data.size());
+
+        const auto bone_names_it = chunks.find(OGF_S_BONE_NAMES);
+        if (bone_names_it == chunks.end())
+            throw std::runtime_error("OGF missing bone names chunk: " + ogf_path.string());
+
+        const auto ik_it = chunks.find(OGF_S_IKDATA);
+        if (ik_it == chunks.end())
+            throw std::runtime_error("OGF missing IK data chunk: " + ogf_path.string());
+
+        auto bones = ReadBoneNames(bone_names_it->second);
+        ReadIkData(ik_it->second, bones);
+        ResolveHierarchy(bones);
+        BuildLocalTransforms(bones);
+        BuildGlobalTransforms(bones);
+
+        BindPoseSample sample;
+        sample.world_space_transforms.reserve(bones.size());
+        for (const auto& bone : bones)
+            sample.world_space_transforms.emplace(bone.name, bone.global_transform);
+
+        return sample;
+    }
+    catch (const std::exception& ex)
+    {
+        ADD_FAILURE() << "Legacy bind-pose load failed: " << ex.what();
+        return std::nullopt;
+    }
 }
 
 std::optional<BindPoseSample> LoadOzzBindPoseSample(const std::filesystem::path& skeleton_path)
@@ -142,60 +412,41 @@ TEST(OzzKinematicsBootstrap, BoneNameLookupsAndVisibilityDefaults)
         EXPECT_EQ((u64(1) << kinematics.LL_BoneCount()) - 1, kinematics.LL_GetBonesVisible());
 }
 
-TEST(OzzKinematicsPose, MatchesBaselineBindPoseTranslations)
+TEST(OzzKinematicsPose, MatchesLegacyBindPoseTranslations)
 {
     const auto skeleton_path = ResolveProjectPath("src/xrAnimation/tests/testdata/stalker_hero_1.ozz");
-    const auto baseline_path = ResolveProjectPath("src/xrAnimation/tests/testdata/stalker_hero_bind_pose.csv");
+    const auto ogf_path = ResolveProjectPath("res/testdata/npc/stalker_hero_1.ogf");
+    const auto omf_path = ResolveProjectPath("res/testdata/npc/critical_hit_grup_1.omf");
 
     ASSERT_TRUE(std::filesystem::exists(skeleton_path));
-    ASSERT_TRUE(std::filesystem::exists(baseline_path));
+    ASSERT_TRUE(std::filesystem::exists(ogf_path));
+    ASSERT_TRUE(std::filesystem::exists(omf_path));
 
-    std::unordered_map<std::string, Fvector3> baseline_positions;
-    std::ifstream baseline_file(baseline_path);
-    ASSERT_TRUE(baseline_file.is_open());
-
-    std::string line;
-    std::getline(baseline_file, line); // header
-    while (std::getline(baseline_file, line))
-    {
-        if (line.empty())
-            continue;
-
-        std::vector<std::string> tokens;
-        size_t start = 0;
-        while (start <= line.size())
-        {
-            size_t end = line.find(',', start);
-            if (end == std::string::npos)
-                end = line.size();
-            tokens.emplace_back(line.substr(start, end - start));
-            start = end + 1;
-        }
-
-        if (tokens.size() < 8)
-            continue;
-
-        Fvector3 global;
-        global.set(std::stof(tokens[5]), std::stof(tokens[6]), std::stof(tokens[7]));
-        baseline_positions.emplace(tokens[0], global);
-    }
-
-    ASSERT_FALSE(baseline_positions.empty());
+    const auto legacy_sample = LoadLegacyBindPoseSample(ogf_path, omf_path);
+    ASSERT_TRUE(legacy_sample.has_value());
 
     OzzKinematics kinematics;
     ASSERT_TRUE(kinematics.InitializeFromOzz(skeleton_path.string().c_str()));
-
     kinematics.CalculateBones(TRUE);
 
-    for (const auto& [bone_name, expected_position] : baseline_positions)
+    ASSERT_EQ(legacy_sample->world_space_transforms.size(), static_cast<size_t>(kinematics.LL_BoneCount()));
+
+    const std::vector<std::string> sentinel_bones = { "bip01", "bip01_pelvis", "bip01_spine", "bip01_head", "bip01_l_hand", "bip01_r_hand" };
+
+    for (const auto& bone_name : sentinel_bones)
     {
+        const auto legacy_it = legacy_sample->world_space_transforms.find(bone_name);
+        ASSERT_NE(legacy_it, legacy_sample->world_space_transforms.end()) << "Legacy skeleton missing " << bone_name;
+
         const u16 bone_id = kinematics.LL_BoneID(bone_name.c_str());
-        ASSERT_NE(bone_id, BI_NONE) << "Missing bone in OzzKinematics: " << bone_name;
+        ASSERT_NE(bone_id, BI_NONE) << "OzzKinematics missing bone: " << bone_name;
 
         const Fmatrix& transform = kinematics.LL_GetTransform(bone_id);
-        EXPECT_NEAR(transform.c.x, expected_position.x, 1e-3f) << "Bone: " << bone_name;
-        EXPECT_NEAR(transform.c.y, expected_position.y, 1e-3f) << "Bone: " << bone_name;
-        EXPECT_NEAR(transform.c.z, expected_position.z, 1e-3f) << "Bone: " << bone_name;
+        const Fmatrix& expected = legacy_it->second;
+
+        EXPECT_NEAR(transform.c.x, expected.c.x, 1e-4f) << "Bone: " << bone_name;
+        EXPECT_NEAR(transform.c.y, expected.c.y, 1e-4f) << "Bone: " << bone_name;
+        EXPECT_NEAR(transform.c.z, expected.c.z, 1e-4f) << "Bone: " << bone_name;
     }
 }
 

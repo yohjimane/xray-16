@@ -16,13 +16,16 @@ namespace XRay
 {
 namespace Animation
 {
-
 namespace
 {
 struct BoneInstanceStub
 {
     CBoneInstance instance;
-    BoneInstanceStub() { instance.construct(); }
+
+    BoneInstanceStub()
+    {
+        instance.construct();
+    }
 };
 
 CBoneInstance& StubBoneInstance()
@@ -33,7 +36,7 @@ CBoneInstance& StubBoneInstance()
 
 CBoneData& StubBoneData()
 {
-    static CBoneData stub{0};
+    static CBoneData stub{ 0 };
     return stub;
 }
 
@@ -53,8 +56,8 @@ Fvector3 ConvertOzzVectorToXRay(float x, float y, float z)
 {
     Fvector3 result;
     result.x = x;
-    result.y = -z;
-    result.z = y;
+    result.y = y;
+    result.z = -z;
     return result;
 }
 
@@ -69,12 +72,10 @@ Fmatrix ConvertOzzMatrixToXRay(const ozz::math::Float4x4& matrix)
     out.i = ConvertOzzVectorToXRay(column[0], column[1], column[2]);
 
     ozz::math::Store3PtrU(matrix.cols[1], column);
-    Fvector3 converted_column1 = ConvertOzzVectorToXRay(column[0], column[1], column[2]);
+    out.j = ConvertOzzVectorToXRay(column[0], column[1], column[2]);
 
     ozz::math::Store3PtrU(matrix.cols[2], column);
-    out.j = ConvertOzzVectorToXRay(column[0], column[1], column[2]);
-    converted_column1.mul(-1.f);
-    out.k = converted_column1;
+    out.k = ConvertOzzVectorToXRay(column[0], column[1], column[2]);
 
     ozz::math::Store3PtrU(matrix.cols[3], column);
     out.c = ConvertOzzVectorToXRay(column[0], column[1], column[2]);
@@ -89,13 +90,8 @@ Fmatrix ConvertOzzMatrixToXRay(const ozz::math::Float4x4& matrix)
 } // namespace
 
 OzzKinematics::OzzKinematics()
-    : user_data_(nullptr)
-    , root_bone_(BI_NONE)
-    , visible_mask_(0)
-    , update_callback_(nullptr)
-    , update_callback_param_(nullptr)
-    , last_update_time_(0)
-    , visibility_counter_(0)
+    : user_data_(nullptr), root_bone_(BI_NONE), visible_mask_(0), update_callback_(nullptr), update_callback_param_(nullptr), last_update_time_(0),
+      visibility_counter_(0)
 {
     cached_box_.invalidate();
 }
@@ -151,23 +147,24 @@ bool OzzKinematics::InitializeFromOzz(pcstr skeleton_path)
     for (int joint = 0; joint < joint_count; ++joint)
     {
         const size_t joint_index = static_cast<size_t>(joint);
-        const char* joint_name =
-            (joint_index < joint_names.size() && joint_names[joint_index]) ? joint_names[joint_index] : "";
+        const char* joint_name = (joint_index < joint_names.size() && joint_names[joint_index]) ? joint_names[joint_index] : "";
         shared_str shared_name(joint_name ? joint_name : "");
         const u16 bone_id = static_cast<u16>(joint);
         bone_map_by_name_.emplace_back(shared_name, bone_id);
         bone_map_by_ptr_.emplace_back(shared_name, bone_id);
     }
 
-    std::sort(bone_map_by_name_.begin(), bone_map_by_name_.end(), [](const auto& lhs, const auto& rhs)
-    {
-        return xr_strcmp(lhs.first.c_str(), rhs.first.c_str()) < 0;
-    });
+    std::sort(bone_map_by_name_.begin(), bone_map_by_name_.end(),
+        [](const auto& lhs, const auto& rhs)
+        {
+            return xr_strcmp(lhs.first.c_str(), rhs.first.c_str()) < 0;
+        });
 
-    std::sort(bone_map_by_ptr_.begin(), bone_map_by_ptr_.end(), [](const auto& lhs, const auto& rhs)
-    {
-        return lhs.first._get() < rhs.first._get();
-    });
+    std::sort(bone_map_by_ptr_.begin(), bone_map_by_ptr_.end(),
+        [](const auto& lhs, const auto& rhs)
+        {
+            return lhs.first._get() < rhs.first._get();
+        });
 
     root_bone_ = joint_count > 0 ? 0 : BI_NONE;
 
@@ -201,8 +198,8 @@ void OzzKinematics::Bone_GetAnimPos(Fmatrix& pos, u16 /*id*/, u8 /*channel_mask*
     pos.identity();
 }
 
-bool OzzKinematics::PickBone(const Fmatrix& /*parent_xform*/, pick_result& /*r*/, float /*dist*/, const Fvector& /*start*/,
-    const Fvector& /*dir*/, u16 /*bone_id*/)
+bool OzzKinematics::PickBone(const Fmatrix& /*parent_xform*/, pick_result& /*r*/, float /*dist*/, const Fvector& /*start*/, const Fvector& /*dir*/,
+    u16 /*bone_id*/)
 {
     NotImplemented(__FUNCTION__);
     return false;
@@ -218,8 +215,8 @@ u16 OzzKinematics::LL_BoneID(LPCSTR B)
     if (!B)
         return BI_NONE;
 
-    const auto it = std::lower_bound(
-        bone_map_by_name_.begin(), bone_map_by_name_.end(), B, [](const accel::value_type& entry, LPCSTR value)
+    const auto it = std::lower_bound(bone_map_by_name_.begin(), bone_map_by_name_.end(), B,
+        [](const accel::value_type& entry, LPCSTR value)
         {
             return xr_strcmp(entry.first.c_str(), value) < 0;
         });
@@ -235,8 +232,8 @@ u16 OzzKinematics::LL_BoneID(const shared_str& B)
     if (!B._get())
         return BI_NONE;
 
-    const auto it = std::lower_bound(
-        bone_map_by_ptr_.begin(), bone_map_by_ptr_.end(), B, [](const accel::value_type& entry, const shared_str& value)
+    const auto it = std::lower_bound(bone_map_by_ptr_.begin(), bone_map_by_ptr_.end(), B,
+        [](const accel::value_type& entry, const shared_str& value)
         {
             return entry.first._get() < value._get();
         });
@@ -252,17 +249,24 @@ LPCSTR OzzKinematics::LL_BoneName_dbg(u16 ID)
     if (ID >= bone_instances_.size())
         return nullptr;
 
-    const auto it = std::find_if(bone_map_by_name_.begin(), bone_map_by_name_.end(), [ID](const accel::value_type& entry)
-    {
-        return entry.second == ID;
-    });
+    const auto it = std::find_if(bone_map_by_name_.begin(), bone_map_by_name_.end(),
+        [ID](const accel::value_type& entry)
+        {
+            return entry.second == ID;
+        });
 
     return it != bone_map_by_name_.end() ? it->first.c_str() : nullptr;
 }
 
-CInifile* OzzKinematics::LL_UserData() { return user_data_; }
+CInifile* OzzKinematics::LL_UserData()
+{
+    return user_data_;
+}
 
-IKinematics::accel* OzzKinematics::LL_Bones() { return &bone_map_by_name_; }
+IKinematics::accel* OzzKinematics::LL_Bones()
+{
+    return &bone_map_by_name_;
+}
 
 CBoneInstance& OzzKinematics::LL_GetBoneInstance(u16 bone_id)
 {
@@ -291,7 +295,10 @@ const IBoneData& OzzKinematics::GetBoneData(u16 bone_id) const
     return StubBoneData();
 }
 
-u16 OzzKinematics::LL_BoneCount() const { return static_cast<u16>(bone_instances_.size()); }
+u16 OzzKinematics::LL_BoneCount() const
+{
+    return static_cast<u16>(bone_instances_.size());
+}
 
 u16 OzzKinematics::LL_VisibleBoneCount()
 {
@@ -339,7 +346,10 @@ Fobb& OzzKinematics::LL_GetBox(u16 bone_id)
     return StubObb();
 }
 
-const Fbox& OzzKinematics::GetBox() const { return cached_box_; }
+const Fbox& OzzKinematics::GetBox() const
+{
+    return cached_box_;
+}
 
 void OzzKinematics::LL_GetBindTransform(xr_vector<Fmatrix>& matrices)
 {
@@ -354,7 +364,10 @@ int OzzKinematics::LL_GetBoneGroups(xr_vector<xr_vector<u16>>& groups)
     return 0;
 }
 
-u16 OzzKinematics::LL_GetBoneRoot() { return root_bone_; }
+u16 OzzKinematics::LL_GetBoneRoot()
+{
+    return root_bone_;
+}
 
 void OzzKinematics::LL_SetBoneRoot(u16 bone_id)
 {
@@ -380,9 +393,15 @@ void OzzKinematics::LL_SetBoneVisible(u16 bone_id, BOOL val, BOOL /*bRecursive*/
         visible_mask_ &= ~mask;
 }
 
-u64 OzzKinematics::LL_GetBonesVisible() { return visible_mask_; }
+u64 OzzKinematics::LL_GetBonesVisible()
+{
+    return visible_mask_;
+}
 
-void OzzKinematics::LL_SetBonesVisible(u64 mask) { visible_mask_ = mask; }
+void OzzKinematics::LL_SetBonesVisible(u64 mask)
+{
+    visible_mask_ = mask;
+}
 
 void OzzKinematics::LL_AddTransformToBone(KinematicsABT::additional_bone_transform& /*offset*/)
 {
@@ -433,13 +452,25 @@ void OzzKinematics::Callback(UpdateCallback C, void* Param)
     update_callback_param_ = Param;
 }
 
-void OzzKinematics::SetUpdateCallback(UpdateCallback pCallback) { update_callback_ = pCallback; }
+void OzzKinematics::SetUpdateCallback(UpdateCallback pCallback)
+{
+    update_callback_ = pCallback;
+}
 
-void OzzKinematics::SetUpdateCallbackParam(void* pCallbackParam) { update_callback_param_ = pCallbackParam; }
+void OzzKinematics::SetUpdateCallbackParam(void* pCallbackParam)
+{
+    update_callback_param_ = pCallbackParam;
+}
 
-UpdateCallback OzzKinematics::GetUpdateCallback() { return update_callback_; }
+UpdateCallback OzzKinematics::GetUpdateCallback()
+{
+    return update_callback_;
+}
 
-void* OzzKinematics::GetUpdateCallbackParam() { return update_callback_param_; }
+void* OzzKinematics::GetUpdateCallbackParam()
+{
+    return update_callback_param_;
+}
 
 IRenderVisual* OzzKinematics::dcast_RenderVisual()
 {
@@ -465,6 +496,5 @@ shared_str OzzKinematics::getDebugName()
     return shared_str("OzzKinematics");
 }
 #endif
-
 } // namespace Animation
 } // namespace XRay
