@@ -6,6 +6,7 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
 BUILD_DIR="${ROOT_DIR}/ozz_utils/bin/Debug"
 TESTDATA_DIR="${ROOT_DIR}/src/xrAnimation/tests/testdata"
+TEXTURE_DIR="/mnt/f/modding/Vanilla_Guns_noedits/unpacked_patches/basedata/textures"
 
 mkdir -p "${TESTDATA_DIR}"
 
@@ -32,6 +33,7 @@ mkdir -p "${TESTDATA_DIR}"
   --skeleton="${TESTDATA_DIR}/stalker_hero_1.ozz" \
   --mesh="${TESTDATA_DIR}/stalker_hero_mesh.ozz" \
   --animation="${TESTDATA_DIR}/critical_hit_grup_1.ozz" \
+  --texture_root="${TEXTURE_DIR}" \
   #--dump_skinning_json="${TESTDATA_DIR}/stalker_hero_mesh_skinning.json" \
   #--render=false \
   #--max_idle_loops=2

@@ -49,6 +49,7 @@
 #include <cstdio>
 #include <cstring>
 #include <cstdlib>
+#include <filesystem>
 #include <fstream>
 #include <iomanip>
 #include <iostream>
@@ -57,10 +58,12 @@
 #include <string>
 #include <string_view>
 #include <locale>
+#include <cctype>
 #include <cstdint>
 #include <vector>
 #include "GL/glfw.h"
 #include "ozz/base/span.h"
+
 
 // Skeleton archive can be specified as an option.
 OZZ_OPTIONS_DECLARE_STRING(skeleton,
@@ -87,7 +90,199 @@ OZZ_OPTIONS_DECLARE_STRING(dump_skinning_json,
                            "Path to write bind-pose skinning data as JSON.",
                            "", false)
 
+OZZ_OPTIONS_DECLARE_STRING(texture_root,
+                           "Optional root directory to resolve texture metadata paths.",
+                           "", false)
+
 namespace {
+
+namespace fs = std::filesystem;
+
+constexpr uint32_t MakeFourCC(char a, char b, char c, char d) {
+  return (static_cast<uint32_t>(a)) | (static_cast<uint32_t>(b) << 8) |
+         (static_cast<uint32_t>(c) << 16) | (static_cast<uint32_t>(d) << 24);
+}
+
+struct DdsPixelFormat {
+  uint32_t size;
+  uint32_t flags;
+  uint32_t fourCC;
+  uint32_t rgbBitCount;
+  uint32_t rBitMask;
+  uint32_t gBitMask;
+  uint32_t bBitMask;
+  uint32_t aBitMask;
+};
+
+struct DdsHeader {
+  uint32_t size;
+  uint32_t flags;
+  uint32_t height;
+  uint32_t width;
+  uint32_t pitchOrLinearSize;
+  uint32_t depth;
+  uint32_t mipMapCount;
+  uint32_t reserved1[11];
+  DdsPixelFormat ddspf;
+  uint32_t caps;
+  uint32_t caps2;
+  uint32_t caps3;
+  uint32_t caps4;
+  uint32_t reserved2;
+};
+
+static_assert(sizeof(DdsPixelFormat) == 32,
+              "Unexpected DDS pixel format header size.");
+static_assert(sizeof(DdsHeader) == 124,
+              "Unexpected DDS header size.");
+
+GLuint LoadDdsTexture(const fs::path& path) {
+  std::ifstream stream(path, std::ios::binary);
+  if (!stream) {
+    ozz::log::Err() << "Failed to open DDS texture: " << path << std::endl;
+    return 0;
+  }
+
+  uint32_t magic = 0;
+  stream.read(reinterpret_cast<char*>(&magic), sizeof(magic));
+  if (!stream || magic != MakeFourCC('D', 'D', 'S', ' ')) {
+    ozz::log::Err() << "Invalid DDS magic for texture: " << path << std::endl;
+    return 0;
+  }
+
+  DdsHeader header{};
+  stream.read(reinterpret_cast<char*>(&header), sizeof(DdsHeader));
+  if (!stream || header.size != sizeof(DdsHeader)) {
+    ozz::log::Err() << "Invalid DDS header for texture: " << path << std::endl;
+    return 0;
+  }
+
+  const uint32_t fourcc = header.ddspf.fourCC;
+  GLenum gl_format = 0;
+  uint32_t block_size = 0;
+  if (fourcc == MakeFourCC('D', 'X', 'T', '1')) {
+    gl_format = GL_COMPRESSED_RGBA_S3TC_DXT1_EXT;
+    block_size = 8;
+  } else if (fourcc == MakeFourCC('D', 'X', 'T', '3')) {
+    gl_format = GL_COMPRESSED_RGBA_S3TC_DXT3_EXT;
+    block_size = 16;
+  } else if (fourcc == MakeFourCC('D', 'X', 'T', '5')) {
+    gl_format = GL_COMPRESSED_RGBA_S3TC_DXT5_EXT;
+    block_size = 16;
+  } else {
+    ozz::log::Err() << "Unsupported DDS FourCC in texture: " << path
+                    << std::endl;
+    return 0;
+  }
+
+  const uint32_t mip_count = header.mipMapCount > 0 ? header.mipMapCount : 1;
+  const size_t data_offset = static_cast<size_t>(stream.tellg());
+  stream.seekg(0, std::ios::end);
+  const size_t file_size = static_cast<size_t>(stream.tellg());
+  const size_t data_size = file_size - data_offset;
+  stream.seekg(data_offset, std::ios::beg);
+
+  std::vector<uint8_t> data(data_size);
+  if (!stream.read(reinterpret_cast<char*>(data.data()), data_size)) {
+    ozz::log::Err() << "Failed to read DDS texture data: " << path << std::endl;
+    return 0;
+  }
+
+  GLuint texture = 0;
+  glGenTextures(1, &texture);
+  glBindTexture(GL_TEXTURE_2D, texture);
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER,
+                  mip_count > 1 ? GL_LINEAR_MIPMAP_LINEAR : GL_LINEAR);
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
+
+  uint32_t width = header.width;
+  uint32_t height = header.height;
+  const uint8_t* bytes = data.data();
+
+  for (uint32_t level = 0; level < mip_count; ++level) {
+    const uint32_t ww = std::max(1u, width);
+    const uint32_t hh = std::max(1u, height);
+    const size_t size =
+        std::max<size_t>(1, ((ww + 3) / 4) * ((hh + 3) / 4) * block_size);
+
+    glCompressedTexImage2D(GL_TEXTURE_2D, level, gl_format, ww, hh, 0,
+                           static_cast<GLsizei>(size), bytes);
+
+    bytes += size;
+    width = width > 1 ? width / 2 : 1;
+    height = height > 1 ? height / 2 : 1;
+  }
+
+  glBindTexture(GL_TEXTURE_2D, 0);
+  return texture;
+}
+
+GLuint LoadTextureFromFile(const fs::path& path) {
+  const std::string extension = path.extension().string();
+  std::string lowercase;
+  lowercase.resize(extension.size());
+  std::transform(extension.begin(), extension.end(), lowercase.begin(),
+                 [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+
+  if (lowercase == ".dds") {
+    return LoadDdsTexture(path);
+  }
+
+  ozz::log::LogV() << "Unsupported texture format for path: " << path
+                   << std::endl;
+  return 0;
+}
+
+fs::path SanitizeTexturePath(const std::string& raw) {
+  std::string sanitized = raw;
+  for (char& ch : sanitized) {
+    if (ch == '\\') {
+      ch = fs::path::preferred_separator;
+    }
+  }
+  return fs::path(sanitized);
+}
+
+std::vector<fs::path> BuildTextureCandidates(const fs::path& texture,
+                                             const fs::path& mesh_dir) {
+  std::vector<fs::path> candidates;
+  auto add_candidate = [&candidates](const fs::path& candidate) {
+    if (candidate.empty()) {
+      return;
+    }
+    for (const fs::path& existing : candidates) {
+      if (existing == candidate) {
+        return;
+      }
+    }
+    candidates.push_back(candidate);
+  };
+
+  const bool has_extension = texture.has_extension();
+
+  if (texture.is_absolute()) {
+    add_candidate(texture);
+  } else {
+    add_candidate(texture);
+    add_candidate(mesh_dir / texture);
+    add_candidate(fs::current_path() / texture);
+  }
+
+  if (!has_extension) {
+    const fs::path with_dds = texture.string() + ".dds";
+    if (texture.is_absolute()) {
+      add_candidate(with_dds);
+    } else {
+      add_candidate(with_dds);
+      add_candidate(mesh_dir / with_dds);
+      add_candidate(fs::current_path() / with_dds);
+    }
+  }
+
+  return candidates;
+}
 
 std::string EscapeJsonString(const char* input) {
   std::string escaped;
@@ -210,6 +405,9 @@ struct MotionMetadataData {
 };
 
 class PlaybackSampleApplication : public ozz::sample::Application {
+ public:
+  ~PlaybackSampleApplication() override { ReleaseMeshTextures(); }
+
  protected:
   static constexpr int kNoAnimationIndex = -1;
 
@@ -517,8 +715,13 @@ class PlaybackSampleApplication : public ozz::sample::Application {
         auto skinning_span = ozz::make_span(skinning_matrices_);
         skinning_span = skinning_span.first(palette_size);
 
-        success &= _renderer->DrawSkinnedMesh(
-            mesh, skinning_span, transform, renderer_options_);
+        ozz::sample::Renderer::Options draw_options = renderer_options_;
+        if (draw_options.texture && mesh_index < mesh_textures_.size()) {
+          draw_options.texture_override = mesh_textures_[mesh_index];
+        }
+
+        success &=
+            _renderer->DrawSkinnedMesh(mesh, skinning_span, transform, draw_options);
       }
     }
 
@@ -599,6 +802,7 @@ class PlaybackSampleApplication : public ozz::sample::Application {
         }
       }
       draw_mesh_ = true;
+      LoadMeshTextures(OPTIONS_mesh);
       RefreshMeshDisplayState();
     } else {
       meshes_.clear();
@@ -606,6 +810,7 @@ class PlaybackSampleApplication : public ozz::sample::Application {
       draw_mesh_ = false;
       mesh_names_.clear();
       mesh_visibility_.clear();
+      ReleaseMeshTextures();
     }
 
     if (!ComputeBindPoseModelMatrices()) {
@@ -784,7 +989,30 @@ class PlaybackSampleApplication : public ozz::sample::Application {
         if (!meshes_.empty()) {
           _im_gui->DoCheckBox("Draw mesh", &draw_mesh_);
           _im_gui->DoCheckBox("Show triangles", &renderer_options_.triangles);
-          _im_gui->DoCheckBox("Show texture", &renderer_options_.texture);
+          if (_im_gui->DoCheckBox("Show texture", &renderer_options_.texture)) {
+            if (renderer_options_.texture) {
+              ozz::log::Out() << "Texture rendering enabled." << std::endl;
+              for (size_t mesh_index = 0; mesh_index < meshes_.size();
+                   ++mesh_index) {
+                const auto& metadata = meshes_[mesh_index].xray_metadata;
+                const std::string resolved =
+                    mesh_index < mesh_texture_paths_.size()
+                        ? mesh_texture_paths_[mesh_index]
+                        : std::string();
+                const bool loaded =
+                    mesh_index < mesh_textures_.size() &&
+                    mesh_textures_[mesh_index] != 0;
+                ozz::log::Out()
+                    << "mesh[" << mesh_index << "] metadata='"
+                    << metadata.texture_path << "' resolved='"
+                    << (resolved.empty() ? "" : resolved)
+                    << "' loaded=" << (loaded ? "yes" : "no")
+                    << std::endl;
+              }
+            } else {
+              ozz::log::Out() << "Texture rendering disabled." << std::endl;
+            }
+          }
           _im_gui->DoCheckBox("Show vertices", &renderer_options_.vertices);
           _im_gui->DoCheckBox("Show normals", &renderer_options_.normals);
           _im_gui->DoCheckBox("Show tangents", &renderer_options_.tangents);
@@ -973,6 +1201,8 @@ class PlaybackSampleApplication : public ozz::sample::Application {
   std::string mesh_label_;
   std::vector<std::string> mesh_names_;
   std::vector<uint8_t> mesh_visibility_;
+  std::vector<GLuint> mesh_textures_;
+  std::vector<std::string> mesh_texture_paths_;
 
   // Optional dump controls.
   std::string skinning_dump_path_;
@@ -992,6 +1222,84 @@ class PlaybackSampleApplication : public ozz::sample::Application {
   bool show_bone_debug_ = true;
   int bone_display_limit_ = 16;
   bool space_was_down_ = false;
+
+  void ReleaseMeshTextures() {
+    if (!mesh_textures_.empty()) {
+      for (GLuint texture : mesh_textures_) {
+        if (texture != 0) {
+          glDeleteTextures(1, &texture);
+        }
+      }
+    }
+    mesh_textures_.clear();
+    mesh_texture_paths_.clear();
+  }
+
+  void LoadMeshTextures(const char* mesh_path) {
+    ReleaseMeshTextures();
+    mesh_textures_.resize(meshes_.size(), 0);
+    mesh_texture_paths_.assign(meshes_.size(), std::string());
+
+    if (!mesh_path) {
+      return;
+    }
+
+    const fs::path mesh_file = fs::absolute(fs::path(mesh_path));
+    const fs::path mesh_dir = mesh_file.parent_path();
+    fs::path override_root;
+    if (OPTIONS_texture_root && OPTIONS_texture_root[0] != '\0') {
+      override_root = fs::absolute(fs::path(std::string(OPTIONS_texture_root)));
+    }
+
+    for (size_t mesh_index = 0; mesh_index < meshes_.size(); ++mesh_index) {
+      const ozz::sample::XRayMeshMetadata& metadata =
+          meshes_[mesh_index].xray_metadata;
+      if (metadata.texture_path.empty()) {
+        continue;
+      }
+
+      const fs::path relative = SanitizeTexturePath(metadata.texture_path);
+      std::vector<fs::path> candidates =
+          BuildTextureCandidates(relative, mesh_dir);
+      if (!override_root.empty()) {
+        std::vector<fs::path> override_candidates =
+            BuildTextureCandidates(relative, override_root);
+        candidates.insert(candidates.end(), override_candidates.begin(),
+                          override_candidates.end());
+      }
+
+      GLuint texture = 0;
+      std::string last_candidate;
+      for (const fs::path& candidate : candidates) {
+        const std::string abs_candidate = fs::absolute(candidate).string();
+        last_candidate = abs_candidate;
+
+        if (!fs::exists(candidate)) {
+          continue;
+        }
+
+        texture = LoadTextureFromFile(candidate);
+        if (texture != 0) {
+          ozz::log::Out() << "Loaded texture for mesh " << mesh_index
+                          << " from " << abs_candidate << std::endl;
+          mesh_texture_paths_[mesh_index] = abs_candidate;
+          break;
+        }
+      }
+
+      if (texture == 0) {
+        ozz::log::Out() << "Unable to load texture '" << metadata.texture_path
+                        << "' for mesh " << mesh_index;
+        if (!last_candidate.empty()) {
+          ozz::log::Out() << " (last candidate: " << last_candidate << ")";
+        }
+        ozz::log::Out() << std::endl;
+        mesh_texture_paths_[mesh_index] = last_candidate;
+      }
+
+      mesh_textures_[mesh_index] = texture;
+    }
+  }
 
   void RefreshMeshDisplayState() {
     mesh_names_.clear();
