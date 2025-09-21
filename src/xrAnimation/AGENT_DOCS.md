@@ -54,7 +54,7 @@
 - Apply the same rotation matrix to translation vectors and orientation columns to maintain consistency.
 
 ## Tools & Scripts
-- `convert_assets.sh` (workspace root): converts `stalker_hero_1.ogf` and `critical_hit_grup_1.omf` into `.ozz` assets under `asset_tests/`.
+- `convert_assets.sh` (workspace root): converts `res/testdata/npc/stalker_hero_1.ogf` and `res/testdata/npc/critical_hit_grup_1.omf` into `.ozz` assets under `asset_tests/`.
 - CLI converter (`xray_to_ozz_converter`):
   - Skeleton: `xray_to_ozz_converter skeleton <input.ogf> <output_dir>`.
   - Animation: `xray_to_ozz_converter animation <skeleton.ogf> <input.omf> <output_dir> [-optimize]`.

@@ -31,12 +31,14 @@
 #include "../Externals/ozz-animation/samples/framework/mesh.h"
 #include "../Externals/ozz-animation/samples/framework/utils.h"
 #include "ozz/animation/runtime/animation.h"
+#include "ozz/animation/runtime/ik_two_bone_job.h"
 #include "ozz/animation/runtime/local_to_model_job.h"
 #include "ozz/animation/runtime/sampling_job.h"
 #include "ozz/animation/runtime/skeleton.h"
 #include "ozz/base/log.h"
 #include "ozz/base/maths/box.h"
 #include "ozz/base/maths/quaternion.h"
+#include "ozz/base/maths/simd_quaternion.h"
 #include "ozz/base/maths/simd_math.h"
 #include "ozz/base/maths/soa_transform.h"
 #include "ozz/base/maths/vec_float.h"
@@ -53,6 +55,7 @@
 #include <fstream>
 #include <iomanip>
 #include <iostream>
+#include <initializer_list>
 #include <limits>
 #include <sstream>
 #include <string>
@@ -660,6 +663,10 @@ class PlaybackSampleApplication : public ozz::sample::Application {
       return false;
     }
 
+    if (!ApplyFootIKAfterLocal()) {
+      return false;
+    }
+
     if (log_bones_each_frame_) {
       LogBoneTransformsForFrame();
     }
@@ -816,6 +823,8 @@ class PlaybackSampleApplication : public ozz::sample::Application {
     if (!ComputeBindPoseModelMatrices()) {
       return false;
     }
+
+    InitializeFootIKChains();
 
     log_bone_limit_ = num_joints > 0 ? num_joints : 0;
     bone_display_limit_ = std::min(num_joints, 16);
@@ -1042,6 +1051,15 @@ class PlaybackSampleApplication : public ozz::sample::Application {
     }
 
 
+    // Inverse kinematics
+    {
+      static bool ik_open = true;
+      ozz::sample::ImGui::OpenClose oc(_im_gui, "Inverse kinematics", &ik_open);
+      if (ik_open) {
+        DrawFootIkGui(_im_gui);
+      }
+    }
+
     // Logging options
     {
       static bool logging_open = false;
@@ -1177,6 +1195,20 @@ class PlaybackSampleApplication : public ozz::sample::Application {
   // Metadata per animation loaded from converter archives.
   std::vector<MotionMetadataData> animation_metadata_;
 
+  struct FootIkChain {
+    std::string label;
+    int hip = -1;
+    int knee = -1;
+    int ankle = -1;
+    ozz::math::SimdFloat4 mid_axis;
+    ozz::math::Float3 target_offset = {0.f, 0.f, 0.f};
+    bool enabled = true;
+    bool reached = false;
+    std::string hip_name;
+    std::string knee_name;
+    std::string ankle_name;
+  };
+
   // Temporary strings used to display mark information.
   std::vector<std::string> metadata_labels_;
 
@@ -1191,6 +1223,7 @@ class PlaybackSampleApplication : public ozz::sample::Application {
 
   // Buffer of model space matrices.
   ozz::vector<ozz::math::Float4x4> models_;
+  ozz::vector<ozz::math::Float4x4> bind_pose_models_;
 
   // Optional meshes used for skinning validation / rendering.
   ozz::vector<ozz::sample::Mesh> meshes_;
@@ -1222,6 +1255,20 @@ class PlaybackSampleApplication : public ozz::sample::Application {
   bool show_bone_debug_ = true;
   int bone_display_limit_ = 16;
   bool space_was_down_ = false;
+
+  // Cached lowercase joint names for lookup.
+  std::vector<std::string> joint_names_lower_;
+
+  // Foot IK configuration/state.
+  bool foot_ik_initialized_ = false;
+  bool foot_ik_available_ = false;
+  bool foot_ik_enabled_ = false;
+  float foot_ik_ground_height_ = 0.f;
+  float foot_ik_weight_ = 1.f;
+  float foot_ik_soften_ = 0.97f;
+  float foot_ik_twist_angle_deg_ = 0.f;
+  FootIkChain left_foot_chain_{};
+  FootIkChain right_foot_chain_{};
 
   void ReleaseMeshTextures() {
     if (!mesh_textures_.empty()) {
@@ -1333,6 +1380,7 @@ class PlaybackSampleApplication : public ozz::sample::Application {
   bool ComputeBindPoseModelMatrices() {
     if (skeleton_.num_joints() == 0) {
       models_.clear();
+      bind_pose_models_.clear();
       return true;
     }
 
@@ -1356,7 +1404,291 @@ class PlaybackSampleApplication : public ozz::sample::Application {
       ozz::log::Err() << "Failed to build bind-pose model matrices." << std::endl;
       return false;
     }
+    bind_pose_models_ = models_;
     return true;
+  }
+
+  static std::string ToLowerString(std::string_view value) {
+    std::string lowered;
+    lowered.reserve(value.size());
+    for (char ch : value) {
+      lowered.push_back(static_cast<char>(std::tolower(static_cast<unsigned char>(ch))));
+    }
+    return lowered;
+  }
+
+  int FindJointIndexByNames(std::initializer_list<const char*> candidates) const {
+    if (joint_names_lower_.empty()) {
+      return -1;
+    }
+    for (const char* candidate : candidates) {
+      if (!candidate) {
+        continue;
+      }
+      const std::string candidate_lower = ToLowerString(candidate);
+      for (size_t index = 0; index < joint_names_lower_.size(); ++index) {
+        if (joint_names_lower_[index] == candidate_lower) {
+          return static_cast<int>(index);
+        }
+      }
+    }
+    return -1;
+  }
+
+  bool FootChainValid(const FootIkChain& chain) const {
+    return chain.hip >= 0 && chain.knee >= 0 && chain.ankle >= 0;
+  }
+
+  void InitializeFootIKChains() {
+    const bool previously_initialized = foot_ik_initialized_;
+    const bool previous_left_enabled = left_foot_chain_.enabled;
+    const bool previous_right_enabled = right_foot_chain_.enabled;
+
+    left_foot_chain_ = FootIkChain{};
+    right_foot_chain_ = FootIkChain{};
+    left_foot_chain_.label = "Left foot";
+    right_foot_chain_.label = "Right foot";
+
+    joint_names_lower_.clear();
+    const int joint_count = skeleton_.num_joints();
+    joint_names_lower_.reserve(joint_count);
+    const auto joint_names = skeleton_.joint_names();
+    for (int joint = 0; joint < joint_count; ++joint) {
+      joint_names_lower_.push_back(ToLowerString(joint_names[joint]));
+    }
+
+    auto populate_chain = [&](FootIkChain& chain,
+                              std::initializer_list<const char*> hip_candidates,
+                              std::initializer_list<const char*> knee_candidates,
+                              std::initializer_list<const char*> ankle_candidates) {
+      chain.hip = FindJointIndexByNames(hip_candidates);
+      chain.knee = FindJointIndexByNames(knee_candidates);
+      chain.ankle = FindJointIndexByNames(ankle_candidates);
+      chain.hip_name = chain.hip >= 0 ? joint_names[chain.hip] : std::string();
+      chain.knee_name = chain.knee >= 0 ? joint_names[chain.knee] : std::string();
+      chain.ankle_name = chain.ankle >= 0 ? joint_names[chain.ankle] : std::string();
+      chain.mid_axis = ozz::math::simd_float4::z_axis();
+      if (FootChainValid(chain) &&
+          chain.knee >= 0 && static_cast<size_t>(chain.knee) < bind_pose_models_.size()) {
+        ozz::math::SimdFloat4 axis_candidate = bind_pose_models_[chain.knee].cols[2];
+        const ozz::math::SimdFloat4 axis_len_sq =
+            ozz::math::Length3Sqr(axis_candidate);
+        const ozz::math::SimdFloat4 min_len = ozz::math::simd_float4::Load1(1e-6f);
+        if (ozz::math::AreAllTrue1(ozz::math::CmpGt(axis_len_sq, min_len))) {
+          chain.mid_axis = ozz::math::Normalize3(axis_candidate);
+        }
+      }
+      chain.target_offset = {0.f, 0.f, 0.f};
+      chain.reached = false;
+    };
+
+    populate_chain(left_foot_chain_,
+                   {"bip01_l_thigh", "l_thigh", "left_thigh"},
+                   {"bip01_l_calf", "l_calf", "left_calf", "bip01_l_knee"},
+                   {"bip01_l_foot", "l_foot", "left_foot", "bip01_l_ankle"});
+    populate_chain(right_foot_chain_,
+                   {"bip01_r_thigh", "r_thigh", "right_thigh"},
+                   {"bip01_r_calf", "r_calf", "right_calf", "bip01_r_knee"},
+                   {"bip01_r_foot", "r_foot", "right_foot", "bip01_r_ankle"});
+
+    foot_ik_available_ = FootChainValid(left_foot_chain_) || FootChainValid(right_foot_chain_);
+
+    if (!previously_initialized) {
+      foot_ik_enabled_ = foot_ik_available_;
+      foot_ik_ground_height_ = 0.f;
+      foot_ik_weight_ = 1.f;
+      foot_ik_soften_ = 0.97f;
+      foot_ik_twist_angle_deg_ = 0.f;
+    } else if (!foot_ik_available_) {
+      foot_ik_enabled_ = false;
+    }
+
+    left_foot_chain_.enabled = FootChainValid(left_foot_chain_) &&
+                               (previously_initialized ? previous_left_enabled : true);
+    right_foot_chain_.enabled = FootChainValid(right_foot_chain_) &&
+                                (previously_initialized ? previous_right_enabled : true);
+
+    if (!FootChainValid(left_foot_chain_)) {
+      left_foot_chain_.enabled = false;
+    }
+    if (!FootChainValid(right_foot_chain_)) {
+      right_foot_chain_.enabled = false;
+    }
+
+    left_foot_chain_.reached = false;
+    right_foot_chain_.reached = false;
+    foot_ik_initialized_ = true;
+  }
+
+  bool ApplyFootIKAfterLocal() {
+    if (!foot_ik_enabled_ || !foot_ik_available_) {
+      left_foot_chain_.reached = false;
+      right_foot_chain_.reached = false;
+      return true;
+    }
+
+    bool applied = false;
+    if (left_foot_chain_.enabled && FootChainValid(left_foot_chain_)) {
+      applied |= ApplyFootChainIk(left_foot_chain_);
+    } else {
+      left_foot_chain_.reached = false;
+    }
+
+    if (right_foot_chain_.enabled && FootChainValid(right_foot_chain_)) {
+      applied |= ApplyFootChainIk(right_foot_chain_);
+    } else {
+      right_foot_chain_.reached = false;
+    }
+
+    if (applied) {
+      ozz::animation::LocalToModelJob ltm_job;
+      ltm_job.skeleton = &skeleton_;
+      ltm_job.input = make_span(locals_);
+      ltm_job.output = make_span(models_);
+      if (!ltm_job.Run()) {
+        return false;
+      }
+    }
+    return true;
+  }
+
+  bool ApplyFootChainIk(FootIkChain& chain) {
+    chain.reached = false;
+    if (!FootChainValid(chain) || !chain.enabled) {
+      return false;
+    }
+
+    const size_t model_count = models_.size();
+    if (chain.hip < 0 || chain.knee < 0 || chain.ankle < 0 ||
+        static_cast<size_t>(chain.hip) >= model_count ||
+        static_cast<size_t>(chain.knee) >= model_count ||
+        static_cast<size_t>(chain.ankle) >= model_count) {
+      return false;
+    }
+
+    const ozz::math::Float4x4& ankle_matrix = models_[chain.ankle];
+    ozz::math::Float3 target = {
+        ozz::math::GetX(ankle_matrix.cols[3]) + chain.target_offset.x,
+        ozz::math::GetY(ankle_matrix.cols[3]) + chain.target_offset.y,
+        foot_ik_ground_height_ + chain.target_offset.z};
+
+    const ozz::math::SimdFloat4 target_ms =
+        ozz::math::simd_float4::Load3PtrU(&target.x);
+
+    ozz::math::SimdFloat4 pole_vector_ms = models_[chain.knee].cols[1];
+    const ozz::math::SimdFloat4 pole_len_sq =
+        ozz::math::Length3Sqr(pole_vector_ms);
+    const ozz::math::SimdFloat4 min_len = ozz::math::simd_float4::Load1(1e-6f);
+    if (ozz::math::AreAllTrue1(ozz::math::CmpGt(pole_len_sq, min_len))) {
+      pole_vector_ms = ozz::math::Normalize3(pole_vector_ms);
+    }
+
+    ozz::animation::IKTwoBoneJob ik_job;
+    ik_job.target = target_ms;
+    ik_job.pole_vector = pole_vector_ms;
+    ik_job.mid_axis = chain.mid_axis;
+    const float clamped_weight = std::clamp(foot_ik_weight_, 0.f, 1.f);
+    const float soften_max = 0.999f;
+    const float clamped_soften = std::clamp(foot_ik_soften_, 0.f, soften_max);
+    ik_job.weight = clamped_weight;
+    ik_job.soften = clamped_soften;
+    ik_job.twist_angle = foot_ik_twist_angle_deg_ * ozz::math::kDegreeToRadian;
+    ik_job.start_joint = &models_[chain.hip];
+    ik_job.mid_joint = &models_[chain.knee];
+    ik_job.end_joint = &models_[chain.ankle];
+    ozz::math::SimdQuaternion start_correction;
+    ik_job.start_joint_correction = &start_correction;
+    ozz::math::SimdQuaternion mid_correction;
+    ik_job.mid_joint_correction = &mid_correction;
+    ik_job.reached = &chain.reached;
+
+    if (!ik_job.Run()) {
+      chain.reached = false;
+      return false;
+    }
+
+    ozz::sample::MultiplySoATransformQuaternion(chain.hip, start_correction,
+                                                make_span(locals_));
+    ozz::sample::MultiplySoATransformQuaternion(chain.knee, mid_correction,
+                                                make_span(locals_));
+
+    return true;
+  }
+
+  void DrawFootIkChainGui(ozz::sample::ImGui* _im_gui, FootIkChain& chain) {
+    if (!FootChainValid(chain)) {
+      std::string message = chain.label + " IK unavailable (joints not detected)";
+      _im_gui->DoLabel(message.c_str());
+      chain.enabled = false;
+      chain.reached = false;
+      return;
+    }
+
+    bool chain_enabled = chain.enabled;
+    std::string checkbox_label = chain.label + " IK";
+    if (_im_gui->DoCheckBox(checkbox_label.c_str(), &chain_enabled)) {
+      chain.enabled = chain_enabled;
+    }
+    if (!chain.enabled) {
+      chain.reached = false;
+      return;
+    }
+
+    char label[96];
+    std::snprintf(label, sizeof(label), "%s vertical offset %.3f",
+                  chain.label.c_str(), chain.target_offset.z);
+    _im_gui->DoSlider(label, -0.5f, 0.5f, &chain.target_offset.z);
+
+    std::snprintf(label, sizeof(label), "%s forward offset %.3f",
+                  chain.label.c_str(), chain.target_offset.x);
+    _im_gui->DoSlider(label, -0.5f, 0.5f, &chain.target_offset.x);
+
+    std::snprintf(label, sizeof(label), "%s lateral offset %.3f",
+                  chain.label.c_str(), chain.target_offset.y);
+    _im_gui->DoSlider(label, -0.5f, 0.5f, &chain.target_offset.y);
+
+    std::string joint_summary = "Hip: " + chain.hip_name + "  Knee: " + chain.knee_name +
+                                "  Ankle: " + chain.ankle_name;
+    _im_gui->DoLabel(joint_summary.c_str());
+
+    _im_gui->DoLabel(chain.reached ? "Status: target reached" : "Status: solving");
+  }
+
+  void DrawFootIkGui(ozz::sample::ImGui* _im_gui) {
+    if (!foot_ik_initialized_) {
+      _im_gui->DoLabel("Foot IK initializes after a skeleton is loaded.");
+      return;
+    }
+
+    if (!foot_ik_available_) {
+      _im_gui->DoLabel("No leg chains detected for foot IK on this skeleton.");
+      return;
+    }
+
+    _im_gui->DoCheckBox("Enable foot IK", &foot_ik_enabled_);
+    if (!foot_ik_enabled_) {
+      return;
+    }
+
+    foot_ik_weight_ = std::clamp(foot_ik_weight_, 0.f, 1.f);
+    const float soften_max = 0.999f;
+    foot_ik_soften_ = std::clamp(foot_ik_soften_, 0.f, soften_max);
+
+    char label[96];
+    std::snprintf(label, sizeof(label), "Ground height %.3f", foot_ik_ground_height_);
+    _im_gui->DoSlider(label, -2.f, 2.f, &foot_ik_ground_height_);
+
+    std::snprintf(label, sizeof(label), "IK weight %.2f", foot_ik_weight_);
+    _im_gui->DoSlider(label, 0.f, 1.f, &foot_ik_weight_);
+
+    std::snprintf(label, sizeof(label), "IK soften %.2f", foot_ik_soften_);
+    _im_gui->DoSlider(label, 0.f, soften_max, &foot_ik_soften_);
+
+    std::snprintf(label, sizeof(label), "Twist %.1f deg", foot_ik_twist_angle_deg_);
+    _im_gui->DoSlider(label, -180.f, 180.f, &foot_ik_twist_angle_deg_);
+
+    DrawFootIkChainGui(_im_gui, left_foot_chain_);
+    DrawFootIkChainGui(_im_gui, right_foot_chain_);
   }
 
   bool ExportSkinningToJson(const char* path) {

@@ -258,12 +258,12 @@ fs::path TestArtifactsDir()
 
 fs::path SkeletonInputPath()
 {
-    return ProjectRoot() / "res" / "testdata" / "stalker_hero_1.ogf";
+    return ProjectRoot() / "res" / "testdata" / "npc" / "stalker_hero_1.ogf";
 }
 
 fs::path AnimationInputPath()
 {
-    return ProjectRoot() / "res" / "testdata" / "critical_hit_grup_1.omf";
+    return ProjectRoot() / "res" / "testdata" / "npc" / "critical_hit_grup_1.omf";
 }
 
 fs::path SkeletonOutputPath()

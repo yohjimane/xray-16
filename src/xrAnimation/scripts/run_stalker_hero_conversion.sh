@@ -12,20 +12,20 @@ mkdir -p "${TESTDATA_DIR}"
 
 "${BUILD_DIR}/xray_to_ozz_converter" \
   skeleton \
-  "${ROOT_DIR}/res/testdata/stalker_hero_1.ogf" \
+  "${ROOT_DIR}/res/testdata/npc/stalker_hero_1.ogf" \
   "${TESTDATA_DIR}/stalker_hero_1.ozz"
 
 # Convert the critical_hit_grup_1 animation using the same skeleton
 "${BUILD_DIR}/xray_to_ozz_converter" \
   animation \
-  "${ROOT_DIR}/res/testdata/critical_hit_grup_1.omf" \
+  "${ROOT_DIR}/res/testdata/npc/critical_hit_grup_1.omf" \
   "${TESTDATA_DIR}/critical_hit_grup_1.ozz" \
-  "${ROOT_DIR}/res/testdata/stalker_hero_1.ogf"
+  "${ROOT_DIR}/res/testdata/npc/stalker_hero_1.ogf"
 
 # Convert the stalker hero mesh for skinning validation
 "${BUILD_DIR}/xray_to_ozz_converter" \
   mesh \
-  "${ROOT_DIR}/res/testdata/stalker_hero_1.ogf" \
+  "${ROOT_DIR}/res/testdata/npc/stalker_hero_1.ogf" \
   "${TESTDATA_DIR}/stalker_hero_mesh.ozz"
 
 # Launch the viewer with the converted assets
