@@ -41,12 +41,19 @@ endif()
 # ozz animation viewer tool (using ozz playback sample)
 add_executable(ozz_animation_viewer
     ozz_animation_viewer.cpp
+    ../../../Externals/imgui/imgui.cpp
+    ../../../Externals/imgui/imgui_draw.cpp
+    ../../../Externals/imgui/imgui_tables.cpp
+    ../../../Externals/imgui/imgui_widgets.cpp
+    ../../../Externals/imgui/backends/imgui_impl_glfw.cpp
+    ../../../Externals/imgui/backends/imgui_impl_opengl3.cpp
 )
 
 # Link to the existing ozz sample_framework
 target_link_libraries(ozz_animation_viewer
     PRIVATE
     sample_framework  # From ozz-animation
+    glfw
     xrAnimation
     xrCore
     xrScriptEngine
@@ -62,7 +69,8 @@ target_include_directories(ozz_animation_viewer
     ${CMAKE_CURRENT_SOURCE_DIR}/../../Include
     ${CMAKE_CURRENT_SOURCE_DIR}/../../../Externals/ozz-animation/include
     ${CMAKE_CURRENT_SOURCE_DIR}/../../../Externals/ozz-animation/samples
-    ${CMAKE_CURRENT_SOURCE_DIR}/../../../Externals/ozz-animation/extern/glfw/include
+    ${CMAKE_CURRENT_SOURCE_DIR}/../../../Externals/imgui
+    ${CMAKE_CURRENT_SOURCE_DIR}/../../../Externals/imgui/backends
 )
 
 # Set properties
