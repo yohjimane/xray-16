@@ -42,6 +42,11 @@ struct BindPoseSample
     std::unordered_map<std::string, Fmatrix> world_space_transforms;
 };
 
+struct AnimationSample
+{
+    std::unordered_map<std::string, Fmatrix> world_space_transforms;
+};
+
 struct LegacyChunk
 {
     const std::byte* data = nullptr;
@@ -312,6 +317,30 @@ std::optional<BindPoseSample> LoadLegacyBindPoseSample(const std::filesystem::pa
     }
 }
 
+std::optional<AnimationSample> LoadLegacyAnimationSample(const std::filesystem::path& ogf_path, const std::filesystem::path& omf_path,
+    std::string_view motion_name, float sample_time_seconds)
+{
+    (void)ogf_path;
+    (void)omf_path;
+    (void)motion_name;
+    (void)sample_time_seconds;
+
+    // TODO: Drive CKinematics sampling against legacy `.ogf/.omf` data for animation parity.
+    return std::nullopt;
+}
+
+std::optional<AnimationSample> LoadOzzAnimationSample(const std::filesystem::path& skeleton_path, const std::filesystem::path& animation_path,
+    std::string_view motion_name, float sample_time_seconds)
+{
+    (void)skeleton_path;
+    (void)animation_path;
+    (void)motion_name;
+    (void)sample_time_seconds;
+
+    // TODO: Drive Ozz sampling (SamplingJob + LocalToModelJob) for converted animation data.
+    return std::nullopt;
+}
+
 std::optional<BindPoseSample> LoadOzzBindPoseSample(const std::filesystem::path& skeleton_path)
 {
     if (!std::filesystem::exists(skeleton_path))
@@ -479,5 +508,47 @@ TEST(OzzKinematicsParity, BindPoseMatchesLegacySkeleton)
         EXPECT_NEAR(legacy_transform.c.x, ozz_transform.c.x, 1e-4f) << "Bind-pose X mismatch for bone " << bone_name;
         EXPECT_NEAR(legacy_transform.c.y, ozz_transform.c.y, 1e-4f) << "Bind-pose Y mismatch for bone " << bone_name;
         EXPECT_NEAR(legacy_transform.c.z, ozz_transform.c.z, 1e-4f) << "Bind-pose Z mismatch for bone " << bone_name;
+    }
+}
+
+TEST(OzzKinematicsParity, AnimationPoseMatchesLegacySkeleton)
+{
+    const auto ogf_path = ResolveProjectPath("res/testdata/npc/stalker_hero_1.ogf");
+    const auto omf_path = ResolveProjectPath("res/testdata/npc/critical_hit_grup_1.omf");
+    const auto ozz_skeleton_path = ResolveProjectPath("src/xrAnimation/tests/testdata/stalker_hero_1.ozz");
+    const auto ozz_animation_path = ResolveProjectPath("src/xrAnimation/tests/testdata/critical_hit_grup_1.ozz");
+
+    ASSERT_TRUE(std::filesystem::exists(ogf_path)) << "Missing legacy .ogf: " << ogf_path;
+    ASSERT_TRUE(std::filesystem::exists(omf_path)) << "Missing legacy .omf: " << omf_path;
+    ASSERT_TRUE(std::filesystem::exists(ozz_skeleton_path)) << "Missing converted skeleton: " << ozz_skeleton_path;
+    ASSERT_TRUE(std::filesystem::exists(ozz_animation_path)) << "Missing converted animation: " << ozz_animation_path;
+
+    constexpr std::string_view kMotionName = "critical_hit_grup_1";
+    constexpr float kSampleTimeSeconds = 0.2f;
+
+    const auto legacy_sample = LoadLegacyAnimationSample(ogf_path, omf_path, kMotionName, kSampleTimeSeconds);
+    ASSERT_TRUE(legacy_sample.has_value()) << "Legacy animation sampling not implemented yet for " << kMotionName;
+
+    const auto ozz_sample = LoadOzzAnimationSample(ozz_skeleton_path, ozz_animation_path, kMotionName, kSampleTimeSeconds);
+    ASSERT_TRUE(ozz_sample.has_value()) << "Ozz animation sampling not implemented yet for " << kMotionName;
+
+    ASSERT_EQ(legacy_sample->world_space_transforms.size(), ozz_sample->world_space_transforms.size()) << "Bone count mismatch between sampled poses";
+
+    const std::vector<std::string> sentinel_bones = { "bip01", "bip01_spine", "bip01_head", "bip01_l_hand", "bip01_r_hand" };
+
+    for (const auto& bone_name : sentinel_bones)
+    {
+        const auto legacy_it = legacy_sample->world_space_transforms.find(bone_name);
+        ASSERT_NE(legacy_it, legacy_sample->world_space_transforms.end()) << "Legacy sample missing bone " << bone_name;
+
+        const auto ozz_it = ozz_sample->world_space_transforms.find(bone_name);
+        ASSERT_NE(ozz_it, ozz_sample->world_space_transforms.end()) << "Ozz sample missing bone " << bone_name;
+
+        const Fmatrix& legacy_transform = legacy_it->second;
+        const Fmatrix& ozz_transform = ozz_it->second;
+
+        EXPECT_NEAR(legacy_transform.c.x, ozz_transform.c.x, 1e-4f) << "Animation X mismatch for bone " << bone_name;
+        EXPECT_NEAR(legacy_transform.c.y, ozz_transform.c.y, 1e-4f) << "Animation Y mismatch for bone " << bone_name;
+        EXPECT_NEAR(legacy_transform.c.z, ozz_transform.c.z, 1e-4f) << "Animation Z mismatch for bone " << bone_name;
     }
 }
