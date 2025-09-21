@@ -408,9 +408,6 @@ class PlaybackSampleApplication : public ozz::sample::Application {
  protected:
  // Updates current animation time and skeleton pose.
   virtual bool OnUpdate(float _dt, float) {
-    // Debug: count frames and output debug info for first few frames
-    debug_frame_count_++;
-
     const bool space_down = glfwGetKey(GLFW_KEY_SPACE) == GLFW_PRESS;
     if (space_down && !space_was_down_ && HasAnimationSelected() &&
         animations_[current_animation_].duration() > 0.0f) {
@@ -450,50 +447,6 @@ class PlaybackSampleApplication : public ozz::sample::Application {
 
     if (log_bones_each_frame_) {
       LogBoneTransformsForFrame();
-    }
-
-    // Debug: output bone transforms for first few frames
-    if (debug_frame_count_ <= 3) {
-      std::cout << "\n=== DEBUG FRAME " << debug_frame_count_ << " ===" << std::endl;
-      std::cout << "Animation time ratio: " << controller_.time_ratio() << std::endl;
-
-      // Show skeleton bounds
-      ozz::math::Box bounds;
-      GetSceneBounds(&bounds);
-      std::cout << "Scene bounds: min(" << bounds.min.x << ", "
-                << bounds.min.y << ", " << bounds.min.z
-                << ") max(" << bounds.max.x << ", "
-                << bounds.max.y << ", " << bounds.max.z << ")" << std::endl;
-
-      // Show first 10 bone transforms
-      const ozz::span<const char* const> joint_names = skeleton_.joint_names();
-      for (int i = 0; i < std::min(10, static_cast<int>(models_.size())); ++i) {
-        const ozz::math::Float4x4& matrix = models_[i];
-        // Extract translation from the last column
-        float x = ozz::math::GetX(matrix.cols[3]);
-        float y = ozz::math::GetY(matrix.cols[3]);
-        float z = ozz::math::GetZ(matrix.cols[3]);
-        std::cout << "  Bone[" << i << "] '" << joint_names[i] << "': pos("
-                  << std::fixed << std::setprecision(3) << x << ", " << y << ", " << z << ")" << std::endl;
-      }
-
-      // Show all bone positions in a compact format
-      std::cout << "\nAll bone positions:" << std::endl;
-      for (int i = 0; i < static_cast<int>(models_.size()); ++i) {
-        const ozz::math::Float4x4& matrix = models_[i];
-        float x = ozz::math::GetX(matrix.cols[3]);
-        float y = ozz::math::GetY(matrix.cols[3]);
-        float z = ozz::math::GetZ(matrix.cols[3]);
-        if (i % 5 == 0) std::cout << std::endl; // New line every 5 bones
-        std::cout << "(" << std::setw(7) << std::setprecision(2) << x << ","
-                  << std::setw(7) << std::setprecision(2) << y << ","
-                  << std::setw(7) << std::setprecision(2) << z << ") ";
-      }
-      std::cout << std::endl;
-
-      if (debug_frame_count_ == 1) {
-        PrintPoseTable();
-      }
     }
 
     if (skinning_dump_pending_ && !skinning_dump_path_.empty()) {
@@ -551,9 +504,6 @@ class PlaybackSampleApplication : public ozz::sample::Application {
   }
 
   virtual bool OnInitialize() {
-    // Initialize debug counter
-    debug_frame_count_ = 0;
-
     // Reading skeleton.
     if (!ozz::sample::LoadSkeleton(OPTIONS_skeleton, &skeleton_)) {
       return false;
@@ -989,9 +939,6 @@ class PlaybackSampleApplication : public ozz::sample::Application {
   bool draw_mesh_ = false;
   ozz::sample::Renderer::Options renderer_options_;
 
-  // Debug frame counter
-  int debug_frame_count_;
-
   // Optional externally forced time ratio for sampling animations.
   float forced_time_ratio_ = 0.f;
   bool use_forced_time_ratio_ = false;
@@ -1377,8 +1324,6 @@ class PlaybackSampleApplication : public ozz::sample::Application {
 
     std::ostringstream oss;
     oss.imbue(std::locale::classic());
-    oss << "\n=== FRAME " << debug_frame_count_ << " BONE TRANSFORMS ===" << std::endl;
-    oss << "Animation time ratio: " << controller_.time_ratio() << std::endl;
 
     for (int joint = 0; joint < max_joints; ++joint) {
       const ozz::math::Float4x4& matrix = models_[joint];

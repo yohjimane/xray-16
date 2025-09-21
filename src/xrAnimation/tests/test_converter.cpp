@@ -1,6 +1,7 @@
 #include <algorithm>
 #include <array>
 #include <cmath>
+#include <cstdint>
 #include <cstdlib>
 #include <filesystem>
 #include <fstream>
@@ -14,6 +15,7 @@
 #include <string_view>
 #include <system_error>
 #include <type_traits>
+#include <unordered_map>
 #include <vector>
 
 #ifndef PROJECT_ROOT
@@ -119,6 +121,90 @@ fs::path BlenderRestPoseBaselinePath()
 constexpr float kMeshPositionTolerance = 1e-4f;
 constexpr float kMeshWeightTolerance = 5e-4f;
 constexpr float kMatrixTolerance = 1e-4f;
+constexpr int kExpectedStalkerHeroVertexCount = 3237; // Blender export baseline
+
+int64_t QuantizeToScaledInt(double value, double scale)
+{
+    return static_cast<int64_t>(std::llround(value * scale));
+}
+
+std::string BuildVertexSignature(const Json& vertex)
+{
+    if (!vertex.contains("position"))
+        return {};
+
+    const Json& position = vertex["position"];
+    if (!position.is_array() || position.size() != 3)
+        return {};
+
+    std::ostringstream key;
+    key << QuantizeToScaledInt(position[0].get<double>(), 100000.0) << ','
+        << QuantizeToScaledInt(position[1].get<double>(), 100000.0) << ','
+        << QuantizeToScaledInt(position[2].get<double>(), 100000.0);
+
+    if (vertex.contains("weights") && vertex["weights"].is_array())
+    {
+        std::vector<std::pair<int, int64_t>> weights;
+        weights.reserve(vertex["weights"].size());
+
+        for (const auto& entry : vertex["weights"])
+        {
+            if (!entry.is_array() || entry.size() < 2)
+                continue;
+
+            const int joint_index = entry[0].get<int>();
+            const double weight_value = entry[1].get<double>();
+            weights.emplace_back(joint_index, QuantizeToScaledInt(weight_value, 1000000.0));
+        }
+
+        std::sort(weights.begin(), weights.end(), [](const auto& lhs, const auto& rhs) {
+            if (lhs.first != rhs.first)
+                return lhs.first < rhs.first;
+            return lhs.second < rhs.second;
+        });
+
+        for (const auto& [joint, weight] : weights)
+        {
+            key << '|' << joint << ':' << weight;
+        }
+    }
+
+    return key.str();
+}
+
+bool CollectVertexSignatures(const Json& meshes,
+                             size_t& total_vertices,
+                             std::unordered_map<std::string, size_t>& signatures)
+{
+    total_vertices = 0;
+    signatures.clear();
+
+    if (!meshes.is_array())
+        return false;
+
+    for (const auto& mesh_value : meshes)
+    {
+        if (!mesh_value.is_object())
+            return false;
+
+        if (!mesh_value.contains("vertices"))
+            return false;
+
+        const Json& vertices = mesh_value["vertices"];
+        if (!vertices.is_array())
+            return false;
+
+        total_vertices += vertices.size();
+        for (const auto& vertex : vertices)
+        {
+            const std::string signature = BuildVertexSignature(vertex);
+            if (!signature.empty())
+                signatures[signature]++;
+        }
+    }
+
+    return true;
+}
 
 bool LoadJsonFile(const fs::path& path, Json& out)
 {
@@ -954,6 +1040,77 @@ bool TestViewerMeshMatchesBaseline()
     {
         std::cerr << "mesh data malformed" << std::endl;
         return false;
+    }
+
+    std::unordered_map<std::string, size_t> viewer_signatures;
+    std::unordered_map<std::string, size_t> baseline_signatures;
+    size_t viewer_total_vertices = 0;
+    size_t baseline_total_vertices = 0;
+
+    if (!CollectVertexSignatures(viewer_meshes, viewer_total_vertices, viewer_signatures))
+    {
+        std::cerr << "viewer mesh vertices malformed" << std::endl;
+        return false;
+    }
+
+    if (!CollectVertexSignatures(baseline_meshes, baseline_total_vertices, baseline_signatures))
+    {
+        std::cerr << "baseline mesh vertices malformed" << std::endl;
+        return false;
+    }
+
+    if (viewer_signatures.size() != kExpectedStalkerHeroVertexCount)
+    {
+        std::cerr << "viewer produced " << viewer_signatures.size()
+                  << " unique vertices, expected " << kExpectedStalkerHeroVertexCount << std::endl;
+        ok = false;
+    }
+
+    if (baseline_signatures.size() != kExpectedStalkerHeroVertexCount)
+    {
+        std::cerr << "baseline recorded " << baseline_signatures.size()
+                  << " unique vertices, expected " << kExpectedStalkerHeroVertexCount << std::endl;
+        ok = false;
+    }
+
+    const size_t viewer_duplicate_vertices = viewer_total_vertices - viewer_signatures.size();
+    if (viewer_duplicate_vertices > 0)
+    {
+        std::cout << "viewer mesh contains " << viewer_duplicate_vertices
+                  << " duplicated vertices after deduplication" << std::endl;
+    }
+
+    if (viewer_signatures.size() != baseline_signatures.size())
+    {
+        std::cerr << "viewer/baseline unique vertex count mismatch ("
+                  << viewer_signatures.size() << " vs "
+                  << baseline_signatures.size() << ")" << std::endl;
+        ok = false;
+    }
+
+    for (const auto& [signature, baseline_count] : baseline_signatures)
+    {
+        const auto viewer_it = viewer_signatures.find(signature);
+        if (viewer_it == viewer_signatures.end())
+        {
+            std::cerr << "viewer missing vertex signature present in baseline" << std::endl;
+            ok = false;
+            break;
+        }
+
+        if (viewer_it->second < baseline_count)
+        {
+            std::cerr << "viewer has fewer instances of a vertex signature than baseline" << std::endl;
+            ok = false;
+            break;
+        }
+    }
+
+    if (baseline_total_vertices != kExpectedStalkerHeroVertexCount)
+    {
+        std::cerr << "baseline raw vertex total " << baseline_total_vertices
+                  << " differs from expected " << kExpectedStalkerHeroVertexCount << std::endl;
+        ok = false;
     }
 
     if (viewer_meshes.size() != baseline_meshes.size())

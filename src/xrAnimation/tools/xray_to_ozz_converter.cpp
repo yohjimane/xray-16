@@ -1027,6 +1027,9 @@ ozz::sample::Mesh build_mesh(const std::vector<MeshVertex>& vertices,
         mesh.triangle_indices[idx] = static_cast<uint16_t>(remapped);
     }
 
+    for (size_t tri = 0; tri + 2 < mesh.triangle_indices.size(); tri += 3)
+        std::swap(mesh.triangle_indices[tri + 1], mesh.triangle_indices[tri + 2]);
+
     mesh.joint_remaps.resize(joint_remaps.size());
     std::copy(joint_remaps.begin(), joint_remaps.end(), mesh.joint_remaps.begin());
 
