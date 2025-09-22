@@ -401,6 +401,8 @@ target_include_directories(xrRender_GL
     "${CMAKE_SOURCE_DIR}/sdk/include/DirectXMesh"
     "${CMAKE_SOURCE_DIR}/sdk/include/nvapi"
     "${CMAKE_SOURCE_DIR}/Externals"
+    "${CMAKE_SOURCE_DIR}/Externals/ozz-animation/include"
+    "${CMAKE_SOURCE_DIR}/Externals/ozz-animation/samples"
     "${CMAKE_SOURCE_DIR}/Externals/gli"
     "${CMAKE_SOURCE_DIR}/Externals/gli/external"
     "${CMAKE_SOURCE_DIR}/Externals/AGS_SDK/ags_lib/inc"

@@ -121,6 +121,8 @@ target_include_directories(xrRenderPC_R4
     "${CMAKE_SOURCE_DIR}/Externals/AGS_SDK"
     "${CMAKE_SOURCE_DIR}/Externals/AGS_SDK/ags_lib/inc"
     "${CMAKE_SOURCE_DIR}/src/packages/directxtex_desktop_2019.2024.10.29.1/include"
+    "${CMAKE_SOURCE_DIR}/Externals/ozz-animation/include"
+    "${CMAKE_SOURCE_DIR}/Externals/ozz-animation/samples"
 )
 
 target_link_libraries(xrRenderPC_R4

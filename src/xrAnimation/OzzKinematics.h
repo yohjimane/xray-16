@@ -39,6 +39,11 @@ public:
     const ozz::animation::Skeleton& Skeleton() const;
     ozz::animation::SamplingJob::Context& SamplingContext();
 
+    // Builds a skinning palette from cached bone instances. When render_space is
+    // true the output contains mRenderTransform (model-space skinning matrices),
+    // otherwise the raw local-to-model transforms prior to render-space offsets.
+    void BuildSkinningPalette(xr_vector<Fmatrix>& out_matrices, bool render_space) const;
+
     // IKinematics implementation (stubbed for initial integration pass)
     void Bone_Calculate(CBoneData* bd, Fmatrix* parent) override;
     void Bone_GetAnimPos(Fmatrix& pos, u16 id, u8 channel_mask, bool ignore_callbacks) override;

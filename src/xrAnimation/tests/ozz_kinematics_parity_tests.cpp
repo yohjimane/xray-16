@@ -1214,6 +1214,60 @@ TEST(OzzKinematicsPose, AdditionalBoneTransformsAffectSingleBone)
     EXPECT_NEAR(baseline_translation.z, restored_transform.c.z, 1e-4f);
 }
 
+TEST(OzzKinematicsPose, BuildsSkinningPaletteMatchesTransforms)
+{
+    const auto skeleton_path = ResolveProjectPath("src/xrAnimation/tests/testdata/stalker_hero_1.ozz");
+    ASSERT_TRUE(std::filesystem::exists(skeleton_path));
+
+    OzzKinematics kinematics;
+    ASSERT_TRUE(kinematics.InitializeFromOzz(skeleton_path.string().c_str()));
+
+    kinematics.CalculateBones(TRUE);
+
+    xr_vector<Fmatrix> local_palette;
+    xr_vector<Fmatrix> render_palette;
+    kinematics.BuildSkinningPalette(local_palette, false);
+    kinematics.BuildSkinningPalette(render_palette, true);
+
+    const u16 bone_count = kinematics.LL_BoneCount();
+    ASSERT_EQ(static_cast<size_t>(bone_count), local_palette.size());
+    ASSERT_EQ(static_cast<size_t>(bone_count), render_palette.size());
+
+    for (u16 bone = 0; bone < bone_count; ++bone)
+    {
+        const Fmatrix& local = kinematics.LL_GetTransform(bone);
+        const Fmatrix& render = kinematics.LL_GetTransform_R(bone);
+
+        SCOPED_TRACE(::testing::Message() << "bone=" << bone);
+
+        EXPECT_NEAR(local.i.x, local_palette[bone].i.x, 1e-5f);
+        EXPECT_NEAR(local.i.y, local_palette[bone].i.y, 1e-5f);
+        EXPECT_NEAR(local.i.z, local_palette[bone].i.z, 1e-5f);
+        EXPECT_NEAR(local.j.x, local_palette[bone].j.x, 1e-5f);
+        EXPECT_NEAR(local.j.y, local_palette[bone].j.y, 1e-5f);
+        EXPECT_NEAR(local.j.z, local_palette[bone].j.z, 1e-5f);
+        EXPECT_NEAR(local.k.x, local_palette[bone].k.x, 1e-5f);
+        EXPECT_NEAR(local.k.y, local_palette[bone].k.y, 1e-5f);
+        EXPECT_NEAR(local.k.z, local_palette[bone].k.z, 1e-5f);
+        EXPECT_NEAR(local.c.x, local_palette[bone].c.x, 1e-5f);
+        EXPECT_NEAR(local.c.y, local_palette[bone].c.y, 1e-5f);
+        EXPECT_NEAR(local.c.z, local_palette[bone].c.z, 1e-5f);
+
+        EXPECT_NEAR(render.i.x, render_palette[bone].i.x, 1e-5f);
+        EXPECT_NEAR(render.i.y, render_palette[bone].i.y, 1e-5f);
+        EXPECT_NEAR(render.i.z, render_palette[bone].i.z, 1e-5f);
+        EXPECT_NEAR(render.j.x, render_palette[bone].j.x, 1e-5f);
+        EXPECT_NEAR(render.j.y, render_palette[bone].j.y, 1e-5f);
+        EXPECT_NEAR(render.j.z, render_palette[bone].j.z, 1e-5f);
+        EXPECT_NEAR(render.k.x, render_palette[bone].k.x, 1e-5f);
+        EXPECT_NEAR(render.k.y, render_palette[bone].k.y, 1e-5f);
+        EXPECT_NEAR(render.k.z, render_palette[bone].k.z, 1e-5f);
+        EXPECT_NEAR(render.c.x, render_palette[bone].c.x, 1e-5f);
+        EXPECT_NEAR(render.c.y, render_palette[bone].c.y, 1e-5f);
+        EXPECT_NEAR(render.c.z, render_palette[bone].c.z, 1e-5f);
+    }
+}
+
 TEST(OzzKinematicsVisibility, BoneVisibilityToggleZeroesTransforms)
 {
     const auto skeleton_path = ResolveProjectPath("src/xrAnimation/tests/testdata/stalker_hero_1.ozz");

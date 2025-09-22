@@ -46,6 +46,10 @@
 5. **Animated Extension**: layer an `OzzKinematicsAnimated` companion that implements `IKinematicsAnimated` on top of the façade, translating X-Ray blend graphs into Ozz sampling jobs.
 6. **Validation**: compare viewer output against legacy `CKinematics` for representative actors (`stalker_hero`, weapon rigs) using existing regression scripts; document discrepancies in `logs/`.
 
+### Future Enhancement
+- Provide an optional startup flag that scans legacy `.ogf/.omf` assets (whether loose or inside packed `.db` archives), converts them to `.ozz/.ozzx` on first launch, and writes the results back to the matching paths under `gamedata`. This removes the need to ship huge preconverted bundles while keeping runtime loading identical.
+- `COzzKinematicsVisual` now stages both skeletons and mesh payloads from `.ozzx` bundles and exposes a skinning palette ready for renderer upload. Multi-threaded palette staging is earmarked for a later optimization pass once the animation job system is in place.
+
 ## Risks & Open Questions
 - We need authoritative `CBoneData` when running inside the engine. Confirm the converter stores/loadable structures or plan a serialized cache.
 - Legacy systems occasionally mutate `CBoneInstance` directly between updates (e.g., IK solvers). We must detect and reconcile those overrides with the Ozz pose buffer each frame.

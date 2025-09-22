@@ -360,6 +360,23 @@ ozz::animation::SamplingJob::Context& OzzKinematics::SamplingContext()
     return sampling_context_;
 }
 
+void OzzKinematics::BuildSkinningPalette(xr_vector<Fmatrix>& out_matrices, bool render_space) const
+{
+    const size_t count = bone_instances_.size();
+    out_matrices.resize(count);
+
+    if (render_space)
+    {
+        for (size_t idx = 0; idx < count; ++idx)
+            out_matrices[idx] = bone_instances_[idx].mRenderTransform;
+    }
+    else
+    {
+        for (size_t idx = 0; idx < count; ++idx)
+            out_matrices[idx] = bone_instances_[idx].mTransform;
+    }
+}
+
 void OzzKinematics::Bone_Calculate(CBoneData* /*bd*/, Fmatrix* /*parent*/)
 {
     CalculateBones(TRUE);

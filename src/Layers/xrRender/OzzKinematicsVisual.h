@@ -11,7 +11,10 @@
 
 #include "xrCommon/xr_vector.h"
 
+#include "ozz/base/io/archive.h"
+#include "ozz/base/io/memory_stream.h"
 #include "ozz/base/span.h"
+#include "ozz/sample/framework/mesh.h"
 
 #include <cstdint>
 #include <filesystem>
@@ -33,13 +36,18 @@ public:
     IKinematics* dcast_PKinematics() override { return &kinematics_; }
 
     OzzKinematics& Kinematics() { return kinematics_; }
+    const xr_vector<Fmatrix>& SkinningPalette() const { return bone_palette_; }
+    const std::vector<ozz::sample::Mesh>& Meshes() const { return meshes_; }
 
 private:
     void UpdateBounds();
+    void UpdateSkinningPalette();
 
 private:
     OzzKinematics kinematics_;
     xr_vector<std::uint8_t> skeleton_payload_;
     xr_vector<std::uint8_t> mesh_payload_;
+    std::vector<ozz::sample::Mesh> meshes_;
+    xr_vector<Fmatrix> bone_palette_;
 };
 } // namespace xray::render::RENDER_NAMESPACE

@@ -38,8 +38,24 @@ bool COzzKinematicsVisual::LoadFromBundle(const char* name, const std::filesyste
     std::string init_error = "Failed to initialize OzzKinematics from bundle: " + path.string();
     R_ASSERT2(kinematics_.InitializeFromOzzBuffer(skeleton_span), init_error.c_str());
 
+    meshes_.clear();
+    if (!mesh_payload_.empty())
+    {
+        ozz::io::MemoryStream mesh_stream;
+        R_ASSERT2(mesh_stream.Write(mesh_payload_.data(), mesh_payload_.size()), "Failed to seed mesh stream from bundle payload");
+        mesh_stream.Seek(0, ozz::io::Stream::kSet);
+
+        ozz::io::IArchive archive(&mesh_stream);
+        while (archive.TestTag<ozz::sample::Mesh>())
+        {
+            meshes_.emplace_back();
+            archive >> meshes_.back();
+        }
+    }
+
     kinematics_.CalculateBones(TRUE);
     UpdateBounds();
+    UpdateSkinningPalette();
 
     return true;
 }
@@ -52,6 +68,7 @@ void COzzKinematicsVisual::Copy(dxRender_Visual* pFrom)
     {
         skeleton_payload_ = other->skeleton_payload_;
         mesh_payload_ = other->mesh_payload_;
+        meshes_ = other->meshes_;
 
         if (!skeleton_payload_.empty())
         {
@@ -61,6 +78,7 @@ void COzzKinematicsVisual::Copy(dxRender_Visual* pFrom)
 
         kinematics_.CalculateBones(TRUE);
         UpdateBounds();
+        UpdateSkinningPalette();
     }
 }
 
@@ -68,6 +86,8 @@ void COzzKinematicsVisual::Release()
 {
     skeleton_payload_.clear();
     mesh_payload_.clear();
+    meshes_.clear();
+    bone_palette_.clear();
     inherited::Release();
 }
 
@@ -89,5 +109,11 @@ void COzzKinematicsVisual::UpdateBounds()
         vis.sphere.P.set(0.f, 0.f, 0.f);
         vis.sphere.R = 0.f;
     }
+}
+
+void COzzKinematicsVisual::UpdateSkinningPalette()
+{
+    // TODO: evaluate parallel palette staging once we integrate threaded animation jobs.
+    kinematics_.BuildSkinningPalette(bone_palette_, /*render_space*/ true);
 }
 } // namespace xray::render::RENDER_NAMESPACE
