@@ -48,7 +48,7 @@
 
 ### Future Enhancement
 - Provide an optional startup flag that scans legacy `.ogf/.omf` assets (whether loose or inside packed `.db` archives), converts them to `.ozz/.ozzx` on first launch, and writes the results back to the matching paths under `gamedata`. This removes the need to ship huge preconverted bundles while keeping runtime loading identical.
-- `COzzKinematicsVisual` now stages both skeletons and mesh payloads from `.ozzx` bundles and exposes a skinning palette ready for renderer upload. Multi-threaded palette staging is earmarked for a later optimization pass once the animation job system is in place.
+- `COzzKinematicsVisual` stages skeletons, meshes, and CPU-skinned geometry from `.ozzx` bundles. Skinned surfaces currently update on the main thread using the computed palette; once the animation job system lands we can parallelise the per-surface palette and skinning work (each surface only depends on its subset of joints), pushing the heavy lifting off the render thread.
 
 ## Risks & Open Questions
 - We need authoritative `CBoneData` when running inside the engine. Confirm the converter stores/loadable structures or plan a serialized cache.

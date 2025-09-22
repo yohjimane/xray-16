@@ -44,6 +44,9 @@ public:
     // otherwise the raw local-to-model transforms prior to render-space offsets.
     void BuildSkinningPalette(xr_vector<Fmatrix>& out_matrices, bool render_space) const;
 
+    // Returns whether the current skeleton has any joints.
+    bool HasBones() const { return !bone_instances_.empty(); }
+
     // IKinematics implementation (stubbed for initial integration pass)
     void Bone_Calculate(CBoneData* bd, Fmatrix* parent) override;
     void Bone_GetAnimPos(Fmatrix& pos, u16 id, u8 channel_mask, bool ignore_callbacks) override;

@@ -18,9 +18,13 @@
 
 #include <cstdint>
 #include <filesystem>
+#include <memory>
+#include <vector>
 
 namespace xray::render::RENDER_NAMESPACE
 {
+class COzzSkinnedSurface;
+
 class COzzKinematicsVisual final : public FHierrarhyVisual
 {
 public:
@@ -36,18 +40,25 @@ public:
     IKinematics* dcast_PKinematics() override { return &kinematics_; }
 
     OzzKinematics& Kinematics() { return kinematics_; }
-    const xr_vector<Fmatrix>& SkinningPalette() const { return bone_palette_; }
+    bool HasGeometry() const { return !meshes_.empty(); }
+    const xr_vector<Fmatrix>& SkinningPalette();
     const std::vector<ozz::sample::Mesh>& Meshes() const { return meshes_; }
+
+    void EnsureSkinningPalette();
+    void OnPoseUpdated();
+    void UpdateSkinningPalette();
+    static void HandleKinematicsUpdated(IKinematics* kin);
 
 private:
     void UpdateBounds();
-    void UpdateSkinningPalette();
 
 private:
     OzzKinematics kinematics_;
     xr_vector<std::uint8_t> skeleton_payload_;
     xr_vector<std::uint8_t> mesh_payload_;
     std::vector<ozz::sample::Mesh> meshes_;
+    std::vector<std::unique_ptr<COzzSkinnedSurface>> surfaces_;
     xr_vector<Fmatrix> bone_palette_;
+    bool palette_dirty_ = true;
 };
 } // namespace xray::render::RENDER_NAMESPACE
