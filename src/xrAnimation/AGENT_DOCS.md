@@ -3,7 +3,7 @@
 ## Latest Session Notes
 - `OzzKinematics` now evaluates bind pose and sampled animation with visibility masks, callbacks, and additional transforms; parity tests compare results against the legacy runtime.
 - README and docs updated to describe the façade-first strategy and highlight remaining work around `.ozzx` runtime integration.
-- Next focus is delivering an in-engine `.ozzx` visual plus a pilot actor so we can validate renderer/physics callbacks while keeping TDD guardrails in place.
+- `.ozzx` visuals instantiate CPU-skinned surfaces that honour engine containers (`xr_vector`, `xr_unique_ptr`) and feed geometry through the existing renderer; traversal code now treats `MT_OZZ_BUNDLE` like legacy skeletons.
 
 ## Active Objective
 - Integrate a runtime visual that consumes `.ozzx` bundles, owns an `OzzKinematics`, and pushes bone palettes into the renderer/model pool.

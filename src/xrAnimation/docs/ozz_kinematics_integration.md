@@ -42,13 +42,13 @@
 1. **Façade Skeleton**: add `OzzKinematics` class (header/impl) under `xrAnimation/` exposing an `IKinematics` interface. Stub out every virtual with assertions and document mapping decisions inline. Wire into `xrAnimation` CMake target.
 2. **Data Bootstrap**: load `.ozz` skeleton + legacy `CBoneData`, build name/ID maps, allocate `CBoneInstance` storage via engine allocators, and expose getters (`LL_BoneID`, `LL_Bones`, etc.) using converter metadata.
 3. **Pose Evaluation Core**: implement the `CalculateBones` path using Ozz sampling + local-to-model jobs. Populate `CBoneInstance` buffers, respect callbacks/visibility, and update bounding volumes.
-4. **Compatibility Layer**: port remaining helpers (`Bone_GetAnimPos`, wallmarks, bounding boxes) and add unit hooks so downstream systems (physics/render) see unchanged behaviour.
+4. **Compatibility Layer**: port remaining helpers (`Bone_GetAnimPos`, wallmarks, bounding boxes) and add unit hooks so downstream systems (physics/render) see unchanged behaviour. `COzzKinematicsVisual` now consumes `.ozzx` mesh payloads, CPU-skins surfaces each frame, and feeds them into the renderer via standard `ref_geom` buffers.
 5. **Animated Extension**: layer an `OzzKinematicsAnimated` companion that implements `IKinematicsAnimated` on top of the façade, translating X-Ray blend graphs into Ozz sampling jobs.
 6. **Validation**: compare viewer output against legacy `CKinematics` for representative actors (`stalker_hero`, weapon rigs) using existing regression scripts; document discrepancies in `logs/`.
 
 ### Future Enhancement
 - Provide an optional startup flag that scans legacy `.ogf/.omf` assets (whether loose or inside packed `.db` archives), converts them to `.ozz/.ozzx` on first launch, and writes the results back to the matching paths under `gamedata`. This removes the need to ship huge preconverted bundles while keeping runtime loading identical.
-- `COzzKinematicsVisual` stages skeletons, meshes, and CPU-skinned geometry from `.ozzx` bundles. Skinned surfaces currently update on the main thread using the computed palette; once the animation job system lands we can parallelise the per-surface palette and skinning work (each surface only depends on its subset of joints), pushing the heavy lifting off the render thread.
+- `COzzKinematicsVisual` stages skeletons, meshes, and CPU-skinned geometry from `.ozzx` bundles. Surfaces currently update on the main thread using the computed palette; once the animation job system lands we can parallelise per-surface palette/skin computation (each surface only depends on a subset of joints), and longer term bind the palette to GPU skinning so we can drop the CPU pass entirely.
 
 ## Risks & Open Questions
 - We need authoritative `CBoneData` when running inside the engine. Confirm the converter stores/loadable structures or plan a serialized cache.
