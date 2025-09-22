@@ -1,10 +1,10 @@
 #pragma once
 
 #include <cstddef>
-#include <memory>
 
 #include "Include/xrRender/Kinematics.h"
 #include "xrCore/_fbox.h"
+#include "xrCommon/xr_smart_pointers.h"
 
 #include "ozz/animation/runtime/sampling_job.h"
 #include "ozz/animation/runtime/skeleton.h"
@@ -120,7 +120,7 @@ private:
     accel bone_map_by_ptr_;
     xr_vector<CBoneInstance> bone_instances_;
     xr_vector<CBoneData*> bones_;
-    xr_vector<std::unique_ptr<CBoneData>> bone_storage_;
+    xr_vector<xr_unique_ptr<CBoneData>> bone_storage_;
     xr_vector<Fobb> bone_boxes_;
     u16 root_bone_;
     u64 visible_mask_;

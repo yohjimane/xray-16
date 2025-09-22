@@ -10,6 +10,7 @@
 #include "xrCore/xrDebug.h"
 
 #include "xrCommon/xr_vector.h"
+#include "xrCommon/xr_smart_pointers.h"
 
 #include "ozz/base/io/archive.h"
 #include "ozz/base/io/memory_stream.h"
@@ -42,7 +43,7 @@ public:
     OzzKinematics& Kinematics() { return kinematics_; }
     bool HasGeometry() const { return !meshes_.empty(); }
     const xr_vector<Fmatrix>& SkinningPalette();
-    const std::vector<ozz::sample::Mesh>& Meshes() const { return meshes_; }
+    const xr_vector<ozz::sample::Mesh>& Meshes() const { return meshes_; }
 
     void EnsureSkinningPalette();
     void OnPoseUpdated();
@@ -56,8 +57,8 @@ private:
     OzzKinematics kinematics_;
     xr_vector<std::uint8_t> skeleton_payload_;
     xr_vector<std::uint8_t> mesh_payload_;
-    std::vector<ozz::sample::Mesh> meshes_;
-    std::vector<std::unique_ptr<COzzSkinnedSurface>> surfaces_;
+    xr_vector<ozz::sample::Mesh> meshes_;
+    xr_vector<xr_unique_ptr<COzzSkinnedSurface>> surfaces_;
     xr_vector<Fmatrix> bone_palette_;
     bool palette_dirty_ = true;
 };

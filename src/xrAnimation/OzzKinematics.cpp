@@ -260,7 +260,7 @@ bool OzzKinematics::BuildBoneMetadata()
     for (int joint = 0; joint < joint_count; ++joint)
     {
         const u16 bone_id = static_cast<u16>(joint);
-        auto bone = std::make_unique<CBoneData>(bone_id);
+        auto bone = xr_make_unique<CBoneData>(bone_id);
 
     const int16_t parent_index = (static_cast<size_t>(joint) < parents.size()) ? parents[joint] : static_cast<int16_t>(-1);
         bone->SetParentID(parent_index >= 0 ? static_cast<u16>(parent_index) : BI_NONE);
