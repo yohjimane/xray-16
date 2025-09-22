@@ -306,14 +306,14 @@ fs::path SingleAnimationOutputPath()
     return TestArtifactsDir() / "critical_hit_grup_1_single.ozz";
 }
 
+fs::path SingleAnimationOptimizedOutputPath()
+{
+    return TestArtifactsDir() / "critical_hit_grup_1_single_optimized.ozz";
+}
+
 fs::path MeshOutputPath()
 {
     return TestArtifactsDir() / "stalker_hero_mesh.ozz";
-}
-
-fs::path MeshSkinningOutputPath()
-{
-    return TestArtifactsDir() / "stalker_hero_mesh_skinning.json";
 }
 
 fs::path BundleOutputPath()
@@ -1051,12 +1051,11 @@ bool ConvertAnimation(bool force)
     return fs::exists(output_file);
 }
 
-bool ConvertSpecificMotion(const std::string& motion_name, bool force)
+bool ConvertSpecificMotionInternal(const std::string& motion_name, bool force, const fs::path& output_file, bool optimize)
 {
     if (!EnsureSkeletonGenerated())
         return false;
 
-    const fs::path output_file = SingleAnimationOutputPath();
     std::error_code ec;
     fs::create_directories(TestArtifactsDir(), ec);
 
@@ -1066,7 +1065,16 @@ bool ConvertSpecificMotion(const std::string& motion_name, bool force)
     if (!force && fs::exists(output_file))
         return true;
 
-    std::vector<std::string> args = { "animation", AnimationInputPath().string(), output_file.string(), SkeletonInputPath().string(), "--motion", motion_name };
+    std::vector<std::string> args = {
+        "animation",
+        AnimationInputPath().string(),
+        output_file.string(),
+        SkeletonInputPath().string(),
+        "--motion",
+        motion_name,
+    };
+    if (optimize)
+        args.emplace_back("--optimize");
 
     const int exit_code = ExecuteConverterCommand(args);
     if (exit_code != 0)
@@ -1076,6 +1084,16 @@ bool ConvertSpecificMotion(const std::string& motion_name, bool force)
     }
 
     return fs::exists(output_file);
+}
+
+bool ConvertSpecificMotion(const std::string& motion_name, bool force)
+{
+    return ConvertSpecificMotionInternal(motion_name, force, SingleAnimationOutputPath(), false);
+}
+
+bool ConvertSpecificMotionOptimized(const std::string& motion_name, bool force)
+{
+    return ConvertSpecificMotionInternal(motion_name, force, SingleAnimationOptimizedOutputPath(), true);
 }
 
 template <typename T>
@@ -1357,278 +1375,6 @@ bool TestMeshSurfaceStatsMatchSource()
     return ok;
 }
 
-bool TestViewerMeshMatchesBaseline()
-{
-    if (!EnsureSkeletonGenerated())
-        return false;
-
-    if (!ConvertBundle(true))
-        return false;
-
-    const fs::path skinning_dump = MeshSkinningOutputPath();
-    std::error_code remove_error;
-    fs::remove(skinning_dump, remove_error);
-
-    std::vector<std::string> args = {
-        std::string("--bundle=") + BundleOutputPath().string(),
-        std::string("--dump_skinning_json=") + skinning_dump.string(),
-        "--render=false",
-        "--max_idle_loops=2",
-    };
-
-    const int viewer_exit = ExecuteCommand(ResolveViewerBinary(), args);
-    if (viewer_exit != 0)
-    {
-        std::cerr << "ozz_animation_viewer returned exit code " << viewer_exit << std::endl;
-        return false;
-    }
-
-    if (!fs::exists(skinning_dump))
-    {
-        std::cerr << "viewer did not produce skinning dump: " << skinning_dump << std::endl;
-        return false;
-    }
-
-    Json viewer_json;
-    if (!LoadJsonFile(skinning_dump, viewer_json))
-        return false;
-
-    Json baseline_json;
-    if (!LoadJsonFile(BlenderRestPoseBaselinePath(), baseline_json))
-        return false;
-
-    ozz::animation::Skeleton skeleton;
-    if (!LoadOzz(SkeletonOutputPath(), skeleton))
-        return false;
-
-    bool ok = true;
-
-    if (!viewer_json.contains("armature") || !baseline_json.contains("armature"))
-    {
-        std::cerr << "armature missing from JSON data" << std::endl;
-        return false;
-    }
-
-    const Json& viewer_armature = viewer_json["armature"];
-    const Json& baseline_armature = baseline_json["armature"];
-
-    if (!viewer_armature.contains("bones") || !baseline_armature.contains("bones"))
-    {
-        std::cerr << "bone arrays missing from armature" << std::endl;
-        return false;
-    }
-
-    const Json& viewer_bones = viewer_armature["bones"];
-    const Json& baseline_bones = baseline_armature["bones"];
-
-    if (!viewer_bones.is_array() || !baseline_bones.is_array())
-    {
-        std::cerr << "bone data malformed" << std::endl;
-        return false;
-    }
-
-    if (viewer_bones.size() != baseline_bones.size())
-    {
-        std::cerr << "bone count mismatch between viewer and baseline" << std::endl;
-        ok = false;
-    }
-
-    const size_t bone_count = std::min(viewer_bones.size(), baseline_bones.size());
-    for (size_t bone_index = 0; bone_index < bone_count; ++bone_index)
-    {
-        const Json& viewer_bone = viewer_bones[bone_index];
-        const Json& baseline_bone = baseline_bones[bone_index];
-
-        const std::string viewer_name = viewer_bone.value("name", std::string());
-        const std::string baseline_name = baseline_bone.value("name", std::string());
-        if (viewer_name != baseline_name)
-        {
-            std::cerr << "bone name mismatch at index " << bone_index << ": '" << viewer_name << "' vs '" << baseline_name << "'" << std::endl;
-            ok = false;
-        }
-    }
-
-    if (!viewer_json.contains("meshes") || !baseline_json.contains("meshes"))
-    {
-        std::cerr << "mesh arrays missing from JSON data" << std::endl;
-        return false;
-    }
-
-    const Json& viewer_meshes = viewer_json["meshes"];
-    const Json& baseline_meshes = baseline_json["meshes"];
-
-    if (!viewer_meshes.is_array() || !baseline_meshes.is_array())
-    {
-        std::cerr << "mesh data malformed" << std::endl;
-        return false;
-    }
-
-    if (viewer_meshes.size() > 0)
-    {
-        const Json& viewer_mesh = viewer_meshes[0];
-        if (viewer_mesh.contains("joint_palette"))
-            ok &= ValidateJointPalette(viewer_mesh["joint_palette"], skeleton, "mesh[0].joint_palette");
-    }
-
-    std::unordered_map<std::string, std::vector<BaselineVertex>> baseline_vertex_map;
-    if (!LoadCombinedBaselineVertices(skeleton, baseline_vertex_map))
-        return false;
-
-    size_t matched_vertices = 0;
-    size_t logged_unmatched = 0;
-
-    for (size_t mesh_index = 0; mesh_index < viewer_meshes.size(); ++mesh_index)
-    {
-        const Json& viewer_mesh = viewer_meshes[mesh_index];
-        if (!viewer_mesh.contains("vertices") || !viewer_mesh["vertices"].is_array())
-        {
-            std::cerr << "viewer mesh[" << mesh_index << "] lacks vertex array" << std::endl;
-            return false;
-        }
-
-        const Json& viewer_vertices = viewer_mesh["vertices"];
-        for (size_t vertex_index = 0; vertex_index < viewer_vertices.size(); ++vertex_index)
-        {
-            const Json& viewer_vertex = viewer_vertices[vertex_index];
-            const std::array<double, 3> viewer_position_ozz{ viewer_vertex["position"][0].get<double>(), viewer_vertex["position"][1].get<double>(),
-                viewer_vertex["position"][2].get<double>() };
-
-            const Json& weights_json = viewer_vertex.value("weights", Json::array());
-            if (!weights_json.is_array() || weights_json.empty())
-            {
-                std::cerr << "viewer mesh vertex missing weights" << std::endl;
-                ok = false;
-                continue;
-            }
-
-            std::vector<std::pair<int, double>> viewer_weights;
-            viewer_weights.reserve(weights_json.size());
-            for (const auto& entry : weights_json)
-            {
-                if (!entry.is_array() || entry.size() < 2)
-                    continue;
-                const int joint_index = entry[0].get<int>();
-                const double weight = entry[1].get<double>();
-                if (weight <= 0.f)
-                    continue;
-                viewer_weights.emplace_back(joint_index, weight);
-            }
-
-            if (viewer_weights.empty())
-            {
-                std::cerr << "viewer vertex has zero effective weights" << std::endl;
-                ok = false;
-                continue;
-            }
-
-            std::stable_sort(viewer_weights.begin(), viewer_weights.end(),
-                [](const auto& lhs, const auto& rhs)
-                {
-                    return lhs.second > rhs.second;
-                });
-
-            double viewer_weight_sum = 0.0;
-            for (const auto& entry : viewer_weights)
-                viewer_weight_sum += entry.second;
-            if (viewer_weight_sum > std::numeric_limits<double>::epsilon())
-            {
-                const double inv_sum = 1.0 / viewer_weight_sum;
-                for (auto& entry : viewer_weights)
-                    entry.second *= inv_sum;
-            }
-
-            std::sort(viewer_weights.begin(), viewer_weights.end(),
-                [](const auto& lhs, const auto& rhs)
-                {
-                    if (lhs.first != rhs.first)
-                        return lhs.first < rhs.first;
-                    return lhs.second < rhs.second;
-                });
-
-            const std::string signature = BuildVertexSignatureFromComponents(static_cast<double>(viewer_position_ozz[0]),
-                static_cast<double>(viewer_position_ozz[1]), static_cast<double>(viewer_position_ozz[2]), viewer_weights);
-
-            auto baseline_it = baseline_vertex_map.find(signature);
-            if (baseline_it == baseline_vertex_map.end())
-            {
-                if (logged_unmatched < 10)
-                {
-                    const int vertex_label = viewer_vertex.value("index", static_cast<int>(vertex_index));
-                    std::cerr << "no baseline entry matches viewer vertex signature for vertex " << vertex_label << ": " << signature << std::endl;
-                    ++logged_unmatched;
-                }
-                ok = false;
-                continue;
-            }
-
-            if (baseline_it->second.empty())
-            {
-                // Duplicate vertex beyond baseline coverage; accepted when deduplication is disabled.
-                continue;
-            }
-
-            BaselineVertex baseline_vertex = baseline_it->second.back();
-            baseline_it->second.pop_back();
-
-            const float dx = std::fabs(viewer_position_ozz[0] - baseline_vertex.position[0]);
-            const float dy = std::fabs(viewer_position_ozz[1] - baseline_vertex.position[1]);
-            const float dz = std::fabs(viewer_position_ozz[2] - baseline_vertex.position[2]);
-            if (dx > kMeshPositionTolerance || dy > kMeshPositionTolerance || dz > kMeshPositionTolerance)
-            {
-                std::cerr << "vertex position mismatch exceeds tolerance" << std::endl;
-                ok = false;
-            }
-
-            if (viewer_weights.size() != baseline_vertex.weights.size())
-            {
-                std::cerr << "vertex weight count mismatch (viewer " << viewer_weights.size() << " vs baseline " << baseline_vertex.weights.size() << ")"
-                          << std::endl;
-                ok = false;
-            }
-            else
-            {
-                for (size_t weight_idx = 0; weight_idx < viewer_weights.size(); ++weight_idx)
-                {
-                    const auto& vw = viewer_weights[weight_idx];
-                    const auto& bw = baseline_vertex.weights[weight_idx];
-                    if (vw.first != bw.first)
-                    {
-                        std::cerr << "vertex joint index mismatch (viewer " << vw.first << " vs baseline " << bw.first << ")" << std::endl;
-                        ok = false;
-                    }
-                    const float diff = std::fabs(vw.second - bw.second);
-                    if (diff > kMeshWeightTolerance)
-                    {
-                        std::cerr << "vertex weight mismatch for joint " << vw.first << " (viewer " << vw.second << " vs baseline " << bw.second << ", tol "
-                                  << kMeshWeightTolerance << ")" << std::endl;
-                        ok = false;
-                    }
-                }
-            }
-
-            ++matched_vertices;
-        }
-    }
-
-    for (const auto& [signature, remaining] : baseline_vertex_map)
-    {
-        if (!remaining.empty())
-        {
-            std::cerr << "baseline contains unmatched vertex signature" << std::endl;
-            ok = false;
-            break;
-        }
-    }
-
-    if (matched_vertices != kExpectedStalkerHeroVertexCount)
-    {
-        std::cerr << "matched vertex count " << matched_vertices << " differs from expected " << kExpectedStalkerHeroVertexCount << std::endl;
-        ok = false;
-    }
-
-    return ok;
-}
-
 bool TestBindPoseMatchesBlender()
 {
     if (!EnsureSkeletonGenerated())
@@ -1779,6 +1525,115 @@ bool TestAnimationMatchesReference()
     }
 
     return ok;
+}
+
+bool TestOptimizedAnimationMatchesSource()
+{
+    const char* motion_name = kExpectedMultiMotionNames[0];
+
+    if (!ConvertSpecificMotion(motion_name, true))
+        return false;
+
+    if (!ConvertSpecificMotionOptimized(motion_name, true))
+        return false;
+
+    const fs::path original_path = SingleAnimationOutputPath();
+    const fs::path optimized_path = SingleAnimationOptimizedOutputPath();
+    if (!fs::exists(original_path) || !fs::exists(optimized_path))
+        return false;
+
+    const std::uintmax_t original_size = fs::file_size(original_path);
+    const std::uintmax_t optimized_size = fs::file_size(optimized_path);
+    if (optimized_size >= original_size)
+    {
+        std::cerr << "optimized animation size " << optimized_size << " not smaller than original " << original_size << std::endl;
+        return false;
+    }
+
+    if (!EnsureSkeletonGenerated())
+        return false;
+
+    ozz::animation::Skeleton skeleton;
+    if (!LoadOzz(SkeletonOutputPath(), skeleton))
+        return false;
+
+    ozz::animation::Animation original_animation;
+    if (!LoadOzz(original_path, original_animation))
+        return false;
+
+    ozz::animation::Animation optimized_animation;
+    if (!LoadOzz(optimized_path, optimized_animation))
+        return false;
+
+    if (original_animation.num_tracks() != optimized_animation.num_tracks())
+    {
+        std::cerr << "optimized animation track count mismatch" << std::endl;
+        return false;
+    }
+
+    const float duration_delta = std::fabs(original_animation.duration() - optimized_animation.duration());
+    if (duration_delta > 1e-5f)
+    {
+        std::cerr << "optimized animation duration differs by " << duration_delta << std::endl;
+        return false;
+    }
+
+    const int sample_steps = 25;
+    const float translation_epsilon = 2e-3f;
+    const float rotation_epsilon = 5e-4f;
+    const float scale_epsilon = 1e-4f;
+
+    std::vector<ozz::math::Transform> original_locals;
+    std::vector<ozz::math::Transform> optimized_locals;
+
+    for (int step = 0; step < sample_steps; ++step)
+    {
+        const float ratio = sample_steps == 1 ? 0.f : static_cast<float>(step) / static_cast<float>(sample_steps - 1);
+        const float time = original_animation.duration() * ratio;
+
+        if (!SampleLocals(original_animation, skeleton, time, original_locals))
+            return false;
+        if (!SampleLocals(optimized_animation, skeleton, time, optimized_locals))
+            return false;
+
+        if (original_locals.size() != optimized_locals.size())
+            return false;
+
+        for (size_t joint = 0; joint < original_locals.size(); ++joint)
+        {
+            const auto& lhs = original_locals[joint];
+            const auto& rhs = optimized_locals[joint];
+
+            const float dx = lhs.translation.x - rhs.translation.x;
+            const float dy = lhs.translation.y - rhs.translation.y;
+            const float dz = lhs.translation.z - rhs.translation.z;
+            const float translation_error = std::sqrt(dx * dx + dy * dy + dz * dz);
+            if (translation_error > translation_epsilon)
+            {
+                std::cerr << "translation error " << translation_error << " for joint " << joint << " at sample " << step << std::endl;
+                return false;
+            }
+
+            float dot = lhs.rotation.x * rhs.rotation.x + lhs.rotation.y * rhs.rotation.y + lhs.rotation.z * rhs.rotation.z + lhs.rotation.w * rhs.rotation.w;
+            dot = std::fabs(dot);
+            if (dot < 1.f - rotation_epsilon)
+            {
+                std::cerr << "rotation dot product " << dot << " below threshold for joint " << joint << " at sample " << step << std::endl;
+                return false;
+            }
+
+            const float sx = std::fabs(lhs.scale.x - rhs.scale.x);
+            const float sy = std::fabs(lhs.scale.y - rhs.scale.y);
+            const float sz = std::fabs(lhs.scale.z - rhs.scale.z);
+            if (sx > scale_epsilon || sy > scale_epsilon || sz > scale_epsilon)
+            {
+                std::cerr << "scale mismatch for joint " << joint << " at sample " << step << std::endl;
+                return false;
+            }
+        }
+    }
+
+    return true;
 }
 
 bool TestMultipleAnimationConversion()
@@ -2045,12 +1900,6 @@ TEST(ConverterIntegration, MeshSurfaceStatsMatchSource)
     EXPECT_TRUE(TestMeshSurfaceStatsMatchSource());
 }
 
-// TODO: Re-enable once viewer JSON parity tolerances align with Blender baseline export.
-TEST(ConverterIntegration, DISABLED_ViewerMeshMatchesBaseline)
-{
-    EXPECT_TRUE(TestViewerMeshMatchesBaseline());
-}
-
 TEST(ConverterIntegration, BindPoseMatchesBlender)
 {
     EXPECT_TRUE(TestBindPoseMatchesBlender());
@@ -2079,6 +1928,11 @@ TEST(ConverterIntegration, MultipleAnimationConversion)
 TEST(ConverterIntegration, AnimationNamesPreserved)
 {
     EXPECT_TRUE(TestAnimationNamesPreserved());
+}
+
+TEST(ConverterIntegration, OptimizedAnimationMatchesSource)
+{
+    EXPECT_TRUE(TestOptimizedAnimationMatchesSource());
 }
 
 TEST(ConverterIntegration, AssetBundleContainsSkeletonAndMesh)

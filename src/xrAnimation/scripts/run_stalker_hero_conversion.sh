@@ -31,7 +31,8 @@ for animation_base in "${ANIMATION_BASENAMES[@]}"; do
       animation \
       "${ANIMATION_PATH}" \
       "${OUTPUT_DIR}/${animation_base}.ozz" \
-      "${SKELETON_PATH}"
+      "${SKELETON_PATH}" \
+      --optimize
   else
     echo "Warning: animation file not found: ${ANIMATION_PATH}" >&2
   fi
@@ -62,8 +63,3 @@ if ((${#ANIMATION_BASENAMES[@]} > 0)); then
 fi
 
 "${BUILD_DIR}/ozz_animation_viewer" "${viewer_args[@]}"
-
-# Optional viewer flags:
-#   --dump_skinning_json="${MESH_OUTPUT%.ozz}_skinning.json"
-#   --render=false
-#   --max_idle_loops=2

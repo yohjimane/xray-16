@@ -91,9 +91,6 @@ OZZ_OPTIONS_DECLARE_STRING(mesh, "Path to the skinned mesh (ozz archive format).
 // Optional JSON export for sampled animation data.
 OZZ_OPTIONS_DECLARE_STRING(dump_animation_json, "Path to write sampled animation data as JSON.", "", false)
 
-// Optional JSON export for bind-pose skinning baseline data.
-OZZ_OPTIONS_DECLARE_STRING(dump_skinning_json, "Path to write bind-pose skinning data as JSON.", "", false)
-
 OZZ_OPTIONS_DECLARE_STRING(texture_root, "Optional root directory to resolve texture metadata paths.", "", false)
 
 namespace
@@ -410,21 +407,6 @@ std::string GetFileStem(const char* path)
     return value;
 }
 
-std::array<std::array<float, 4>, 4> MatrixToRows(const ozz::math::Float4x4& matrix)
-{
-    std::array<std::array<float, 4>, 4> rows{};
-    for (int column = 0; column < 4; ++column)
-    {
-        float values[4];
-        ozz::math::StorePtrU(matrix.cols[column], values);
-        for (int row = 0; row < 4; ++row)
-        {
-            rows[row][column] = values[row];
-        }
-    }
-    return rows;
-}
-
 bool LoadSkeletonFromBytes(const std::vector<std::uint8_t>& bytes, ozz::animation::Skeleton* skeleton)
 {
     if (!skeleton)
@@ -460,11 +442,6 @@ bool LoadMeshesFromBytes(const std::vector<std::uint8_t>& bytes, ozz::vector<ozz
         archive >> meshes->back();
     }
     return true;
-}
-
-std::array<float, 3> ConvertOzzToBlender(float x, float y, float z)
-{
-    return { x, -z, y };
 }
 
 std::string BuildMeshDisplayName(const std::string& base_label, size_t mesh_index, size_t mesh_count)
@@ -618,8 +595,6 @@ protected:
         bool draw_skeleton = true;
         bool draw_mesh = false;
         ozz::sample::Renderer::Options renderer_options;
-        bool log_bones_each_frame = false;
-        int log_bone_limit = 0;
         bool show_bone_debug = true;
         int bone_display_limit = 16;
         bool foot_ik_enabled = false;
@@ -917,20 +892,6 @@ protected:
             return false;
         }
 
-        if (ui_state_.log_bones_each_frame)
-        {
-            LogBoneTransformsForFrame();
-        }
-
-        if (skinning_dump_pending_ && !skinning_dump_path_.empty())
-        {
-            if (!ExportSkinningToJson(skinning_dump_path_.c_str()))
-            {
-                return false;
-            }
-            skinning_dump_pending_ = false;
-        }
-
         return true;
     }
 
@@ -1169,7 +1130,6 @@ protected:
 
         InitializeFootIKChains();
 
-        ui_state_.log_bone_limit = num_joints > 0 ? num_joints : 0;
         ui_state_.bone_display_limit = std::min(num_joints, 16);
 
         if (OPTIONS_dump_animation_json && OPTIONS_dump_animation_json[0] != '\0')
@@ -1178,14 +1138,6 @@ protected:
             {
                 return false;
             }
-        }
-
-        skinning_dump_path_.clear();
-        skinning_dump_pending_ = false;
-        if (OPTIONS_dump_skinning_json && OPTIONS_dump_skinning_json[0] != '\0')
-        {
-            skinning_dump_path_ = OPTIONS_dump_skinning_json;
-            skinning_dump_pending_ = true;
         }
 
         // Optionally set a forced animation time ratio from environment.
@@ -1293,10 +1245,6 @@ private:
     std::vector<std::string> mesh_names_;
     std::vector<GLuint> mesh_textures_;
     std::vector<std::string> mesh_texture_paths_;
-
-    // Optional dump controls.
-    std::string skinning_dump_path_;
-    bool skinning_dump_pending_ = false;
 
     // Optional externally forced time ratio for sampling animations.
     float forced_time_ratio_ = 0.f;
@@ -1459,10 +1407,6 @@ private:
         ui_state_.current_animation = resolved;
         controller_.Reset();
         context_.Invalidate();
-        if (!skinning_dump_path_.empty())
-        {
-            skinning_dump_pending_ = true;
-        }
     }
 
     void DrawDearImGuiPanels()
@@ -1525,7 +1469,6 @@ private:
         DrawAnimationPanel();
         DrawRenderingPanel();
         DrawFootIkPanel();
-        DrawLoggingPanel();
         DrawBoneTransformsPanel();
         DrawMetadataPanel();
     }
@@ -1885,32 +1828,6 @@ private:
         ImGui::PopID();
     }
 
-    void DrawLoggingPanel()
-    {
-        if (!ImGui::Begin("Logging"))
-        {
-            ImGui::End();
-            return;
-        }
-
-        ImGui::Checkbox("Log bones every frame", &ui_state_.log_bones_each_frame);
-        if (ui_state_.log_bones_each_frame)
-        {
-            const int max_joints = skeleton_.num_joints();
-            if (max_joints > 0)
-            {
-                ui_state_.log_bone_limit = std::clamp(ui_state_.log_bone_limit, 1, max_joints);
-                ImGui::SliderInt("Bones printed", &ui_state_.log_bone_limit, 1, max_joints);
-            }
-            else
-            {
-                ui_state_.log_bone_limit = 0;
-            }
-        }
-
-        ImGui::End();
-    }
-
     void DrawBoneTransformsPanel()
     {
         if (!ImGui::Begin("Bone Transforms"))
@@ -2018,13 +1935,6 @@ private:
             ImGui::Separator();
             ImGui::Text("Mesh file: %s", mesh_label_.c_str());
             ImGui::Text("Loaded meshes: %zu", meshes_.size());
-        }
-
-        if (!skinning_dump_path_.empty())
-        {
-            ImGui::Separator();
-            ImGui::Text("Skinning dump: %s", skinning_dump_path_.c_str());
-            ImGui::Text("Pending: %s", skinning_dump_pending_ ? "yes" : "no");
         }
 
         ImGui::End();
@@ -2292,433 +2202,6 @@ private:
         ozz::sample::MultiplySoATransformQuaternion(chain.knee, mid_correction, make_span(locals_));
 
         return true;
-    }
-
-    bool ExportSkinningToJson(const char* path)
-    {
-        if (path == nullptr || path[0] == '\0')
-        {
-            return true;
-        }
-        if (meshes_.empty())
-        {
-            ozz::log::Err() << "No mesh loaded; cannot export skinning JSON." << std::endl;
-            return false;
-        }
-
-        const int joint_count = skeleton_.num_joints();
-        if (joint_count == 0)
-        {
-            ozz::log::Err() << "Skeleton has no joints; cannot export skinning JSON." << std::endl;
-            return false;
-        }
-
-        if (models_.size() != static_cast<size_t>(joint_count))
-        {
-            if (!ComputeBindPoseModelMatrices())
-            {
-                return false;
-            }
-        }
-
-        std::ofstream file(path, std::ios::binary);
-        if (!file)
-        {
-            ozz::log::Err() << "Failed to open skinning JSON export path: " << path << std::endl;
-            return false;
-        }
-        file.imbue(std::locale::classic());
-
-        const auto joint_names = skeleton_.joint_names();
-
-        file << "{\n";
-        file << "  \"armature\": {\n";
-        file << "    \"name\": \"" << EscapeJsonString(skeleton_label_.c_str()) << "\",\n";
-        file << "    \"bones\": [\n";
-
-        for (int joint = 0; joint < joint_count; ++joint)
-        {
-            const auto rows = MatrixToRows(models_[joint]);
-            ozz::math::SimdInt4 invertible;
-            const ozz::math::Float4x4 inverse = ozz::math::Invert(models_[joint], &invertible);
-            const auto inverse_rows = MatrixToRows(inverse);
-
-            file << "      {\n";
-            file << "        \"index\": " << joint << ",\n";
-            file << "        \"name\": \"" << EscapeJsonString(joint_names[joint]) << "\",\n";
-            file << "        \"matrix_global\": [\n";
-            for (int row = 0; row < 4; ++row)
-            {
-                file << "          [" << FormatFloat(rows[row][0]) << ", " << FormatFloat(rows[row][1]) << ", " << FormatFloat(rows[row][2]) << ", "
-                     << FormatFloat(rows[row][3]) << "]";
-                file << (row < 3 ? ",\n" : "\n");
-            }
-            file << "        ],\n";
-            file << "        \"matrix_global_inverse\": [\n";
-            for (int row = 0; row < 4; ++row)
-            {
-                file << "          [" << FormatFloat(inverse_rows[row][0]) << ", " << FormatFloat(inverse_rows[row][1]) << ", "
-                     << FormatFloat(inverse_rows[row][2]) << ", " << FormatFloat(inverse_rows[row][3]) << "]";
-                file << (row < 3 ? ",\n" : "\n");
-            }
-            file << "        ]\n";
-            file << "      }";
-            file << (joint + 1 < joint_count ? ",\n" : "\n");
-        }
-
-        file << "    ]\n";
-        file << "  },\n";
-        file << "  \"meshes\": [\n";
-
-        for (size_t mesh_index = 0; mesh_index < meshes_.size(); ++mesh_index)
-        {
-            const ozz::sample::Mesh& mesh = meshes_[mesh_index];
-
-            const size_t palette_size = mesh.joint_remaps.size();
-            if (palette_size > 0)
-            {
-                skinning_matrices_.resize(palette_size);
-                if (mesh.inverse_bind_poses.size() != palette_size)
-                {
-                    ozz::log::Err() << "Mesh palette size mismatch: remaps=" << mesh.joint_remaps.size()
-                                    << " inverse_bind_poses=" << mesh.inverse_bind_poses.size() << std::endl;
-                }
-                for (size_t palette_index = 0; palette_index < palette_size; ++palette_index)
-                {
-                    const uint16_t joint_index = mesh.joint_remaps[palette_index];
-                    if (joint_index >= models_.size())
-                    {
-                        ozz::log::Err() << "Palette index " << palette_index << " references joint " << joint_index << " beyond loaded skeleton." << std::endl;
-                        continue;
-                    }
-                    if (mesh.inverse_bind_poses.size() > palette_index)
-                    {
-                        skinning_matrices_[palette_index] = models_[joint_index] * mesh.inverse_bind_poses[palette_index];
-                    }
-                    else
-                    {
-                        skinning_matrices_[palette_index] = models_[joint_index];
-                    }
-                }
-            }
-            else
-            {
-                skinning_matrices_.clear();
-            }
-
-            file << "    {\n";
-            const std::string mesh_name =
-                mesh_names_.size() > mesh_index ? mesh_names_[mesh_index] : BuildMeshDisplayName(mesh_label_, mesh_index, meshes_.size());
-            file << "      \"name\": \"" << EscapeJsonString(mesh_name.c_str()) << "\",\n";
-            file << "      \"vertex_count\": " << mesh.vertex_count() << ",\n";
-            const ozz::sample::XRayMeshMetadata& xray = mesh.xray_metadata;
-            file << "      \"xray\": {\n";
-            file << "        \"ogf_type\": " << static_cast<int>(xray.ogf_type) << ",\n";
-            file << "        \"original_vertex_count\": " << xray.original_vertex_count << ",\n";
-            file << "        \"original_face_count\": " << xray.original_face_count << ",\n";
-            file << "        \"texture_path\": ";
-            if (!xray.texture_path.empty())
-            {
-                file << "\"" << EscapeJsonString(xray.texture_path.c_str()) << "\"";
-            }
-            else
-            {
-                file << "null";
-            }
-            file << ",\n";
-            file << "        \"shader_name\": ";
-            if (!xray.shader_name.empty())
-            {
-                file << "\"" << EscapeJsonString(xray.shader_name.c_str()) << "\"";
-            }
-            else
-            {
-                file << "null";
-            }
-            file << ",\n";
-            file << "        \"texture_link\": ";
-            if (xray.texture_link_present)
-            {
-                file << xray.texture_link;
-            }
-            else
-            {
-                file << "null";
-            }
-            file << ",\n";
-            file << "        \"shader_link\": ";
-            if (xray.shader_link_present)
-            {
-                file << xray.shader_link;
-            }
-            else
-            {
-                file << "null";
-            }
-            file << ",\n";
-            file << "        \"lod_visuals\": [";
-            for (size_t lod_index = 0; lod_index < xray.lod_visuals.size(); ++lod_index)
-            {
-                file << (lod_index == 0 ? "" : ", ") << "\"" << EscapeJsonString(xray.lod_visuals[lod_index].c_str()) << "\"";
-            }
-            file << "],\n";
-            file << "        \"lod_data_bytes\": " << xray.lod_data.size() << ",\n";
-            file << "        \"progressive_collapse_count\": " << xray.progressive_collapse_count << ",\n";
-            file << "        \"progressive_data_bytes\": " << xray.progressive_data.size() << ",\n";
-            file << "        \"child_links\": [";
-            for (size_t link_index = 0; link_index < xray.child_visual_links.size(); ++link_index)
-            {
-                file << (link_index == 0 ? "" : ", ") << xray.child_visual_links[link_index];
-            }
-            file << "]\n";
-            file << "      },\n";
-            file << "      \"joint_palette\": [\n";
-            for (size_t palette_index = 0; palette_index < palette_size; ++palette_index)
-            {
-                file << "        {\n";
-                file << "          \"palette_index\": " << palette_index << ",\n";
-                file << "          \"joint_index\": " << mesh.joint_remaps[palette_index] << ",\n";
-                if (mesh.inverse_bind_poses.size() > palette_index)
-                {
-                    const auto inverse_rows = MatrixToRows(mesh.inverse_bind_poses[palette_index]);
-                    file << "          \"inverse_bind_pose\": [\n";
-                    for (int row = 0; row < 4; ++row)
-                    {
-                        file << "            [" << FormatFloat(inverse_rows[row][0]) << ", " << FormatFloat(inverse_rows[row][1]) << ", "
-                             << FormatFloat(inverse_rows[row][2]) << ", " << FormatFloat(inverse_rows[row][3]) << "]";
-                        file << (row < 3 ? ",\n" : "\n");
-                    }
-                    file << "          ],\n";
-                }
-                else
-                {
-                    file << "          \"inverse_bind_pose\": [],\n";
-                }
-                if (skinning_matrices_.size() > palette_index)
-                {
-                    const auto skin_rows = MatrixToRows(skinning_matrices_[palette_index]);
-                    file << "          \"skinning_matrix\": [\n";
-                    for (int row = 0; row < 4; ++row)
-                    {
-                        file << "            [" << FormatFloat(skin_rows[row][0]) << ", " << FormatFloat(skin_rows[row][1]) << ", "
-                             << FormatFloat(skin_rows[row][2]) << ", " << FormatFloat(skin_rows[row][3]) << "]";
-                        file << (row < 3 ? ",\n" : "\n");
-                    }
-                    file << "          ]\n";
-                }
-                else
-                {
-                    file << "          \"skinning_matrix\": []\n";
-                }
-                file << "        }";
-                file << (palette_index + 1 < palette_size ? ",\n" : "\n");
-            }
-            file << "      ],\n";
-            file << "      \"vertices\": [\n";
-
-            int global_vertex = 0;
-            for (const ozz::sample::Mesh::Part& part : mesh.parts)
-            {
-                const int influences = part.influences_count();
-                const int vertex_count = part.vertex_count();
-                const bool has_normals = part.normals.size() == static_cast<size_t>(vertex_count * ozz::sample::Mesh::Part::kNormalsCpnts);
-                for (int v = 0; v < vertex_count; ++v, ++global_vertex)
-                {
-                    file << "        {\n";
-                    file << "          \"index\": " << global_vertex << ",\n";
-                    const int pos_offset = v * ozz::sample::Mesh::Part::kPositionsCpnts;
-                    const float px = part.positions[pos_offset + 0];
-                    const float py = part.positions[pos_offset + 1];
-                    const float pz = part.positions[pos_offset + 2];
-                    const auto blender_pos = ConvertOzzToBlender(px, py, pz);
-                    file << "          \"position\": [" << FormatFloat(blender_pos[0]) << ", " << FormatFloat(blender_pos[1]) << ", "
-                         << FormatFloat(blender_pos[2]) << "],\n";
-
-                    float nx = 0.f;
-                    float ny = 0.f;
-                    float nz = 0.f;
-                    if (has_normals)
-                    {
-                        const int normal_offset = v * ozz::sample::Mesh::Part::kNormalsCpnts;
-                        nx = part.normals[normal_offset + 0];
-                        ny = part.normals[normal_offset + 1];
-                        nz = part.normals[normal_offset + 2];
-                        const auto blender_normal = ConvertOzzToBlender(nx, ny, nz);
-                        file << "          \"normal\": [" << FormatFloat(blender_normal[0]) << ", " << FormatFloat(blender_normal[1]) << ", "
-                             << FormatFloat(blender_normal[2]) << "],\n";
-                    }
-
-                    std::vector<std::pair<uint16_t, float>> weights;
-                    weights.reserve(influences > 0 ? influences : 1);
-                    const bool skinning_available = !skinning_matrices_.empty();
-                    const ozz::math::SimdFloat4 rest_position = ozz::math::simd_float4::Load(px, py, pz, 1.f);
-                    const ozz::math::SimdFloat4 rest_normal =
-                        has_normals ? ozz::math::simd_float4::Load(nx, ny, nz, 0.f) : ozz::math::simd_float4::Load(0.f, 0.f, 0.f, 0.f);
-                    float skinned_pos[3] = { 0.f, 0.f, 0.f };
-                    float skinned_nrm[3] = { 0.f, 0.f, 0.f };
-                    float weight_sum = 0.f;
-
-                    if (influences > 0)
-                    {
-                        const int joint_base = v * influences;
-                        const int weight_base = v * std::max(0, influences - 1);
-                        float accum = 0.f;
-                        for (int influence = 0; influence < influences; ++influence)
-                        {
-                            const uint16_t palette_index = part.joint_indices[joint_base + influence];
-                            if (palette_index >= mesh.joint_remaps.size())
-                            {
-                                ozz::log::Err() << "Vertex " << global_vertex << " references out-of-range joint index" << std::endl;
-                                continue;
-                            }
-                            float weight = 0.f;
-                            if (influence < influences - 1)
-                            {
-                                weight = part.joint_weights[weight_base + influence];
-                                accum += weight;
-                            }
-                            else
-                            {
-                                weight = std::max(0.f, 1.f - accum);
-                            }
-                            weight = std::clamp(weight, 0.f, 1.f);
-                            weight_sum += weight;
-
-                            const uint16_t joint_index = mesh.joint_remaps[palette_index];
-                            weights.emplace_back(joint_index, weight);
-
-                            if (skinning_available && weight > 0.f && palette_index < skinning_matrices_.size())
-                            {
-                                const ozz::math::Float4x4& skin_matrix = skinning_matrices_[palette_index];
-                                float transformed_position[4];
-                                ozz::math::StorePtrU(ozz::math::TransformPoint(skin_matrix, rest_position), transformed_position);
-                                skinned_pos[0] += transformed_position[0] * weight;
-                                skinned_pos[1] += transformed_position[1] * weight;
-                                skinned_pos[2] += transformed_position[2] * weight;
-
-                                if (has_normals)
-                                {
-                                    float transformed_normal[4];
-                                    ozz::math::StorePtrU(ozz::math::TransformVector(skin_matrix, rest_normal), transformed_normal);
-                                    skinned_nrm[0] += transformed_normal[0] * weight;
-                                    skinned_nrm[1] += transformed_normal[1] * weight;
-                                    skinned_nrm[2] += transformed_normal[2] * weight;
-                                }
-                            }
-                        }
-                    }
-
-                    std::sort(weights.begin(), weights.end(),
-                        [](const auto& lhs, const auto& rhs)
-                        {
-                            return lhs.first < rhs.first;
-                        });
-
-                    file << "          \"weights\": [";
-                    for (size_t idx = 0; idx < weights.size(); ++idx)
-                    {
-                        file << "[" << weights[idx].first << ", " << FormatFloat(weights[idx].second) << "]";
-                        if (idx + 1 < weights.size())
-                        {
-                            file << ", ";
-                        }
-                    }
-                    file << "],\n";
-
-                    const bool wrote_skinned = skinning_available && !weights.empty();
-                    if (wrote_skinned)
-                    {
-                        const auto blender_skinned = ConvertOzzToBlender(skinned_pos[0], skinned_pos[1], skinned_pos[2]);
-                        file << "          \"skinned_position\": [" << FormatFloat(blender_skinned[0]) << ", " << FormatFloat(blender_skinned[1]) << ", "
-                             << FormatFloat(blender_skinned[2]) << "]";
-                        if (has_normals)
-                        {
-                            const float length = std::sqrt(skinned_nrm[0] * skinned_nrm[0] + skinned_nrm[1] * skinned_nrm[1] + skinned_nrm[2] * skinned_nrm[2]);
-                            if (length > 0.f)
-                            {
-                                skinned_nrm[0] /= length;
-                                skinned_nrm[1] /= length;
-                                skinned_nrm[2] /= length;
-                            }
-                            else
-                            {
-                                skinned_nrm[0] = nx;
-                                skinned_nrm[1] = ny;
-                                skinned_nrm[2] = nz;
-                            }
-                            const auto blender_skinned_normal = ConvertOzzToBlender(skinned_nrm[0], skinned_nrm[1], skinned_nrm[2]);
-                            file << ",\n";
-                            file << "          \"skinned_normal\": [" << FormatFloat(blender_skinned_normal[0]) << ", "
-                                 << FormatFloat(blender_skinned_normal[1]) << ", " << FormatFloat(blender_skinned_normal[2]) << "]";
-                        }
-                        file << ",\n";
-                    }
-                    else
-                    {
-                        file << "          \"skinned_position\": [" << FormatFloat(blender_pos[0]) << ", " << FormatFloat(blender_pos[1]) << ", "
-                             << FormatFloat(blender_pos[2]) << "],\n";
-                        if (has_normals)
-                        {
-                            const auto blender_normal_fallback = ConvertOzzToBlender(nx, ny, nz);
-                            file << "          \"skinned_normal\": [" << FormatFloat(blender_normal_fallback[0]) << ", "
-                                 << FormatFloat(blender_normal_fallback[1]) << ", " << FormatFloat(blender_normal_fallback[2]) << "],\n";
-                        }
-                    }
-
-                    file << "          \"weight_sum\": " << FormatFloat(weight_sum) << "\n";
-                    file << "        }";
-                    if (global_vertex + 1 < mesh.vertex_count())
-                    {
-                        file << ",";
-                    }
-                    file << "\n";
-                }
-            }
-
-            file << "      ]\n";
-            file << "    }";
-            file << (mesh_index + 1 < meshes_.size() ? ",\n" : "\n");
-        }
-
-        file << "  ]\n";
-        file << "}\n";
-
-        ozz::log::LogV() << "Exported skinning JSON to " << path << std::endl;
-        return true;
-    }
-
-    void LogBoneTransformsForFrame() const
-    {
-        const int joint_count = skeleton_.num_joints();
-        if (joint_count == 0)
-        {
-            return;
-        }
-
-        const auto joint_names = skeleton_.joint_names();
-        const int max_joints = ui_state_.log_bone_limit > 0 ? std::min(ui_state_.log_bone_limit, joint_count) : joint_count;
-
-        std::ostringstream oss;
-        oss.imbue(std::locale::classic());
-
-        for (int joint = 0; joint < max_joints; ++joint)
-        {
-            const ozz::math::Float4x4& matrix = models_[joint];
-            const float tx = ozz::math::GetX(matrix.cols[3]);
-            const float ty = ozz::math::GetY(matrix.cols[3]);
-            const float tz = ozz::math::GetZ(matrix.cols[3]);
-
-            const ozz::math::SimdFloat4 quat_simd = ozz::math::ToQuaternion(matrix);
-            float quat[4];
-            ozz::math::StorePtrU(quat_simd, quat);
-
-            oss << "  Bone[" << joint << "] '" << joint_names[joint] << "': pos(" << FormatFloat(tx, 6) << ", " << FormatFloat(ty, 6) << ", "
-                << FormatFloat(tz, 6) << ") rot(" << FormatFloat(quat[3], 6) << ", " << FormatFloat(quat[0], 6) << ", " << FormatFloat(quat[1], 6) << ", "
-                << FormatFloat(quat[2], 6) << ")" << std::endl;
-        }
-
-        oss << std::endl;
-        std::cout << oss.str();
     }
 
     bool ExportAnimationToJson(const char* path)

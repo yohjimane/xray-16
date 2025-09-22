@@ -11,6 +11,7 @@
 #include "xrCore/xrCore.h"
 
 #include <ozz/animation/offline/animation_builder.h>
+#include <ozz/animation/offline/animation_optimizer.h>
 #include <ozz/animation/offline/raw_animation.h>
 #include <ozz/animation/offline/raw_skeleton.h>
 #include <ozz/animation/offline/skeleton_builder.h>
@@ -1958,6 +1959,7 @@ struct AnimationConfig
     fs::path skeleton_ogf;
     std::optional<std::string> motion_name;
     std::optional<fs::path> metadata_path;
+    bool optimize = false;
 };
 
 struct MeshConfig
@@ -2002,7 +2004,8 @@ SkeletonConfig parse_skeleton_arguments(int argc, char** argv)
 AnimationConfig parse_animation_arguments(int argc, char** argv)
 {
     if (argc < 5)
-        throw std::runtime_error("usage: xray_to_ozz_converter animation <input.omf> <output.ozz> <skeleton.ogf> [--motion <name>] [--metadata <json>]");
+        throw std::
+            runtime_error("usage: xray_to_ozz_converter animation <input.omf> <output.ozz> <skeleton.ogf> [--motion <name>] [--metadata <json>] [--optimize]");
 
     AnimationConfig config;
     config.input_omf = fs::path(argv[2]);
@@ -2023,6 +2026,10 @@ AnimationConfig parse_animation_arguments(int argc, char** argv)
             if (idx + 1 >= argc)
                 throw std::runtime_error("--metadata requires a path argument");
             config.metadata_path = fs::path(argv[++idx]);
+        }
+        else if (arg == "--optimize")
+        {
+            config.optimize = true;
         }
         else
         {
@@ -2142,9 +2149,17 @@ void convert_animation(const AnimationConfig& config)
     archive << animation_count;
 
     ozz::animation::offline::AnimationBuilder builder;
+    ozz::animation::offline::AnimationOptimizer optimizer;
     for (const OmfMotion* motion : motions_to_export)
     {
         auto raw_animation = build_raw_animation_from_omf(*motion, omf, bones);
+        if (config.optimize)
+        {
+            ozz::animation::offline::RawAnimation optimized_raw;
+            if (!optimizer(raw_animation, *skeleton, &optimized_raw))
+                throw std::runtime_error("animation optimization failed for motion: " + motion->name);
+            raw_animation = std::move(optimized_raw);
+        }
         auto animation = builder(raw_animation);
         if (!animation)
             throw std::runtime_error("ozz animation build failed");
