@@ -258,6 +258,29 @@ struct LegacyAnimationData
     std::vector<std::string> motion_names;
 };
 
+struct TestBoneCallbackContext
+{
+    int call_count = 0;
+    CBoneInstance* last_instance = nullptr;
+    Fmatrix pre_transform{};
+    Fmatrix override_transform{};
+};
+
+void TestBoneCallbackFunction(CBoneInstance* instance)
+{
+    if (!instance)
+        return;
+
+    auto* context = static_cast<TestBoneCallbackContext*>(instance->callback_param());
+    if (!context)
+        return;
+
+    ++context->call_count;
+    context->last_instance = instance;
+    context->pre_transform = instance->mTransform;
+    instance->mTransform = context->override_transform;
+}
+
 std::vector<LegacyBoneRecord> ReadBoneNames(const LegacyChunk& chunk)
 {
     LegacyBinaryReader reader{ chunk.data, chunk.size, 0 };
@@ -1074,6 +1097,54 @@ TEST(OzzKinematicsPose, MatchesLegacyBindPoseTranslations)
     }
 }
 
+TEST(OzzKinematicsPose, SetPoseLocalsOverridesSingleBone)
+{
+    const auto skeleton_path = ResolveProjectPath("src/xrAnimation/tests/testdata/stalker_hero_1.ozz");
+    ASSERT_TRUE(std::filesystem::exists(skeleton_path));
+
+    OzzKinematics kinematics;
+    ASSERT_TRUE(kinematics.InitializeFromOzz(skeleton_path.string().c_str()));
+
+    kinematics.CalculateBones(TRUE);
+
+    constexpr u16 target_bone = 0;
+    ASSERT_LT(target_bone, kinematics.LL_BoneCount());
+
+    const Fmatrix baseline_target = kinematics.LL_GetTransform(target_bone);
+
+    const ozz::animation::Skeleton& skeleton = kinematics.Skeleton();
+    const auto rest_span = skeleton.joint_rest_poses();
+    std::vector<ozz::math::SoaTransform> locals(rest_span.begin(), rest_span.end());
+
+    const int soa_index = static_cast<int>(target_bone / 4);
+    const int lane_index = static_cast<int>(target_bone % 4);
+    ASSERT_LT(soa_index, static_cast<int>(locals.size()));
+
+    const Fvector delta{ 0.05f, -0.03f, 0.f };
+    ozz::math::SoaFloat3 soa_delta = ozz::math::SoaFloat3::zero();
+    soa_delta.x = ozz::math::SetI(soa_delta.x, ozz::math::simd_float4::Load1(delta.x), lane_index);
+    soa_delta.y = ozz::math::SetI(soa_delta.y, ozz::math::simd_float4::Load1(delta.y), lane_index);
+    soa_delta.z = ozz::math::SetI(soa_delta.z, ozz::math::simd_float4::Load1(delta.z), lane_index);
+
+    locals[static_cast<size_t>(soa_index)].translation = locals[static_cast<size_t>(soa_index)].translation + soa_delta;
+
+    ASSERT_TRUE(kinematics.SetPoseLocals(ozz::span<const ozz::math::SoaTransform>(locals.data(), locals.size())));
+    kinematics.CalculateBones(TRUE);
+
+    const Fmatrix sampled_target = kinematics.LL_GetTransform(target_bone);
+    EXPECT_NEAR(baseline_target.c.x + delta.x, sampled_target.c.x, 1e-4f);
+    EXPECT_NEAR(baseline_target.c.y + delta.y, sampled_target.c.y, 1e-4f);
+    EXPECT_NEAR(baseline_target.c.z + delta.z, sampled_target.c.z, 1e-4f);
+
+    kinematics.ClearPose();
+    kinematics.CalculateBones(TRUE);
+
+    const Fmatrix restored_target = kinematics.LL_GetTransform(target_bone);
+    EXPECT_NEAR(baseline_target.c.x, restored_target.c.x, 1e-4f);
+    EXPECT_NEAR(baseline_target.c.y, restored_target.c.y, 1e-4f);
+    EXPECT_NEAR(baseline_target.c.z, restored_target.c.z, 1e-4f);
+}
+
 TEST(OzzKinematicsPose, AdditionalBoneTransformsAffectSingleBone)
 {
     const auto skeleton_path = ResolveProjectPath("src/xrAnimation/tests/testdata/stalker_hero_1.ozz");
@@ -1113,6 +1184,152 @@ TEST(OzzKinematicsPose, AdditionalBoneTransformsAffectSingleBone)
     EXPECT_NEAR(baseline_translation.x, restored_transform.c.x, 1e-4f);
     EXPECT_NEAR(baseline_translation.y, restored_transform.c.y, 1e-4f);
     EXPECT_NEAR(baseline_translation.z, restored_transform.c.z, 1e-4f);
+}
+
+TEST(OzzKinematicsVisibility, BoneVisibilityToggleZeroesTransforms)
+{
+    const auto skeleton_path = ResolveProjectPath("src/xrAnimation/tests/testdata/stalker_hero_1.ozz");
+    ASSERT_TRUE(std::filesystem::exists(skeleton_path));
+
+    OzzKinematics kinematics;
+    ASSERT_TRUE(kinematics.InitializeFromOzz(skeleton_path.string().c_str()));
+
+    kinematics.CalculateBones(TRUE);
+
+    constexpr u16 sample_bone = 0;
+    ASSERT_LT(sample_bone, kinematics.LL_BoneCount());
+
+    const Fmatrix baseline = kinematics.LL_GetTransform(sample_bone);
+
+    auto expect_translation = [](const Fmatrix& transform, const Fvector& expected, float epsilon)
+    {
+        EXPECT_NEAR(expected.x, transform.c.x, epsilon);
+        EXPECT_NEAR(expected.y, transform.c.y, epsilon);
+        EXPECT_NEAR(expected.z, transform.c.z, epsilon);
+    };
+
+    Fvector baseline_translation = baseline.c;
+
+    kinematics.LL_SetBoneVisible(sample_bone, FALSE, FALSE);
+    kinematics.CalculateBones(TRUE);
+
+    const Fmatrix hidden = kinematics.LL_GetTransform(sample_bone);
+    expect_translation(hidden, { 0.f, 0.f, 0.f }, 1e-5f);
+
+    Fmatrix pre_callback{};
+    kinematics.Bone_GetAnimPos(pre_callback, sample_bone, 0, TRUE);
+    expect_translation(pre_callback, { 0.f, 0.f, 0.f }, 1e-5f);
+
+    kinematics.LL_SetBoneVisible(sample_bone, TRUE, FALSE);
+    kinematics.CalculateBones(TRUE);
+
+    const Fmatrix restored = kinematics.LL_GetTransform(sample_bone);
+    expect_translation(restored, baseline_translation, 1e-4f);
+}
+
+TEST(OzzKinematicsVisibility, SetBonesVisibleControlsMask)
+{
+    const auto skeleton_path = ResolveProjectPath("src/xrAnimation/tests/testdata/stalker_hero_1.ozz");
+    ASSERT_TRUE(std::filesystem::exists(skeleton_path));
+
+    OzzKinematics kinematics;
+    ASSERT_TRUE(kinematics.InitializeFromOzz(skeleton_path.string().c_str()));
+
+    kinematics.CalculateBones(TRUE);
+
+    constexpr u16 first_hidden_bone = 0;
+    constexpr u16 second_hidden_bone = 1;
+    constexpr u16 survivor_bone = 2;
+    ASSERT_LT(second_hidden_bone, kinematics.LL_BoneCount());
+    ASSERT_LT(survivor_bone, kinematics.LL_BoneCount());
+
+    const Fmatrix baseline_first = kinematics.LL_GetTransform(first_hidden_bone);
+    const Fmatrix baseline_second = kinematics.LL_GetTransform(second_hidden_bone);
+    const Fmatrix baseline_survivor = kinematics.LL_GetTransform(survivor_bone);
+
+    const u16 bone_count = kinematics.LL_BoneCount();
+    const u64 full_mask = bone_count >= 64 ? u64(-1) : ((u64(1) << bone_count) - 1);
+    const u64 hidden_mask = full_mask & ~(u64(1) << first_hidden_bone) & ~(u64(1) << second_hidden_bone);
+
+    kinematics.LL_SetBonesVisible(hidden_mask);
+    kinematics.CalculateBones(TRUE);
+
+    EXPECT_EQ(hidden_mask, kinematics.LL_GetBonesVisible());
+
+    const u16 expected_visible = static_cast<u16>(bone_count - 2);
+    EXPECT_EQ(expected_visible, kinematics.LL_VisibleBoneCount());
+
+    auto expect_zero_translation = [](const Fmatrix& transform)
+    {
+        EXPECT_NEAR(0.f, transform.c.x, 1e-5f);
+        EXPECT_NEAR(0.f, transform.c.y, 1e-5f);
+        EXPECT_NEAR(0.f, transform.c.z, 1e-5f);
+    };
+
+    expect_zero_translation(kinematics.LL_GetTransform(first_hidden_bone));
+    expect_zero_translation(kinematics.LL_GetTransform(second_hidden_bone));
+
+    const Fmatrix survivor_visible = kinematics.LL_GetTransform(survivor_bone);
+    EXPECT_NEAR(baseline_survivor.c.x, survivor_visible.c.x, 1e-4f);
+    EXPECT_NEAR(baseline_survivor.c.y, survivor_visible.c.y, 1e-4f);
+    EXPECT_NEAR(baseline_survivor.c.z, survivor_visible.c.z, 1e-4f);
+
+    kinematics.LL_SetBonesVisible(full_mask);
+    kinematics.CalculateBones(TRUE);
+
+    EXPECT_EQ(full_mask, kinematics.LL_GetBonesVisible());
+
+    const Fmatrix restored_first = kinematics.LL_GetTransform(first_hidden_bone);
+    EXPECT_NEAR(baseline_first.c.x, restored_first.c.x, 1e-4f);
+    EXPECT_NEAR(baseline_first.c.y, restored_first.c.y, 1e-4f);
+    EXPECT_NEAR(baseline_first.c.z, restored_first.c.z, 1e-4f);
+
+    const Fmatrix restored_second = kinematics.LL_GetTransform(second_hidden_bone);
+    EXPECT_NEAR(baseline_second.c.x, restored_second.c.x, 1e-4f);
+    EXPECT_NEAR(baseline_second.c.y, restored_second.c.y, 1e-4f);
+    EXPECT_NEAR(baseline_second.c.z, restored_second.c.z, 1e-4f);
+}
+
+TEST(OzzKinematicsCallbacks, InvokesBoneCallbackAndHonorsOverwrite)
+{
+    const auto skeleton_path = ResolveProjectPath("src/xrAnimation/tests/testdata/stalker_hero_1.ozz");
+    ASSERT_TRUE(std::filesystem::exists(skeleton_path));
+
+    OzzKinematics kinematics;
+    ASSERT_TRUE(kinematics.InitializeFromOzz(skeleton_path.string().c_str()));
+
+    kinematics.CalculateBones(TRUE);
+
+    constexpr u16 callback_bone = 0;
+    ASSERT_LT(callback_bone, kinematics.LL_BoneCount());
+
+    const Fmatrix baseline = kinematics.LL_GetTransform(callback_bone);
+
+    TestBoneCallbackContext context;
+    context.override_transform = baseline;
+    const Fvector override_delta{ -0.12f, 0.08f, 0.04f };
+    context.override_transform.c.add(override_delta);
+
+    CBoneInstance& bone_instance = kinematics.LL_GetBoneInstance(callback_bone);
+    bone_instance.set_callback(bctCustom, &TestBoneCallbackFunction, &context, TRUE);
+
+    kinematics.CalculateBones(TRUE);
+
+    EXPECT_EQ(1, context.call_count);
+    EXPECT_EQ(&bone_instance, context.last_instance);
+
+    Fmatrix pre_callback{};
+    kinematics.Bone_GetAnimPos(pre_callback, callback_bone, 0, TRUE);
+    EXPECT_NEAR(baseline.c.x, pre_callback.c.x, 1e-4f);
+    EXPECT_NEAR(baseline.c.y, pre_callback.c.y, 1e-4f);
+    EXPECT_NEAR(baseline.c.z, pre_callback.c.z, 1e-4f);
+
+    const Fmatrix final_transform = kinematics.LL_GetTransform(callback_bone);
+    EXPECT_NEAR(context.override_transform.c.x, final_transform.c.x, 1e-4f);
+    EXPECT_NEAR(context.override_transform.c.y, final_transform.c.y, 1e-4f);
+    EXPECT_NEAR(context.override_transform.c.z, final_transform.c.z, 1e-4f);
+
+    bone_instance.reset_callback();
 }
 
 TEST(OzzKinematicsParity, BindPoseMatchesLegacySkeleton)
