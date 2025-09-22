@@ -1,5 +1,6 @@
 #pragma once
 
+#include <cstddef>
 #include <memory>
 
 #include "Include/xrRender/Kinematics.h"
@@ -9,6 +10,14 @@
 #include "ozz/animation/runtime/skeleton.h"
 #include "ozz/base/maths/soa_transform.h"
 #include "ozz/base/span.h"
+
+namespace ozz
+{
+namespace io
+{
+class Stream;
+} // namespace io
+} // namespace ozz
 
 namespace XRay
 {
@@ -22,6 +31,7 @@ public:
 
     // Bootstrap from converted `.ozz` assets.
     bool InitializeFromOzz(pcstr skeleton_path);
+    bool InitializeFromOzzBuffer(ozz::span<const std::byte> skeleton_data);
 
     // Pose management helpers.
     bool SetPoseLocals(ozz::span<const ozz::math::SoaTransform> locals);
@@ -93,6 +103,8 @@ private:
     void ResetRuntimeState();
     void ApplyAdditionalBoneTransforms(u16 bone_id, Fmatrix& transform) const;
     bool IsBoneVisible(size_t index) const;
+    bool LoadSkeletonFromStream(ozz::io::Stream* stream, pcstr debug_source);
+    bool FinalizeSkeletonInitialization(pcstr debug_source);
 
 private:
     CInifile* user_data_;

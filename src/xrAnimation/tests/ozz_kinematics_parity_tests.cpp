@@ -954,6 +954,39 @@ TEST(OzzKinematicsBootstrap, MatchesJointCountWithReferenceSkeleton)
     EXPECT_EQ(reference_skeleton.num_joints(), kinematics.LL_BoneCount()) << "Loaded joint count mismatch";
 }
 
+TEST(OzzKinematicsBootstrap, InitializesFromMemoryBuffer)
+{
+    const std::filesystem::path skeleton_path = ResolveProjectPath("src/xrAnimation/tests/testdata/stalker_hero_1.ozz");
+    ASSERT_TRUE(std::filesystem::exists(skeleton_path)) << "Missing sample skeleton at " << skeleton_path;
+
+    const auto skeleton_bytes = LoadBinaryFile(skeleton_path);
+    ASSERT_FALSE(skeleton_bytes.empty());
+
+    ozz::animation::Skeleton reference_skeleton;
+    {
+        ozz::io::File file(skeleton_path.string().c_str(), "rb");
+        ASSERT_TRUE(file.opened()) << "Failed to open " << skeleton_path;
+        ozz::io::IArchive archive(&file);
+        archive >> reference_skeleton;
+    }
+
+    OzzKinematics file_initialized;
+    ASSERT_TRUE(file_initialized.InitializeFromOzz(skeleton_path.string().c_str()));
+
+    OzzKinematics buffer_initialized;
+    const ozz::span<const std::byte> skeleton_span(skeleton_bytes.data(), skeleton_bytes.size());
+    ASSERT_TRUE(buffer_initialized.InitializeFromOzzBuffer(skeleton_span)) << "Failed to initialize from memory buffer";
+
+    ASSERT_EQ(reference_skeleton.num_joints(), buffer_initialized.LL_BoneCount());
+    EXPECT_EQ(file_initialized.LL_BoneCount(), buffer_initialized.LL_BoneCount());
+
+    ASSERT_GT(buffer_initialized.LL_BoneCount(), 0);
+    const u16 sample_bone = 0;
+    EXPECT_STREQ(file_initialized.LL_BoneName_dbg(sample_bone), buffer_initialized.LL_BoneName_dbg(sample_bone));
+
+    EXPECT_TRUE(buffer_initialized.LL_GetBoneVisible(sample_bone));
+}
+
 TEST(OzzKinematicsBootstrap, BoneNameLookupsAndVisibilityDefaults)
 {
     const std::filesystem::path skeleton_path = ResolveProjectPath("src/xrAnimation/tests/testdata/stalker_hero_1.ozz");

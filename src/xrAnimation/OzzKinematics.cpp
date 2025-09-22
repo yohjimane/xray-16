@@ -82,19 +82,97 @@ bool OzzKinematics::InitializeFromOzz(pcstr skeleton_path)
         return false;
     }
 
-    ozz::io::IArchive archive(&file);
+    return LoadSkeletonFromStream(&file, skeleton_path);
+}
+
+bool OzzKinematics::InitializeFromOzzBuffer(ozz::span<const std::byte> skeleton_data)
+{
+    ResetRuntimeState();
+
+    if (skeleton_data.empty())
+    {
+        Msg("[OzzKinematics] InitializeFromOzzBuffer received empty skeleton buffer");
+        return false;
+    }
+
+    ozz::io::MemoryStream memory_stream;
+    if (!memory_stream.Write(skeleton_data.data(), skeleton_data.size()))
+    {
+        Msg("[OzzKinematics] Failed to copy skeleton buffer into memory stream");
+        ResetRuntimeState();
+        return false;
+    }
+
+    memory_stream.Seek(0, ozz::io::Stream::kSet);
+
+    if (!LoadSkeletonFromStream(&memory_stream, "memory buffer"))
+    {
+        ResetRuntimeState();
+        return false;
+    }
+
+    return true;
+}
+
+void OzzKinematics::NotImplemented(pcstr function_name) const
+{
+    Msg("[OzzKinematics] %s is not implemented yet", function_name);
+}
+
+void OzzKinematics::ResetRuntimeState()
+{
+    bone_instances_.clear();
+    bone_boxes_.clear();
+    bones_.clear();
+    bone_storage_.clear();
+    bone_map_by_name_.clear();
+    bone_map_by_ptr_.clear();
+    cached_transforms_pre_callbacks_.clear();
+    bone_offsets_.clear();
+    sampled_locals_.clear();
+    model_transforms_.clear();
+    sampling_context_.Resize(0);
+    user_data_ = nullptr;
+    root_bone_ = BI_NONE;
+    visible_mask_ = 0;
+    cached_box_.invalidate();
+    last_update_time_ = 0;
+    visibility_counter_ = 0;
+    skeleton_ = ozz::animation::Skeleton();
+}
+
+bool OzzKinematics::LoadSkeletonFromStream(ozz::io::Stream* stream, pcstr debug_source)
+{
+    if (!stream)
+    {
+        Msg("[OzzKinematics] LoadSkeletonFromStream received null stream for %s", debug_source ? debug_source : "<unknown>");
+        return false;
+    }
+
+    ozz::io::IArchive archive(stream);
     if (!archive.TestTag<ozz::animation::Skeleton>())
     {
-        Msg("[OzzKinematics] File does not contain a skeleton: %s", skeleton_path);
+        Msg("[OzzKinematics] Stream does not contain a skeleton: %s", debug_source ? debug_source : "<unknown>");
         return false;
     }
 
     archive >> skeleton_;
 
+    if (!FinalizeSkeletonInitialization(debug_source))
+    {
+        ResetRuntimeState();
+        return false;
+    }
+
+    return true;
+}
+
+bool OzzKinematics::FinalizeSkeletonInitialization(pcstr debug_source)
+{
     const int joint_count = skeleton_.num_joints();
     if (joint_count <= 0)
     {
-        Msg("[OzzKinematics] Skeleton contains no joints: %s", skeleton_path);
+        Msg("[OzzKinematics] Skeleton contains no joints: %s", debug_source ? debug_source : "<unknown>");
         return false;
     }
 
@@ -165,32 +243,6 @@ bool OzzKinematics::InitializeFromOzz(pcstr skeleton_path)
     visibility_counter_ = 0;
 
     return true;
-}
-
-void OzzKinematics::NotImplemented(pcstr function_name) const
-{
-    Msg("[OzzKinematics] %s is not implemented yet", function_name);
-}
-
-void OzzKinematics::ResetRuntimeState()
-{
-    bone_instances_.clear();
-    bone_boxes_.clear();
-    bones_.clear();
-    bone_storage_.clear();
-    bone_map_by_name_.clear();
-    bone_map_by_ptr_.clear();
-    cached_transforms_pre_callbacks_.clear();
-    bone_offsets_.clear();
-    sampled_locals_.clear();
-    model_transforms_.clear();
-    sampling_context_.Resize(0);
-    user_data_ = nullptr;
-    root_bone_ = BI_NONE;
-    visible_mask_ = 0;
-    cached_box_.invalidate();
-    last_update_time_ = 0;
-    visibility_counter_ = 0;
 }
 
 bool OzzKinematics::BuildBoneMetadata()
