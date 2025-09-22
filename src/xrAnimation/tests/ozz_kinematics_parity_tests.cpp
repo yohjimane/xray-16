@@ -27,6 +27,7 @@
 
 #include "OzzConversion.h"
 #include "OzzKinematics.h"
+#include "OzzBundle.h"
 
 #include "ozz/animation/runtime/animation.h"
 #include "ozz/animation/runtime/local_to_model_job.h"
@@ -976,6 +977,33 @@ TEST(OzzKinematicsBootstrap, MatchesJointCountWithReferenceSkeleton)
     ASSERT_TRUE(kinematics.InitializeFromOzz(skeleton_path.string().c_str())) << "OzzKinematics failed to load skeleton";
 
     EXPECT_EQ(reference_skeleton.num_joints(), kinematics.LL_BoneCount()) << "Loaded joint count mismatch";
+}
+
+TEST(OzzKinematicsBootstrap, InitializesFromOzzxBundleSkeleton)
+{
+    const std::filesystem::path bundle_path = ResolveProjectPath("src/xrAnimation/tests/testdata/stalker_hero.ozzx");
+    ASSERT_TRUE(std::filesystem::exists(bundle_path)) << "Missing sample bundle at " << bundle_path;
+
+    XRay::Animation::OzzxBundle bundle;
+    ASSERT_TRUE(XRay::Animation::ReadOzzxBundle(bundle_path, bundle)) << "Failed to read bundle at " << bundle_path;
+    ASSERT_FALSE(bundle.skeleton.empty()) << "Bundle missing skeleton payload";
+
+    const std::filesystem::path reference_skeleton_path = ResolveProjectPath("src/xrAnimation/tests/testdata/stalker_hero_1.ozz");
+    ASSERT_TRUE(std::filesystem::exists(reference_skeleton_path));
+
+    ozz::animation::Skeleton reference_skeleton;
+    {
+        ozz::io::File file(reference_skeleton_path.string().c_str(), "rb");
+        ASSERT_TRUE(file.opened());
+        ozz::io::IArchive archive(&file);
+        archive >> reference_skeleton;
+    }
+
+    OzzKinematics kinematics;
+    const ozz::span<const std::byte> skeleton_span(reinterpret_cast<const std::byte*>(bundle.skeleton.data()), bundle.skeleton.size());
+    ASSERT_TRUE(kinematics.InitializeFromOzzBuffer(skeleton_span));
+
+    EXPECT_EQ(reference_skeleton.num_joints(), kinematics.LL_BoneCount());
 }
 
 TEST(OzzKinematicsBootstrap, InitializesFromMemoryBuffer)

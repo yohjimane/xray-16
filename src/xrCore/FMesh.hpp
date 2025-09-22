@@ -22,6 +22,7 @@ enum MT
     MT_TREE_PM = 11,
 
     MT_3DFLUIDVOLUME = 12,
+    MT_OZZ_BUNDLE = 13,
 };
 
 enum OGF_Chuncks : u32

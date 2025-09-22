@@ -123,6 +123,8 @@ target_sources(xrRender_GL PRIVATE
     ../xrRender/light_vis.cpp
     ../xrRender/ModelPool.cpp
     ../xrRender/ModelPool.h
+    ../xrRender/OzzKinematicsVisual.cpp
+    ../xrRender/OzzKinematicsVisual.h
     ../xrRender/NvTriStrip.cpp
     ../xrRender/NvTriStrip.h
     ../xrRender/NvTriStripObjects.cpp

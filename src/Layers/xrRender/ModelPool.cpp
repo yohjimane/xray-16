@@ -28,6 +28,10 @@
 #include "IGame_Persistent.h"
 #endif
 
+#include "OzzKinematicsVisual.h"
+
+#include <filesystem>
+
 extern bool ENGINE_API g_bRendering;
 
 namespace xray::render::RENDER_NAMESPACE
@@ -50,6 +54,7 @@ dxRender_Visual* CModelPool::Instance_Create(u32 type)
     case MT_SKELETON_RIGID: V = xr_new<CKinematics>(); break;
     case MT_SKELETON_GEOMDEF_PM: V = xr_new<CSkeletonX_PM>(); break;
     case MT_SKELETON_GEOMDEF_ST: V = xr_new<CSkeletonX_ST>(); break;
+    case MT_OZZ_BUNDLE: V = xr_new<COzzKinematicsVisual>(); break;
     case MT_PARTICLE_EFFECT: V = xr_new<PS::CParticleEffect>(); break;
     case MT_PARTICLE_GROUP: V = xr_new<PS::CParticleGroup>(); break;
 #ifndef _EDITOR
@@ -108,6 +113,24 @@ dxRender_Visual* CModelPool::Instance_Load(const char* N, BOOL allow_register)
     else
     {
         xr_strcpy(fn, N);
+    }
+
+    if (const char* ext = strext(fn))
+    {
+        if (0 == xr_stricmp(ext, ".ozzx"))
+        {
+            auto* visual = static_cast<COzzKinematicsVisual*>(Instance_Create(MT_OZZ_BUNDLE));
+            if (!visual->LoadFromBundle(N, std::filesystem::path(fn)))
+            {
+                xr_delete(visual);
+                return nullptr;
+            }
+
+            if (allow_register)
+                Instance_Register(N, visual);
+
+            return visual;
+        }
     }
 
 // Actual loading
