@@ -189,6 +189,9 @@
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">Create</PrecompiledHeader>
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|x64'">Create</PrecompiledHeader>
     </ClCompile>
+    <ClCompile Include="tests\ozz_kinematics_parity_tests.cpp" />
+    <ClCompile Include="tests\ozz_kinematics_test_main.cpp" />
+    <ClCompile Include="tests\test_converter.cpp" />
     <ClCompile Include="tools\ozz_animation_viewer.cpp" />
     <ClCompile Include="tools\xray_to_ozz_converter.cpp" />
     <ClCompile Include="xrAnimation.cpp" />

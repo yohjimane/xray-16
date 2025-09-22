@@ -37,6 +37,7 @@
 - Begin each interaction by fetching relevant memory entries; refer to them as "memory".
 - Track new user facts: identity, behaviours, preferences, goals, relationships; update memory graphs accordingly.
 - Refresh memory from `xray-16/src/xrAnimation` docs when the user requests a refresh.
+- After modifying source files, rebuild the impacted targets and rerun their tests immediately—do this proactively without waiting for user prompts.
 
 ## Core Tenets
 1. Check the knowledge graph before executing commands or writing files.

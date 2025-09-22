@@ -39,6 +39,7 @@
 
 #include "xrCore/Animation/SkeletonMotionDefs.hpp"
 #include "xrCore/Animation/SkeletonMotions.hpp"
+#include "Layers/xrRender/KinematicsAddBoneTransform.hpp"
 
 using XRay::Animation::ConvertOzzMatrixToXRay;
 using XRay::Animation::OzzKinematics;
@@ -1071,6 +1072,47 @@ TEST(OzzKinematicsPose, MatchesLegacyBindPoseTranslations)
         EXPECT_NEAR(transform.c.y, expected.c.y, 1e-4f) << "Bone: " << bone_name;
         EXPECT_NEAR(transform.c.z, expected.c.z, 1e-4f) << "Bone: " << bone_name;
     }
+}
+
+TEST(OzzKinematicsPose, AdditionalBoneTransformsAffectSingleBone)
+{
+    const auto skeleton_path = ResolveProjectPath("src/xrAnimation/tests/testdata/stalker_hero_1.ozz");
+    ASSERT_TRUE(std::filesystem::exists(skeleton_path));
+
+    OzzKinematics kinematics;
+    ASSERT_TRUE(kinematics.InitializeFromOzz(skeleton_path.string().c_str()));
+
+    kinematics.CalculateBones(TRUE);
+
+    constexpr u16 sample_bone = 0;
+    ASSERT_LT(sample_bone, kinematics.LL_BoneCount());
+
+    const Fmatrix baseline_transform = kinematics.LL_GetTransform(sample_bone);
+    const Fvector baseline_translation = baseline_transform.c;
+
+    KinematicsABT::additional_bone_transform offset;
+    offset.m_bone_id = sample_bone;
+
+    const float offset_x = 0.1f;
+    const float offset_y = -0.05f;
+    const float offset_z = 0.02f;
+    offset.setPosOffset(offset_x, offset_y, offset_z);
+
+    kinematics.LL_AddTransformToBone(offset);
+    kinematics.CalculateBones(TRUE);
+
+    const Fmatrix offset_transform = kinematics.LL_GetTransform(sample_bone);
+    EXPECT_NEAR(baseline_translation.x + offset_x, offset_transform.c.x, 1e-4f);
+    EXPECT_NEAR(baseline_translation.y + offset_y, offset_transform.c.y, 1e-4f);
+    EXPECT_NEAR(baseline_translation.z + offset_z, offset_transform.c.z, 1e-4f);
+
+    kinematics.LL_ClearAdditionalTransform(sample_bone);
+    kinematics.CalculateBones(TRUE);
+
+    const Fmatrix restored_transform = kinematics.LL_GetTransform(sample_bone);
+    EXPECT_NEAR(baseline_translation.x, restored_transform.c.x, 1e-4f);
+    EXPECT_NEAR(baseline_translation.y, restored_transform.c.y, 1e-4f);
+    EXPECT_NEAR(baseline_translation.z, restored_transform.c.z, 1e-4f);
 }
 
 TEST(OzzKinematicsParity, BindPoseMatchesLegacySkeleton)

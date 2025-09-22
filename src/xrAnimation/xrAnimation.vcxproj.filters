@@ -22,6 +22,9 @@
     <Filter Include="Tools">
       <UniqueIdentifier>{123f6e41-d6f6-436e-8c4c-7f44fe6e5ce3}</UniqueIdentifier>
     </Filter>
+    <Filter Include="tests">
+      <UniqueIdentifier>{86460191-d4f8-4bcf-93a6-a690c66e3b92}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="stdafx.h">
@@ -43,6 +46,15 @@
     </ClCompile>
     <ClCompile Include="tools\xray_to_ozz_converter.cpp">
       <Filter>Tools</Filter>
+    </ClCompile>
+    <ClCompile Include="tests\ozz_kinematics_parity_tests.cpp">
+      <Filter>tests</Filter>
+    </ClCompile>
+    <ClCompile Include="tests\ozz_kinematics_test_main.cpp">
+      <Filter>tests</Filter>
+    </ClCompile>
+    <ClCompile Include="tests\test_converter.cpp">
+      <Filter>tests</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
