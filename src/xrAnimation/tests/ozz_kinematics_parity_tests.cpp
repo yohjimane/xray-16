@@ -42,6 +42,7 @@
 #include "xrCore/Animation/SkeletonMotionDefs.hpp"
 #include "xrCore/Animation/SkeletonMotions.hpp"
 #include "Layers/xrRender/KinematicsAddBoneTransform.hpp"
+#include "Layers/xrRender/ModelNaming.h"
 
 using XRay::Animation::ConvertOzzMatrixToXRay;
 using XRay::Animation::OzzKinematics;
@@ -1528,4 +1529,19 @@ TEST(OzzBundleRuntime, HydratesKinematicsAndMeshPayload)
         ++mesh_count;
     }
     EXPECT_GT(mesh_count, 0u) << "Bundle contained no meshes";
+}
+
+TEST(ModelNaming, NormalizesModelIdentifiers)
+{
+    using xray::render::detail::NormalizeModelIdentifier;
+
+    EXPECT_STREQ(NormalizeModelIdentifier("actors\\stalker").c_str(), "actors\\stalker");
+    EXPECT_STREQ(NormalizeModelIdentifier("actors\\stalker.ogf").c_str(), "actors\\stalker");
+    EXPECT_STREQ(NormalizeModelIdentifier("actors\\DEV_STALKER.OGF").c_str(), "actors\\dev_stalker");
+    EXPECT_STREQ(NormalizeModelIdentifier("actors\\dev_stalker.ozzx").c_str(), "actors\\dev_stalker.ozzx");
+    EXPECT_STREQ(NormalizeModelIdentifier("actors\\DEV_STALKER.OZZX").c_str(), "actors\\dev_stalker.ozzx");
+    EXPECT_STREQ(NormalizeModelIdentifier("actors\\some_visual.dds").c_str(), "actors\\some_visual");
+    EXPECT_STREQ(NormalizeModelIdentifier("weapon").c_str(), "weapon");
+    EXPECT_TRUE(NormalizeModelIdentifier(nullptr).empty());
+    EXPECT_TRUE(NormalizeModelIdentifier("").empty());
 }

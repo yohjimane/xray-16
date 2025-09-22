@@ -29,6 +29,7 @@
 #endif
 
 #include "OzzKinematicsVisual.h"
+#include "ModelNaming.h"
 
 #include <filesystem>
 
@@ -36,6 +37,8 @@ extern bool ENGINE_API g_bRendering;
 
 namespace xray::render::RENDER_NAMESPACE
 {
+using xray::render::detail::NormalizeModelIdentifier;
+
 dxRender_Visual* CModelPool::Instance_Create(u32 type)
 {
     dxRender_Visual* V = nullptr;
@@ -271,11 +274,12 @@ dxRender_Visual* CModelPool::Create(const char* name, IReader* data)
         return 0;
 #endif
     string_path low_name;
+    VERIFY(name);
     VERIFY(xr_strlen(name) < sizeof(low_name));
-    xr_strcpy(low_name, name);
-    xr_strlwr(low_name);
-    if (strext(low_name))
-        *strext(low_name) = 0;
+
+    const xr_string normalized = NormalizeModelIdentifier(name);
+    VERIFY(normalized.size() < sizeof(low_name));
+    xr_strcpy(low_name, normalized.c_str());
     //	Msg						("-CREATE %s",low_name);
 
     // 0. Search POOL
@@ -317,11 +321,12 @@ dxRender_Visual* CModelPool::Create(const char* name, IReader* data)
 dxRender_Visual* CModelPool::CreateChild(LPCSTR name, IReader* data)
 {
     string256 low_name;
-    VERIFY(xr_strlen(name) < 256);
-    xr_strcpy(low_name, name);
-    xr_strlwr(low_name);
-    if (strext(low_name))
-        *strext(low_name) = 0;
+    VERIFY(name);
+    VERIFY(xr_strlen(name) < sizeof(low_name));
+
+    const xr_string normalized = NormalizeModelIdentifier(name);
+    VERIFY(normalized.size() < sizeof(low_name));
+    xr_strcpy(low_name, normalized.c_str());
 
     // 1. Search for already loaded model
     dxRender_Visual* Base = Instance_Find(low_name);

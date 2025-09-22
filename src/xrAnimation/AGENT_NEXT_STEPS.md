@@ -6,11 +6,12 @@
 - Skinning path matches the legacy runtime; palette generation and joint remaps are in sync with Blender/XR exporters.
 - Engine console flag `g_use_ozz_visuals` lets developer builds load `.ozzx` bundles (e.g., `dev_stalker.ozzx`) through the standard `CGameObject` path for smoke testing.
 - Unit coverage now checks `.ozzx` bundle hydration against `OzzKinematics`, ensuring skeleton palettes and mesh payloads stay valid.
+- Model pool normalization retains `.ozzx` suffixes so `model_Create` instantiates `COzzKinematicsVisual`; helper coverage exists in `ModelNaming.NormalizesModelIdentifiers`.
 
 ## Immediate Focus – Ozz Runtime Path
 1. **`.ozzx` Visual Integration**
-   - Introduce an engine visual that loads bundle payloads, owns an `OzzKinematics`, and prepares bone palette buffers for renderer submission.
-   - Register the visual in `CModelPool` with a distinct `MT_*` type so assets can be selected through the existing model pool workflows.
+   - Capture palette uploads and renderer hand-off for `COzzKinematicsVisual`, logging palette deltas to confirm the runtime path mirrors the façade.
+   - Extend parity coverage so model pool normalization and bundle hydration stay deterministic.
 2. **Pilot Actor / HUD Harness**
    - Wire a dev-only actor (or HUD item) to the new visual path, play a converted clip, and verify callbacks/physics hooks fire as expected.
    - Capture quirks encountered during animation events, ragdoll bind, or script exposure for follow-up fixes.
