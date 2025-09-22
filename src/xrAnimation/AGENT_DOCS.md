@@ -6,6 +6,7 @@
 - `.ozzx` visuals instantiate CPU-skinned surfaces that honour engine containers (`xr_vector`, `xr_unique_ptr`) and feed geometry through the existing renderer; traversal code now treats `MT_OZZ_BUNDLE` like legacy skeletons.
 - Developer toggle `g_use_ozz_visuals` enables loading converted `.ozzx` bundles (e.g., `dev_stalker.ozzx`) through the standard model pool for in-engine smoke tests.
 - `CModelPool::Create` preserves `.ozzx` identifiers via `NormalizeModelIdentifier`, so bundle requests hydrate `COzzKinematicsVisual`; `ModelNaming.NormalizesModelIdentifiers` guards the normalization logic.
+- Console helpers `debug_dump_ozz_palette`, `debug_dump_ozz_palette_toggle`, and `g_dev_ozz_actor` snapshot Ozz bone palettes and hot-swap the actor to `dev_stalker.ozzx`, making in-engine parity checks reproducible.
 - IK limbs and step manager paths now bail out cleanly when an Ozz visual is active, so missing `IKinematicsAnimated` no longer hard-asserts during experiments.
 - `OzzBundleRuntime` regression test hydrates `OzzKinematics` and mesh payloads from a `.ozzx` bundle to guard bundle/runtime parity.
 

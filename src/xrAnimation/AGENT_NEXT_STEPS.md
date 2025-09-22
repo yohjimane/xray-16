@@ -7,6 +7,7 @@
 - Engine console flag `g_use_ozz_visuals` lets developer builds load `.ozzx` bundles (e.g., `dev_stalker.ozzx`) through the standard `CGameObject` path for smoke testing.
 - Unit coverage now checks `.ozzx` bundle hydration against `OzzKinematics`, ensuring skeleton palettes and mesh payloads stay valid.
 - Model pool normalization retains `.ozzx` suffixes so `model_Create` instantiates `COzzKinematicsVisual`; helper coverage exists in `ModelNaming.NormalizesModelIdentifiers`.
+- Palette instrumentation (`debug_dump_ozz_palette`, `debug_dump_ozz_palette_toggle`) plus `g_dev_ozz_actor` give us a deterministic harness for tracing bone matrices inside the engine.
 
 ## Immediate Focus – Ozz Runtime Path
 1. **`.ozzx` Visual Integration**

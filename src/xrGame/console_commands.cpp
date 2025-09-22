@@ -41,6 +41,8 @@
 #include "xrAICore/Navigation/level_graph.h"
 #include "xrNetServer/NET_Messages.h"
 
+#include "Layers/xrRender/OzzDebugTools.h"
+
 #include "CameraLook.h"
 #include "character_hit_animations_params.h"
 #include "inventory_upgrade_manager.h"
@@ -1763,6 +1765,87 @@ public:
     }
 };
 
+class CCC_ToggleOzzPaletteDump : public IConsole_Command
+{
+public:
+	CCC_ToggleOzzPaletteDump(LPCSTR N) : IConsole_Command(N)
+	{
+		bEmptyArgsHandled = true;
+	}
+
+	void Execute(LPCSTR arguments) override
+	{
+		bool enable = !xray::render::RENDER_NAMESPACE::IsOzzPaletteDebugDumpEnabled();
+		if (arguments && *arguments)
+			enable = int(atoi(arguments)) != 0;
+
+		xray::render::RENDER_NAMESPACE::EnableOzzPaletteDebugDump(enable);
+		Msg("[ozz] palette dump %s", enable ? "enabled" : "disabled");
+	}
+
+	void GetStatus(TStatus& S) override
+	{
+		xr_sprintf(S, sizeof(S), "%d", xray::render::RENDER_NAMESPACE::IsOzzPaletteDebugDumpEnabled() ? 1 : 0);
+	}
+
+	void Info(TInfo& I) override
+	{
+		xr_strcpy(I, "toggle continuous COzzKinematicsVisual palette logging (0/1)");
+	}
+};
+
+class CCC_RequestOzzPaletteDump : public IConsole_Command
+{
+public:
+	CCC_RequestOzzPaletteDump(LPCSTR N) : IConsole_Command(N)
+	{
+		bEmptyArgsHandled = true;
+	}
+
+	void Execute(LPCSTR /*arguments*/) override
+	{
+		xray::render::RENDER_NAMESPACE::RequestOzzPaletteDebugDump();
+		Msg("[ozz] palette snapshot requested");
+	}
+
+	void Info(TInfo& I) override
+	{
+		xr_strcpy(I, "dump COzzKinematicsVisual palette on next update");
+	}
+};
+
+class CCC_SwitchDevOzzActor : public IConsole_Command
+{
+public:
+	CCC_SwitchDevOzzActor(LPCSTR N) : IConsole_Command(N)
+	{
+		bEmptyArgsHandled = true;
+	}
+
+	void Execute(LPCSTR /*arguments*/) override
+	{
+		CActor* actor = Actor();
+		if (!actor)
+		{
+			Msg("[ozz] no active actor to replace visual");
+			return;
+		}
+
+		psActorFlags.set(AF_USE_OZZ_VISUALS, TRUE);
+		shared_str dev_visual("actors\\dev_stalker.ozzx");
+		actor->cNameVisual_set(dev_visual);
+
+		xray::render::RENDER_NAMESPACE::RequestOzzPaletteDebugDump();
+		Msg("[ozz] actor visual forced to %s", dev_visual.c_str());
+	}
+
+	void Info(TInfo& I) override
+	{
+		xr_strcpy(I, "swap player visual to dev_stalker.ozzx and request palette snapshot");
+	}
+};
+
+
 extern void show_animation_stats();
 
 class CCC_ShowAnimationStats : public IConsole_Command
@@ -2298,6 +2381,8 @@ void CCC_RegisterCommands()
 /////////////////////////////////////////////HIT ANIMATION END////////////////////////////////////////////////////
 
     CMD1(CCC_DumpModelBones, "debug_dump_model_bones");
+    CMD1(CCC_RequestOzzPaletteDump, "debug_dump_ozz_palette");
+    CMD1(CCC_ToggleOzzPaletteDump, "debug_dump_ozz_palette_toggle");
 
     CMD1(CCC_DrawGameGraphAll, "ai_draw_game_graph_all");
     CMD1(CCC_DrawGameGraphCurrent, "ai_draw_game_graph_current_level");
@@ -2355,6 +2440,7 @@ void CCC_RegisterCommands()
     CMD3(CCC_Mask, "g_always_use_attitude_sensors", &psActorFlags, AF_ALWAYS_USE_ATTITUDE_SENSORS);
     CMD3(CCC_Mask, "g_use_tracers", &psActorFlags, AF_USE_TRACERS);
     CMD3(CCC_Mask, "g_use_ozz_visuals", &psActorFlags, AF_USE_OZZ_VISUALS);
+    CMD1(CCC_SwitchDevOzzActor, "g_dev_ozz_actor");
 
     CMD4(CCC_Integer, "g_inv_highlight_equipped", &g_inv_highlight_equipped, 0, 1);
     CMD4(CCC_Integer, "g_first_person_death", &g_first_person_death, 0, 1);

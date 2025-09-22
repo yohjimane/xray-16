@@ -1,6 +1,7 @@
 #include "stdafx.h"
 
 #include "OzzKinematicsVisual.h"
+#include "OzzDebugTools.h"
 
 #include "BufferUtils.h"
 #include "FVisual.h"
@@ -13,11 +14,75 @@
 
 #include <algorithm>
 #include <array>
+#include <atomic>
 #include <cstring>
 #include <string>
 
 namespace xray::render::RENDER_NAMESPACE
 {
+namespace
+{
+constexpr u32 kMaxDumpedBones = 4;
+
+std::atomic<bool> g_dump_palette_once{ false };
+bool g_dump_palette_continuous = false;
+
+bool ShouldDumpPalette()
+{
+    if (g_dump_palette_continuous)
+        return true;
+
+    bool expected = true;
+    return g_dump_palette_once.compare_exchange_strong(expected, false, std::memory_order_acq_rel);
+}
+
+void DebugDumpPalette(const COzzKinematicsVisual& visual, const xr_vector<Fmatrix>& palette)
+{
+    if (!ShouldDumpPalette())
+        return;
+
+    const char* label = "<ozz_visual>";
+#ifdef DEBUG
+    if (visual.dbg_name.size())
+        label = visual.dbg_name.c_str();
+#endif
+
+    const u32 bone_count = static_cast<u32>(palette.size());
+    Msg("[ozz][palette] visual=%s bones=%u", label, bone_count);
+
+    const u32 print_count = std::min(bone_count, kMaxDumpedBones);
+    for (u32 idx = 0; idx < print_count; ++idx)
+    {
+        const Fmatrix& bone = palette[idx];
+        Msg("[ozz][palette] bone[%u] i(%.3f %.3f %.3f) j(%.3f %.3f %.3f) k(%.3f %.3f %.3f) c(%.3f %.3f %.3f)", idx,
+            bone.i.x, bone.i.y, bone.i.z,
+            bone.j.x, bone.j.y, bone.j.z,
+            bone.k.x, bone.k.y, bone.k.z,
+            bone.c.x, bone.c.y, bone.c.z);
+    }
+
+    if (bone_count > print_count)
+        Msg("[ozz][palette] ... (omitted %u bones)", bone_count - print_count);
+}
+} // namespace
+
+ENGINE_API void EnableOzzPaletteDebugDump(bool enabled)
+{
+    g_dump_palette_continuous = enabled;
+    if (!enabled)
+        g_dump_palette_once.store(false, std::memory_order_release);
+}
+
+ENGINE_API bool IsOzzPaletteDebugDumpEnabled()
+{
+    return g_dump_palette_continuous;
+}
+
+ENGINE_API void RequestOzzPaletteDebugDump()
+{
+    g_dump_palette_once.store(true, std::memory_order_release);
+}
+
 namespace
 {
 struct OzzGpuVertex
@@ -464,6 +529,8 @@ void COzzKinematicsVisual::EnsureSkinningPalette()
 
     kinematics_.BuildSkinningPalette(bone_palette_, true);
     palette_dirty_ = false;
+
+    DebugDumpPalette(*this, bone_palette_);
 }
 
 const xr_vector<Fmatrix>& COzzKinematicsVisual::SkinningPalette()

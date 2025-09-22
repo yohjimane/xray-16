@@ -28,7 +28,7 @@
 #include "OzzConversion.h"
 #include "OzzKinematics.h"
 #include "OzzBundle.h"
-#include "framework/mesh.h"
+#include "../samples/framework/mesh.h"
 
 #include "ozz/animation/runtime/animation.h"
 #include "ozz/animation/runtime/local_to_model_job.h"
