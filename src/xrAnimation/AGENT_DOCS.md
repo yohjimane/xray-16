@@ -1,12 +1,14 @@
 # AGENT_DOCS.md - AI Assistant Guide
 
 ## Latest Session Notes
-- Converter outputs (skeletons, meshes, animations) now match Blender exports; viewer verifies poses/skinning without depth bugs.
-- `ozz_animation_viewer` integrates modern Dear ImGui + restored performance graphs so profiling parity with upstream samples is maintained.
-- Build system links against modern glfw3; no remaining linker gaps for viewer/tool targets.
+- `OzzKinematics` now evaluates bind pose and sampled animation with visibility masks, callbacks, and additional transforms; parity tests compare results against the legacy runtime.
+- README and docs updated to describe the façade-first strategy and highlight remaining work around `.ozzx` runtime integration.
+- Next focus is delivering an in-engine `.ozzx` visual plus a pilot actor so we can validate renderer/physics callbacks while keeping TDD guardrails in place.
 
 ## Active Objective
-- Design and prototype the `OzzKinematics` façade that will replace `CKinematics`/`IKinematics` while delegating pose evaluation to Ozz runtime jobs.
+- Integrate a runtime visual that consumes `.ozzx` bundles, owns an `OzzKinematics`, and pushes bone palettes into the renderer/model pool.
+- Drive a dev-only actor (or HUD item) through that path to exercise animation/physics callbacks using converted `.ozz` clips.
+- Maintain TDD discipline: expand regression tests before introducing new runtime wiring or threading changes.
 
 ## Project Overview & Philosophy
 - Primary project: integrate ozz-animation into the OpenXRay engine while preserving legacy behaviour.
@@ -45,7 +47,7 @@
 ## Animation Converter Status
 - Skeleton, mesh, and animation exports are validated end-to-end against Blender/XR references; resulting `.ozz` assets drive the viewer without discrepancies.
 - Tooling (`debug_playback`, JSON dumps, viewer graphs) is in place for regression checks when converter logic evolves.
-- Remaining work: decode richer OMF metadata (marks, params) and feed it through the upcoming `OzzKinematics` façade.
+- Remaining work: surface richer OMF metadata (marks, params) through `.ozz`/`.ozzx` and ensure the new runtime visual exposes it alongside `OzzKinematics` events.
 
 ## Coordinate System Reference
 - X-Ray is Y-up; ozz/OpenGL is Z-up.

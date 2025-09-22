@@ -4,6 +4,9 @@
 
 #include "OzzConversion.h"
 
+#include "xrEngine/Device.h"
+
+#include "ozz/animation/runtime/skeleton_utils.h"
 #include "ozz/base/io/archive.h"
 #include "ozz/base/io/stream.h"
 #include "ozz/base/maths/simd_math.h"
@@ -11,8 +14,6 @@
 
 #include <algorithm>
 #include <vector>
-
-#include <algorithm>
 
 namespace XRay
 {
@@ -72,6 +73,8 @@ bool OzzKinematics::InitializeFromOzz(pcstr skeleton_path)
         return false;
     }
 
+    ResetRuntimeState();
+
     ozz::io::File file(skeleton_path, "rb");
     if (!file.opened())
     {
@@ -104,10 +107,15 @@ bool OzzKinematics::InitializeFromOzz(pcstr skeleton_path)
         box.invalidate();
 
     bones_.assign(joint_count, nullptr);
+    bone_storage_.clear();
+    bone_storage_.reserve(joint_count);
 
     model_transforms_.clear();
     model_transforms_.shrink_to_fit();
     model_transforms_.resize(static_cast<size_t>(joint_count));
+
+    cached_transforms_pre_callbacks_.clear();
+    cached_transforms_pre_callbacks_.resize(static_cast<size_t>(joint_count));
 
     bone_map_by_name_.clear();
     bone_map_by_ptr_.clear();
@@ -145,6 +153,13 @@ bool OzzKinematics::InitializeFromOzz(pcstr skeleton_path)
     else
         visible_mask_ = (u64(1) << joint_count) - 1;
 
+    if (!BuildBoneMetadata())
+        return false;
+
+    bone_offsets_.clear();
+    sampled_locals_.clear();
+    sampling_context_.Resize(0);
+
     cached_box_.invalidate();
     last_update_time_ = 0;
     visibility_counter_ = 0;
@@ -157,27 +172,174 @@ void OzzKinematics::NotImplemented(pcstr function_name) const
     Msg("[OzzKinematics] %s is not implemented yet", function_name);
 }
 
+void OzzKinematics::ResetRuntimeState()
+{
+    bone_instances_.clear();
+    bone_boxes_.clear();
+    bones_.clear();
+    bone_storage_.clear();
+    bone_map_by_name_.clear();
+    bone_map_by_ptr_.clear();
+    cached_transforms_pre_callbacks_.clear();
+    bone_offsets_.clear();
+    sampled_locals_.clear();
+    model_transforms_.clear();
+    sampling_context_.Resize(0);
+    user_data_ = nullptr;
+    root_bone_ = BI_NONE;
+    visible_mask_ = 0;
+    cached_box_.invalidate();
+    last_update_time_ = 0;
+    visibility_counter_ = 0;
+}
+
+bool OzzKinematics::BuildBoneMetadata()
+{
+    const int joint_count = skeleton_.num_joints();
+    if (joint_count <= 0)
+        return false;
+
+    const ozz::span<const int16_t> parents = skeleton_.joint_parents();
+    const auto joint_names = skeleton_.joint_names();
+
+    bone_storage_.clear();
+    bone_storage_.reserve(static_cast<size_t>(joint_count));
+
+    for (int joint = 0; joint < joint_count; ++joint)
+    {
+        const u16 bone_id = static_cast<u16>(joint);
+        auto bone = std::make_unique<CBoneData>(bone_id);
+
+    const int16_t parent_index = (static_cast<size_t>(joint) < parents.size()) ? parents[joint] : static_cast<int16_t>(-1);
+        bone->SetParentID(parent_index >= 0 ? static_cast<u16>(parent_index) : BI_NONE);
+
+    const char* joint_name = (static_cast<size_t>(joint) < joint_names.size()) ? joint_names[joint] : nullptr;
+        bone->name = joint_name && joint_name[0] ? shared_str(joint_name) : shared_str();
+
+        bone->shape.Reset();
+        bone->obb.invalidate();
+        bone->game_mtl_name = shared_str();
+        bone->game_mtl_idx = 0;
+        bone->mass = 0.f;
+        bone->center_of_mass.set(0.f, 0.f, 0.f);
+        bone->IK_data.Reset();
+
+        const ozz::math::Transform rest_pose = ozz::animation::GetJointLocalRestPose(skeleton_, joint);
+        const ozz::math::Float4x4 rest_matrix = ozz::math::Float4x4::FromAffine(rest_pose);
+        bone->bind_transform = ConvertOzzMatrixToXRay(rest_matrix);
+        bone->m2b_transform.identity();
+
+        bone_storage_.push_back(std::move(bone));
+    }
+
+    for (size_t idx = 0; idx < bone_storage_.size(); ++idx)
+        bones_[idx] = bone_storage_[idx].get();
+
+    // Build children relationships.
+    for (int joint = 0; joint < joint_count; ++joint)
+    {
+        const int16_t parent_index = (static_cast<size_t>(joint) < parents.size()) ? parents[joint] : static_cast<int16_t>(-1);
+        if (parent_index >= 0 && parent_index < joint_count)
+            bones_[parent_index]->children.push_back(bones_[joint]);
+    }
+
+    if (!bones_.empty() && root_bone_ != BI_NONE && root_bone_ < bones_.size())
+        bones_[root_bone_]->CalculateM2B(Fidentity);
+
+    return true;
+}
+
+bool OzzKinematics::IsBoneVisible(size_t index) const
+{
+    if (index >= bone_instances_.size())
+        return false;
+    if (index >= 64)
+        return true;
+    const u64 mask = u64(1) << index;
+    return (visible_mask_ & mask) != 0;
+}
+
+void OzzKinematics::ApplyAdditionalBoneTransforms(u16 bone_id, Fmatrix& transform) const
+{
+    for (const auto& offset : bone_offsets_)
+    {
+        if (offset.m_bone_id != bone_id)
+            continue;
+
+        const Fvector original_position = transform.c;
+        transform.mulB_43(offset.m_transform);
+        transform.c.add(original_position, offset.m_transform.c);
+    }
+}
+
+bool OzzKinematics::SetPoseLocals(ozz::span<const ozz::math::SoaTransform> locals)
+{
+    if (locals.empty())
+    {
+        sampled_locals_.clear();
+        CalculateBones_Invalidate();
+        return true;
+    }
+
+    if (static_cast<int>(locals.size()) != skeleton_.num_soa_joints())
+    {
+        Msg("[OzzKinematics] SetPoseLocals received %zu soa joints, expected %d", locals.size(), skeleton_.num_soa_joints());
+        return false;
+    }
+
+    sampled_locals_.assign(locals.begin(), locals.end());
+    CalculateBones_Invalidate();
+    return true;
+}
+
+void OzzKinematics::ClearPose()
+{
+    sampled_locals_.clear();
+    CalculateBones_Invalidate();
+}
+
+const ozz::animation::Skeleton& OzzKinematics::Skeleton() const
+{
+    return skeleton_;
+}
+
+ozz::animation::SamplingJob::Context& OzzKinematics::SamplingContext()
+{
+    return sampling_context_;
+}
+
 void OzzKinematics::Bone_Calculate(CBoneData* /*bd*/, Fmatrix* /*parent*/)
 {
-    NotImplemented(__FUNCTION__);
+    CalculateBones(TRUE);
 }
 
-void OzzKinematics::Bone_GetAnimPos(Fmatrix& pos, u16 /*id*/, u8 /*channel_mask*/, bool /*ignore_callbacks*/)
+void OzzKinematics::Bone_GetAnimPos(Fmatrix& pos, u16 id, u8 /*channel_mask*/, bool ignore_callbacks)
 {
-    NotImplemented(__FUNCTION__);
-    pos.identity();
+    if (id >= bone_instances_.size())
+    {
+        pos.identity();
+        return;
+    }
+
+    CalculateBones(TRUE);
+
+    if (ignore_callbacks && id < cached_transforms_pre_callbacks_.size())
+    {
+        pos = cached_transforms_pre_callbacks_[id];
+    }
+    else
+    {
+        pos = LL_GetTransform(id);
+    }
 }
 
-bool OzzKinematics::PickBone(const Fmatrix& /*parent_xform*/, pick_result& /*r*/, float /*dist*/, const Fvector& /*start*/, const Fvector& /*dir*/,
-    u16 /*bone_id*/)
+bool OzzKinematics::PickBone(const Fmatrix& /*parent_xform*/, pick_result& /*r*/, float /*dist*/, const Fvector& /*start*/, const Fvector& /*dir*/, u16 /*bone_id*/)
 {
-    NotImplemented(__FUNCTION__);
     return false;
 }
 
 void OzzKinematics::EnumBoneVertices(SEnumVerticesCallback& /*C*/, u16 /*bone_id*/)
 {
-    NotImplemented(__FUNCTION__);
 }
 
 u16 OzzKinematics::LL_BoneID(LPCSTR B)
@@ -251,8 +413,6 @@ CBoneData& OzzKinematics::LL_GetData(u16 bone_id)
 {
     if (bone_id < bones_.size() && bones_[bone_id])
         return *bones_[bone_id];
-
-    NotImplemented(__FUNCTION__);
     return StubBoneData();
 }
 
@@ -260,8 +420,6 @@ const IBoneData& OzzKinematics::GetBoneData(u16 bone_id) const
 {
     if (bone_id < bones_.size() && bones_[bone_id])
         return *bones_[bone_id];
-
-    const_cast<OzzKinematics*>(this)->NotImplemented(__FUNCTION__);
     return StubBoneData();
 }
 
@@ -323,13 +481,17 @@ const Fbox& OzzKinematics::GetBox() const
 
 void OzzKinematics::LL_GetBindTransform(xr_vector<Fmatrix>& matrices)
 {
-    NotImplemented(__FUNCTION__);
     matrices.clear();
+    matrices.reserve(bones_.size());
+    for (CBoneData* bone : bones_)
+    {
+        if (bone)
+            matrices.push_back(bone->bind_transform);
+    }
 }
 
 int OzzKinematics::LL_GetBoneGroups(xr_vector<xr_vector<u16>>& groups)
 {
-    NotImplemented(__FUNCTION__);
     groups.clear();
     return 0;
 }
@@ -354,13 +516,14 @@ BOOL OzzKinematics::LL_GetBoneVisible(u16 bone_id)
 
 void OzzKinematics::LL_SetBoneVisible(u16 bone_id, BOOL val, BOOL /*bRecursive*/)
 {
-    if (bone_id >= 64)
-        return;
-    const u64 mask = u64(1) << bone_id;
-    if (val)
-        visible_mask_ |= mask;
-    else
-        visible_mask_ &= ~mask;
+    if (bone_id < 64)
+    {
+        const u64 mask = u64(1) << bone_id;
+        if (val)
+            visible_mask_ |= mask;
+        else
+            visible_mask_ &= ~mask;
+    }
 
     if (bone_id < bone_instances_.size())
     {
@@ -372,6 +535,8 @@ void OzzKinematics::LL_SetBoneVisible(u16 bone_id, BOOL val, BOOL /*bRecursive*/
         {
             bone_instances_[bone_id].mTransform.scale(0.f, 0.f, 0.f);
             bone_instances_[bone_id].mRenderTransform.scale(0.f, 0.f, 0.f);
+            if (bone_id < cached_transforms_pre_callbacks_.size())
+                cached_transforms_pre_callbacks_[bone_id].scale(0.f, 0.f, 0.f);
         }
     }
 }
@@ -393,38 +558,63 @@ void OzzKinematics::LL_SetBonesVisible(u64 mask)
         {
             bone_instances_[idx].mTransform.scale(0.f, 0.f, 0.f);
             bone_instances_[idx].mRenderTransform.scale(0.f, 0.f, 0.f);
+            if (idx < cached_transforms_pre_callbacks_.size())
+                cached_transforms_pre_callbacks_[idx].scale(0.f, 0.f, 0.f);
         }
     }
     CalculateBones_Invalidate();
 }
 
-void OzzKinematics::LL_AddTransformToBone(KinematicsABT::additional_bone_transform& /*offset*/)
+void OzzKinematics::LL_AddTransformToBone(KinematicsABT::additional_bone_transform& offset)
 {
-    NotImplemented(__FUNCTION__);
+    bone_offsets_.push_back(offset);
+    CalculateBones_Invalidate();
 }
 
-void OzzKinematics::LL_ClearAdditionalTransform(u16 /*bone_id*/)
+void OzzKinematics::LL_ClearAdditionalTransform(u16 bone_id)
 {
-    NotImplemented(__FUNCTION__);
+    if (bone_id == BI_NONE)
+    {
+        bone_offsets_.clear();
+    }
+    else
+    {
+        bone_offsets_.erase(
+            std::remove_if(bone_offsets_.begin(), bone_offsets_.end(),
+                [bone_id](const KinematicsABT::additional_bone_transform& entry)
+                {
+                    return entry.m_bone_id == bone_id;
+                }),
+            bone_offsets_.end());
+    }
+
+    CalculateBones_Invalidate();
 }
 
-void OzzKinematics::CalculateBones(BOOL /*bForceExact*/)
+void OzzKinematics::CalculateBones(BOOL bForceExact)
 {
     if (skeleton_.num_joints() == 0 || bone_instances_.empty())
         return;
 
+    const u32 current_time = Device.dwTimeGlobal;
+    if (!bForceExact && current_time == last_update_time_)
+        return;
+    if (!bForceExact && last_update_time_ != 0 && current_time < last_update_time_ + UCalc_Interval)
+        return;
+
     if (model_transforms_.size() != bone_instances_.size())
         model_transforms_.resize(bone_instances_.size());
+    if (cached_transforms_pre_callbacks_.size() != bone_instances_.size())
+        cached_transforms_pre_callbacks_.resize(bone_instances_.size());
 
     ozz::animation::LocalToModelJob job;
-    const bool has_sampled_pose = sampled_locals_.size() == static_cast<size_t>(skeleton_.num_soa_joints());
-    if (has_sampled_pose)
+    job.skeleton = &skeleton_;
+    if (!sampled_locals_.empty() && sampled_locals_.size() == static_cast<size_t>(skeleton_.num_soa_joints()))
         job.input = ozz::span<const ozz::math::SoaTransform>(sampled_locals_.data(), sampled_locals_.size());
     else
         job.input = skeleton_.joint_rest_poses();
 
     job.output = ozz::span<ozz::math::Float4x4>(model_transforms_.data(), model_transforms_.size());
-    job.skeleton = &skeleton_;
 
     if (!job.Run())
     {
@@ -433,39 +623,48 @@ void OzzKinematics::CalculateBones(BOOL /*bForceExact*/)
     }
 
     const size_t bone_count = bone_instances_.size();
-    for (size_t i = 0; i < bone_count; ++i)
-    {
-        const Fmatrix transform = ConvertOzzMatrixToXRay(model_transforms_[i]);
-        bone_instances_[i].mTransform = transform;
-
-        if (i < 64)
-        {
-            const u64 bit = u64(1) << i;
-            if ((visible_mask_ & bit) == 0)
-                bone_instances_[i].mTransform.scale(0.f, 0.f, 0.f);
-        }
-
-        if (i < bones_.size() && bones_[i])
-            bone_instances_[i].mRenderTransform.mul_43(bone_instances_[i].mTransform, bones_[i]->m2b_transform);
-        else
-            bone_instances_[i].mRenderTransform = bone_instances_[i].mTransform;
-    }
-
     Fbox box;
     box.invalidate();
+
     for (size_t i = 0; i < bone_count; ++i)
     {
-        if (i < 64)
+        CBoneInstance& instance = bone_instances_[i];
+        const u16 bone_id = static_cast<u16>(i);
+        const bool visible = IsBoneVisible(i);
+
+        Fmatrix transform = ConvertOzzMatrixToXRay(model_transforms_[i]);
+        ApplyAdditionalBoneTransforms(bone_id, transform);
+
+        if (!visible)
         {
-            const u64 bit = u64(1) << i;
-            if ((visible_mask_ & bit) == 0)
-                continue;
+            instance.mTransform.scale(0.f, 0.f, 0.f);
+            instance.mRenderTransform.scale(0.f, 0.f, 0.f);
+            if (i < cached_transforms_pre_callbacks_.size())
+                cached_transforms_pre_callbacks_[i].scale(0.f, 0.f, 0.f);
+            continue;
         }
 
-        box.modify(bone_instances_[i].mTransform.c);
+        cached_transforms_pre_callbacks_[i] = transform;
+
+        const bool has_callback = instance.callback() != nullptr;
+        if (!instance.callback_overwrite() || !has_callback)
+            instance.mTransform = transform;
+
+        if (has_callback)
+            instance.callback()(&instance);
+        else if (instance.callback_overwrite())
+            instance.mTransform = transform;
+
+        if (i < bones_.size() && bones_[i])
+            instance.mRenderTransform.mul_43(instance.mTransform, bones_[i]->m2b_transform);
+        else
+            instance.mRenderTransform = instance.mTransform;
+
+        box.modify(instance.mTransform.c);
     }
 
     cached_box_ = box;
+    last_update_time_ = current_time;
 
     if (update_callback_)
         update_callback_(this);
@@ -475,6 +674,7 @@ void OzzKinematics::CalculateBones_Invalidate()
 {
     last_update_time_ = 0;
     visibility_counter_ = 0;
+    cached_box_.invalidate();
 }
 
 void OzzKinematics::Callback(UpdateCallback C, void* Param)

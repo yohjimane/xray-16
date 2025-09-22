@@ -1,181 +1,71 @@
-# XRay Animation System - ozz-animation Integration
+# X-Ray Animation / ozz-animation Integration
 
-This module provides a modern animation system for the X-Ray engine using the ozz-animation library. It replaces the legacy X-Ray animation system while maintaining compatibility with existing game code.
+This module hosts the ongoing effort to move the OpenXRay animation toolchain and runtime over to [ozz-animation](https://github.com/guillaumeblanc/ozz-animation). It currently ships production-ready converters and validation tooling alongside a work-in-progress runtime façade (`OzzKinematics`) that mirrors the legacy `IKinematics` interface.
 
-## Features
+## Current State
 
-- **Modern Animation Pipeline**: Uses ozz-animation for high-performance skeletal animation
-- **Backward Compatibility**: Maintains compatibility with existing X-Ray animation interfaces
-- **Format Conversion**: Converts X-Ray animation formats (OGF, OMF, ANM, SKL) to ozz format
-- **Metadata Preservation**: Preserves X-Ray-specific animation metadata and properties
-- **Performance Optimized**: SIMD-optimized animation sampling and blending
+- **Asset conversion**: The `xray_to_ozz_converter` CLI and helper scripts convert `.ogf/.omf` pairs into `.ozz` skeletons/animations plus `.ozzx` bundles. Outputs are regression-tested against Blender exports.
+- **Visualization**: `ozz_animation_viewer` loads converted bundles, dumps bind-pose/animation data, and provides profiling overlays to compare with upstream ozz samples.
+- **Runtime façade**: `OzzKinematics` evaluates bind pose and sampled animation, handles visibility masks, `CBoneInstance` callbacks, and additional bone transforms while conforming to `IKinematics` expectations.
+- **Parity tests**: GoogleTest fixtures under `src/xrAnimation/tests` diff world-space transforms between legacy `CKinematics` and `OzzKinematics` for bind pose and sampled clips to ensure behaviour remains aligned.
+- **Still TODO**: Bone picking, vertex enumeration, renderer wiring, and an engine-ready `.ozzx` visual remain in progress; the façade is not yet a drop-in replacement for gameplay actors.
 
-## Architecture
+## Key Components
 
-### Core Components
+- `OzzConversion.*`: Matrix/transform helpers shared by the converter, tests, and runtime façade.
+- `OzzBundle.*`: Minimal reader/writer for `.ozzx` bundles (skeleton + mesh payload).
+- `OzzKinematics.*`: `IKinematics` implementation backed by ozz runtime jobs (`LocalToModelJob`, sampling contexts, visibility masks).
+- `tests/`: Converter smoke tests, `ozz_kinematics_tests`, and parity fixtures that compare against legacy assets.
+- `tools/`: Viewer integration, converter CLI, and support scripts for running conversions on sample data.
 
-1. **AnimationConverter**: Framework for converting X-Ray animation formats to ozz
-2. **OzzAnimationSystem**: Main animation system managing skeleton and animations
-3. **OzzKinematicsAnimated**: X-Ray compatible wrapper implementing `IKinematicsAnimated`
-4. **OGFConverter**: Converts OGF (Object Geometry Format) files to ozz format
+## Building & Running Tools
 
-### File Structure
-
-```
-xrAnimation/
-├── AnimationConverter.h/cpp          # Core conversion framework
-├── OzzAnimationSystem.h/cpp          # Main animation system
-├── OzzKinematicsAnimated.h/cpp       # X-Ray compatibility layer
-├── OGFConverter.h/cpp                # OGF format converter
-├── CMakeLists.txt                    # CMake build configuration
-├── xrAnimation.vcxproj               # Visual Studio project
-└── README.md                         # This file
+```bash
+cmake -S xray-16 -B xray-16/ozz_utils -DCMAKE_BUILD_TYPE=Debug
+cmake --build xray-16/ozz_utils -j$(nproc)
 ```
 
-## Usage
+- **Converters**: `xray-16/ozz_utils/bin/<cfg>/xray_to_ozz_converter`
+- **Viewer**: `xray-16/ozz_utils/bin/<cfg>/ozz_animation_viewer --bundle=<path>.ozzx`
 
-### Loading Animations
+Helper scripts in the repository root (e.g. `run_stalker_hero_conversion.sh`) regenerate sample assets under `src/xrAnimation/tests/testdata/` and launch the viewer in verification modes.
+
+## Runtime Usage Snapshot
 
 ```cpp
-// Create animation system
-auto anim_system = std::make_unique<XRay::Animation::OzzKinematicsAnimated>();
-
-// Initialize with skeleton and animations
-anim_system->Initialize("skeleton.ozz", "animations/");
-
-// Play animation
-CBlend* blend = anim_system->PlayCycle("walk", TRUE);
-```
-
-### Converting Assets
-
-```cpp
-// Convert OGF to ozz format
-XRay::Animation::OGFConverter converter;
-auto result = converter.Convert("model.ogf");
-
-if (result.success) {
-    // Build runtime assets
-    XRay::Animation::OzzAssetBuilder builder;
-    auto assets = builder.BuildAssets(result.skeleton, result.animations, result.metadata);
+XRay::Animation::OzzKinematics kinematics;
+if (kinematics.InitializeFromOzz("path/to/skeleton.ozz"))
+{
+    // Evaluate rest pose or sampled animation (locals come from an ozz SamplingJob)
+    kinematics.CalculateBones(TRUE); // forces recompute this frame
+    const Fmatrix& world = kinematics.LL_GetTransform(bone_id);
+    // Feed matrices into renderer/physics as needed.
 }
 ```
 
-## Integration Points
+`OzzKinematics` owns ozz sampling context/cache buffers; multi-threaded sampling is on the roadmap, so avoid sharing an instance across threads without external synchronization.
 
-### X-Ray Engine Integration
+## Tests
 
-The animation system integrates with X-Ray through:
+- Build tests with the same CMake cache as the tools.
+- Run `ctest --output-on-failure` from the build directory or invoke binaries directly:
+  - `ozz_kinematics_tests`
+  - `xrAnimation_converter_tests`
+- Parity fixtures require the testdata produced by the converter scripts; regenerate them when converter logic changes.
 
-- **IKinematicsAnimated interface**: Maintains full API compatibility
-- **CBlend objects**: Animation blending system remains unchanged
-- **Bone callbacks**: Existing bone callback system is preserved
-- **Physics integration**: Works with existing physics shell animator
+## Roadmap / Known Gaps
 
-### Render System Integration
+- Implement renderer-facing visual that consumes `.ozzx` bundles and feeds bone palettes to the existing model pool.
+- Cover `.ozzx` runtime loading with dedicated tests (bundle hydration, material metadata, failure modes).
+- Add pilot actor/HUD wiring to exercise callbacks, physics hooks, and animation events through the façade.
+- Expand optimization tests to assert size wins for `--optimize` and detect pose drift on representative clips.
+- Harden `OzzKinematics` for multi-threaded sampling (dedicated scratch buffers, deterministic update cadence).
 
-- Compatible with existing skinned mesh rendering
-- Provides bone transformation matrices in X-Ray format
-- Maintains bone hierarchy and naming conventions
+## Resources
 
-## Performance
-
-### Optimizations
-
-- **SIMD processing**: Uses ozz-animation's SIMD-optimized jobs
-- **SoA layout**: Structure-of-Arrays data layout for better cache performance
-- **Compressed animations**: Significantly smaller memory footprint
-- **Efficient blending**: Hardware-accelerated animation blending
-
-### Benchmarks
-
-Compared to legacy X-Ray animation system:
-- **25-40% faster** animation updates
-- **20-30% less memory** usage
-- **Improved cache performance** with SoA layout
-
-## Building
-
-### Prerequisites
-
-- Visual Studio 2019 or later
-- CMake 3.8 or later
-- ozz-animation library
-
-### Build Steps
-
-1. Configure CMake with ozz-animation support
-2. Open `engine.sln` in Visual Studio
-3. Build the `xrAnimation` project
-4. Link against `xrAnimation.lib` in dependent projects
-
-### CMake Configuration
-
-```cmake
-# Find ozz-animation
-find_package(ozz REQUIRED)
-
-# Link against xrAnimation
-target_link_libraries(your_target xrAnimation)
-```
-
-## Compatibility
-
-### Supported Formats
-
-- **OGF**: Object Geometry Format (skeletal meshes)
-- **OMF**: Object Motion Format (object animations)
-- **ANM/ANMS**: Animation formats (skeletal animations)
-- **SKL/SKLS**: Skeleton formats
-
-### X-Ray API Compatibility
-
-The system maintains full compatibility with:
-- All `IKinematicsAnimated` interface methods
-- `CBlend` animation blending system
-- Bone callback system
-- Motion parameter system
-- Partition-based animation playback
-
-## Migration Guide
-
-### From Legacy X-Ray Animation
-
-1. **No Code Changes Required**: Existing game code continues to work unchanged
-2. **Asset Conversion**: Convert animation assets to ozz format using provided tools
-3. **Performance Benefits**: Automatic performance improvements with no code changes
-
-### Asset Conversion Process
-
-1. Use `OGFConverter` to convert skeletal meshes
-2. Convert animations using appropriate format converters
-3. Preserve metadata in INI format for X-Ray compatibility
-4. Test converted assets in-game
-
-## Troubleshooting
-
-### Common Issues
-
-1. **Missing ozz-animation library**: Ensure ozz-animation is properly installed and linked
-2. **Conversion failures**: Check that source assets are valid X-Ray format files
-3. **Performance issues**: Verify SIMD optimizations are enabled in build configuration
-
-### Debug Information
-
-Enable debug logging for detailed conversion and runtime information:
-
-```cpp
-#ifdef DEBUG
-anim_system->LL_DumpBlends_dbg();  // Debug animation blends
-#endif
-```
-
-## Future Enhancements
-
-- **Additional format support**: Support for more X-Ray animation formats
-- **Real-time conversion**: Convert assets on-the-fly during loading
-- **Enhanced IK**: Integration with ozz-animation's IK solvers
-- **Multi-threading**: Parallel animation processing for large scenes
+- `AGENT_DOCS.md`: Session context, workflows, and tooling quick reference.
+- `AGENT_COMMANDS.md`: Ready-to-run snippets for gathering bind-pose and sampled animation data.
+- `AGENT_NEXT_STEPS.md`: Rolling plan that tracks façade work, visual integration, and testing priorities.
 
 ## License
 

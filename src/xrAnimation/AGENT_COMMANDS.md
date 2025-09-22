@@ -1,5 +1,12 @@
 # AGENT_COMMANDS.md
 
+## Run Ozz Tests
+- Context: Keep parity checks green while iterating on the runtime façade/visual.
+- Workflow:
+  1. Build tests with the standard tools cache: `cmake --build xray-16/ozz_utils --target ozz_kinematics_tests xrAnimation_converter_tests -j`.
+  2. Run the full suite: `ctest --test-dir xray-16/ozz_utils --output-on-failure`.
+  3. Execute a single suite when iterating: `xray-16/ozz_utils/bin/Debug/ozz_kinematics_tests --gtest_filter=OzzKinematicsParity.*` (adjust path/config as needed).
+
 ## Bone Rest Pose Dump (Blender)
 - Context: Needed the rest-pose transforms for the `stalker_hero_1.ogf` armature in Blender.
 - Workflow:

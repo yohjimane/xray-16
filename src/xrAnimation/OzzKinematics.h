@@ -1,11 +1,14 @@
 #pragma once
 
+#include <memory>
+
 #include "Include/xrRender/Kinematics.h"
 #include "xrCore/_fbox.h"
 
 #include "ozz/animation/runtime/sampling_job.h"
 #include "ozz/animation/runtime/skeleton.h"
 #include "ozz/base/maths/soa_transform.h"
+#include "ozz/base/span.h"
 
 namespace XRay
 {
@@ -19,6 +22,12 @@ public:
 
     // Bootstrap from converted `.ozz` assets.
     bool InitializeFromOzz(pcstr skeleton_path);
+
+    // Pose management helpers.
+    bool SetPoseLocals(ozz::span<const ozz::math::SoaTransform> locals);
+    void ClearPose();
+    const ozz::animation::Skeleton& Skeleton() const;
+    ozz::animation::SamplingJob::Context& SamplingContext();
 
     // IKinematics implementation (stubbed for initial integration pass)
     void Bone_Calculate(CBoneData* bd, Fmatrix* parent) override;
@@ -80,6 +89,10 @@ public:
 
 private:
     void NotImplemented(pcstr function_name) const;
+    bool BuildBoneMetadata();
+    void ResetRuntimeState();
+    void ApplyAdditionalBoneTransforms(u16 bone_id, Fmatrix& transform) const;
+    bool IsBoneVisible(size_t index) const;
 
 private:
     CInifile* user_data_;
@@ -87,6 +100,7 @@ private:
     accel bone_map_by_ptr_;
     xr_vector<CBoneInstance> bone_instances_;
     xr_vector<CBoneData*> bones_;
+    xr_vector<std::unique_ptr<CBoneData>> bone_storage_;
     xr_vector<Fobb> bone_boxes_;
     u16 root_bone_;
     u64 visible_mask_;
@@ -98,6 +112,8 @@ private:
     ozz::animation::Skeleton skeleton_;
     xr_vector<ozz::math::SoaTransform> sampled_locals_;
     xr_vector<ozz::math::Float4x4> model_transforms_;
+    xr_vector<Fmatrix> cached_transforms_pre_callbacks_;
+    xr_vector<KinematicsABT::additional_bone_transform> bone_offsets_;
     ozz::animation::SamplingJob::Context sampling_context_;
 };
 } // namespace Animation
