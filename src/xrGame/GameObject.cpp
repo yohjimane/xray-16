@@ -1,6 +1,7 @@
 #include "pch_script.h"
 #include "GameObject.h"
 
+#include "Actor_Flags.h"
 #include "Include/xrRender/RenderVisual.h"
 #include "xrPhysics/PhysicsShell.h"
 #include "ai_space.h"
@@ -127,7 +128,36 @@ void CGameObject::cNameVisual_set(shared_str N)
     {
         IRenderVisual* old_v = renderable.visual;
         NameVisual = N;
-        renderable.visual = GEnv.Render->model_Create(*N);
+        pcstr requested_visual = *N;
+        pcstr load_visual = requested_visual;
+        bool resolved_ozz_bundle = false;
+
+        if (psActorFlags.test(AF_USE_OZZ_VISUALS))
+        {
+            const char* extension = strext(requested_visual);
+            if (extension && xr_stricmp(extension, ".ozzx") == 0)
+            {
+                load_visual = requested_visual;
+                resolved_ozz_bundle = true;
+            }
+            else
+            {
+                string_path candidate;
+                strconcat(sizeof(candidate), candidate, requested_visual, ".ozzx");
+                if (FS.exist("$game_meshes$", candidate))
+                {
+                    load_visual = candidate;
+                    resolved_ozz_bundle = true;
+                }
+            }
+        }
+
+        renderable.visual = GEnv.Render->model_Create(load_visual);
+
+#ifdef DEBUG
+        if (resolved_ozz_bundle)
+            Msg("[ozz] '%s' resolved to bundle '%s'", requested_visual, load_visual);
+#endif
         IKinematics* old_k = old_v ? old_v->dcast_PKinematics() : NULL;
         IKinematics* new_k = renderable.visual->dcast_PKinematics();
         /*
@@ -1527,3 +1557,4 @@ void CGameObject::set_tip_text(LPCSTR new_text) { m_sTipText = new_text; }
 void CGameObject::set_tip_text_default() { m_sTipText = nullptr; }
 bool CGameObject::nonscript_usable() { return m_bNonscriptUsable; }
 void CGameObject::set_nonscript_usable(bool usable) { m_bNonscriptUsable = usable; }
+#include "xrCore/FS.h"

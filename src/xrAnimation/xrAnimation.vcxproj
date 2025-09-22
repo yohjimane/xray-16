@@ -179,10 +179,15 @@
     </Lib>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClInclude Include="OzzBundle.h" />
+    <ClInclude Include="OzzConversion.h" />
+    <ClInclude Include="OzzKinematics.h" />
     <ClInclude Include="stdafx.h" />
     <ClInclude Include="xrAnimation.h" />
   </ItemGroup>
   <ItemGroup>
+    <ClCompile Include="OzzBundle.cpp" />
+    <ClCompile Include="OzzKinematics.cpp" />
     <ClCompile Include="stdafx.cpp">
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">Create</PrecompiledHeader>
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Create</PrecompiledHeader>

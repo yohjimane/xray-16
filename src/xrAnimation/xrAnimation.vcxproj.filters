@@ -33,6 +33,15 @@
     <ClInclude Include="xrAnimation.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="OzzBundle.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="OzzKinematics.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="OzzConversion.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="stdafx.cpp">
@@ -55,6 +64,12 @@
     </ClCompile>
     <ClCompile Include="tests\test_converter.cpp">
       <Filter>tests</Filter>
+    </ClCompile>
+    <ClCompile Include="OzzKinematics.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="OzzBundle.cpp">
+      <Filter>Source Files</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>

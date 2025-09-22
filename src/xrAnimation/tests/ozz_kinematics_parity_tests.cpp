@@ -28,6 +28,7 @@
 #include "OzzConversion.h"
 #include "OzzKinematics.h"
 #include "OzzBundle.h"
+#include "framework/mesh.h"
 
 #include "ozz/animation/runtime/animation.h"
 #include "ozz/animation/runtime/local_to_model_job.h"
@@ -1489,4 +1490,42 @@ TEST(OzzKinematicsParity, AnimationPoseMatchesLegacySkeleton)
         EXPECT_NEAR(legacy_transform.c.y, ozz_transform.c.y, kAnimationTolerance) << "Animation Y mismatch for bone " << bone_name;
         EXPECT_NEAR(legacy_transform.c.z, ozz_transform.c.z, kAnimationTolerance) << "Animation Z mismatch for bone " << bone_name;
     }
+}
+
+TEST(OzzBundleRuntime, HydratesKinematicsAndMeshPayload)
+{
+    const auto bundle_path = ResolveProjectPath("src/xrAnimation/tests/testdata/stalker_hero.ozzx");
+    ASSERT_TRUE(std::filesystem::exists(bundle_path)) << "Missing test bundle: " << bundle_path;
+
+    XRay::Animation::OzzxBundle bundle;
+    ASSERT_TRUE(XRay::Animation::ReadOzzxBundle(bundle_path, bundle)) << "Failed to read bundle";
+    ASSERT_FALSE(bundle.skeleton.empty()) << "Bundle missing skeleton payload";
+    ASSERT_FALSE(bundle.mesh.empty()) << "Bundle missing mesh payload";
+
+    XRay::Animation::OzzKinematics kinematics;
+    ozz::span<const std::byte> skeleton_span(reinterpret_cast<const std::byte*>(bundle.skeleton.data()), bundle.skeleton.size());
+    ASSERT_TRUE(kinematics.InitializeFromOzzBuffer(skeleton_span)) << "Failed to initialize kinematics from bundle";
+    EXPECT_GT(kinematics.LL_BoneCount(), 0) << "Kinematics reported zero bones";
+
+    kinematics.CalculateBones(TRUE);
+    xr_vector<Fmatrix> palette;
+    kinematics.BuildSkinningPalette(palette, true);
+    EXPECT_EQ(palette.size(), kinematics.LL_BoneCount()) << "Palette bone count mismatch";
+
+    // Decode mesh payload to ensure geometry data survived bundling.
+    ozz::io::MemoryStream mesh_stream;
+    ASSERT_TRUE(mesh_stream.Write(bundle.mesh.data(), bundle.mesh.size()));
+    mesh_stream.Seek(0, ozz::io::Stream::kSet);
+
+    ozz::io::IArchive archive(&mesh_stream);
+    size_t mesh_count = 0;
+    while (archive.TestTag<ozz::sample::Mesh>())
+    {
+        ozz::sample::Mesh mesh;
+        archive >> mesh;
+        EXPECT_GT(mesh.vertex_count(), 0);
+        EXPECT_FALSE(mesh.parts.empty());
+        ++mesh_count;
+    }
+    EXPECT_GT(mesh_count, 0u) << "Bundle contained no meshes";
 }

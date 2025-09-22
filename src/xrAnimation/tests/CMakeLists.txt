@@ -53,6 +53,7 @@ target_link_libraries(ozz_kinematics_tests PRIVATE
     xrAnimation
     ozz_animation
     ozz_base
+    sample_framework
     gtest
     xrEngine
     xrScriptEngine)

@@ -7,6 +7,13 @@
   2. Run the full suite: `ctest --test-dir xray-16/ozz_utils --output-on-failure`.
   3. Execute a single suite when iterating: `xray-16/ozz_utils/bin/Debug/ozz_kinematics_tests --gtest_filter=OzzKinematicsParity.*` (adjust path/config as needed).
 
+## Enable Ozz Visual Bundles
+- Context: Smoke-test `.ozzx` bundles inside the engine without touching legacy assets.
+- Workflow:
+  1. Copy or convert bundles under `gamedata/meshes` (a sample `actors/dev_stalker.ozzx` is provided).
+  2. Toggle the developer flag: `g_use_ozz_visuals 1`.
+  3. Spawn or reload actors/HUD items; the loader will prefer `.ozzx` when present and fall back to `.ogf` otherwise.
+
 ## Bone Rest Pose Dump (Blender)
 - Context: Needed the rest-pose transforms for the `stalker_hero_1.ogf` armature in Blender.
 - Workflow:

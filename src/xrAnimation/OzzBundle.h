@@ -3,7 +3,7 @@
 #include <cstdint>
 #include <filesystem>
 
-#include "xrCommon/xr_vector.h"
+#include <vector>
 
 namespace XRay
 {
@@ -12,8 +12,8 @@ namespace Animation
 struct OzzxBundle
 {
     std::uint32_t version = 1;
-    xr_vector<std::uint8_t> skeleton;
-    xr_vector<std::uint8_t> mesh;
+    std::vector<std::uint8_t> skeleton;
+    std::vector<std::uint8_t> mesh;
 };
 
 bool ReadOzzxBundle(const std::filesystem::path& path, OzzxBundle& out_bundle);

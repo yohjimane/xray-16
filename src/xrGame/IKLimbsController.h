@@ -42,6 +42,7 @@ private:
     xr_vector<CIKLimb> _bone_chains;
     object_shift _object_shift;
     extrapolation::points _pose_extrapolation;
+    bool m_supports_ozz{};
 
 #ifdef DEBUG
     LPCSTR anim_name;

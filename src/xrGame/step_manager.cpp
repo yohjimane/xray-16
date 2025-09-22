@@ -46,7 +46,16 @@ void CStepManager::reload(LPCSTR section)
 
     IKinematicsAnimated* skeleton_animated = smart_cast<IKinematicsAnimated*>(m_object->Visual());
 
-    VERIFY3(skeleton_animated, "object is not animated", m_object->cNameVisual().c_str());
+    if (!skeleton_animated)
+    {
+#ifdef DEBUG
+        Msg("[steps] skipping step manager setup for '%s' (visual '%s') due to missing IKinematicsAnimated",
+            m_object->cName().c_str(), m_object->cNameVisual().c_str());
+#endif
+        m_steps_map.clear();
+        m_step_info.disable = true;
+        return;
+    }
 #ifdef DEBUG
     if (debug_step_info_load)
         Msg("loading step_params for object :%s, visual: %s, section: %s, step_params section: %s  ",
@@ -115,6 +124,12 @@ void CStepManager::on_animation_start(MotionID motion_id, CBlend* blend)
     m_blend = blend;
     if (!m_blend)
         return;
+
+    if (!smart_cast<IKinematicsAnimated*>(m_object->Visual()))
+    {
+        m_step_info.disable = true;
+        return;
+    }
 
     if (m_object->character_ik_controller())
         m_object->character_ik_controller()->PlayLegs(blend);

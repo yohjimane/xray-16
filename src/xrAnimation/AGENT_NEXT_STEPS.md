@@ -4,6 +4,8 @@
 - `.ogf/.omf → .ozz` pipeline is validated: skeletons, meshes, and animations round-trip and render correctly in the updated `ozz_animation_viewer`.
 - Viewer UI now mirrors Ozz profiling (FPS/update/render graphs) and cleanly renders converted assets without depth conflicts.
 - Skinning path matches the legacy runtime; palette generation and joint remaps are in sync with Blender/XR exporters.
+- Engine console flag `g_use_ozz_visuals` lets developer builds load `.ozzx` bundles (e.g., `dev_stalker.ozzx`) through the standard `CGameObject` path for smoke testing.
+- Unit coverage now checks `.ozzx` bundle hydration against `OzzKinematics`, ensuring skeleton palettes and mesh payloads stay valid.
 
 ## Immediate Focus – Ozz Runtime Path
 1. **`.ozzx` Visual Integration**

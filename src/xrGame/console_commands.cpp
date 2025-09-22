@@ -2354,6 +2354,7 @@ void CCC_RegisterCommands()
     CMD3(CCC_Mask, "g_loading_stages", &psActorFlags, AF_LOADING_STAGES);
     CMD3(CCC_Mask, "g_always_use_attitude_sensors", &psActorFlags, AF_ALWAYS_USE_ATTITUDE_SENSORS);
     CMD3(CCC_Mask, "g_use_tracers", &psActorFlags, AF_USE_TRACERS);
+    CMD3(CCC_Mask, "g_use_ozz_visuals", &psActorFlags, AF_USE_OZZ_VISUALS);
 
     CMD4(CCC_Integer, "g_inv_highlight_equipped", &g_inv_highlight_equipped, 0, 1);
     CMD4(CCC_Integer, "g_first_person_death", &g_first_person_death, 0, 1);
