@@ -125,6 +125,7 @@ target_sources(xrRender_GL PRIVATE
     ../xrRender/ModelPool.h
     ../xrRender/OzzKinematicsVisual.cpp
     ../xrRender/OzzKinematicsVisual.h
+    ../../../Externals/ozz-animation/samples/framework/mesh.cc
     ../xrRender/NvTriStrip.cpp
     ../xrRender/NvTriStrip.h
     ../xrRender/NvTriStripObjects.cpp
@@ -418,6 +419,11 @@ target_link_libraries(xrRender_GL
     xrParticles
     xrScriptEngine
     xrImGui
+    xrAnimation
+    ozz_animation
+    ozz_animation_offline
+    ozz_base
+    ozz_animation_tools
 )
 
 target_compile_definitions(xrRender_GL

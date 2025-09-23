@@ -2521,6 +2521,7 @@ target_compile_definitions(xrGame
     PURE_DYNAMIC_CAST
 
     PRIVATE
+    RENDER_NAMESPACE=render_gl
     XRGAME_EXPORTS
 )
 

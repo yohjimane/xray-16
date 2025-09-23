@@ -46,6 +46,7 @@ target_link_libraries(xrAnimation
 set_target_properties(xrAnimation PROPERTIES
     CXX_STANDARD 17
     CXX_STANDARD_REQUIRED ON
+    POSITION_INDEPENDENT_CODE ON
     FOLDER "xrAnimation"
 )
 

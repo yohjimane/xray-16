@@ -4,7 +4,7 @@
 
 #include "OzzConversion.h"
 
-#include "xrEngine/Device.h"
+#include "xrEngine/device.h"
 
 #include "ozz/animation/runtime/skeleton_utils.h"
 #include "ozz/base/io/archive.h"

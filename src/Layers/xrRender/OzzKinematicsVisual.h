@@ -13,9 +13,9 @@
 #include "xrCommon/xr_smart_pointers.h"
 
 #include "ozz/base/io/archive.h"
-#include "ozz/base/io/memory_stream.h"
+#include "ozz/base/io/stream.h"
 #include "ozz/base/span.h"
-#include "ozz/sample/framework/mesh.h"
+#include "framework/mesh.h"
 
 #include <cstdint>
 #include <filesystem>
@@ -24,6 +24,7 @@
 
 namespace xray::render::RENDER_NAMESPACE
 {
+using XRay::Animation::OzzKinematics;
 class COzzSkinnedSurface;
 
 class COzzKinematicsVisual final : public FHierrarhyVisual
@@ -52,13 +53,14 @@ public:
 
 private:
     void UpdateBounds();
+    void DestroySurfaces();
 
 private:
     OzzKinematics kinematics_;
     xr_vector<std::uint8_t> skeleton_payload_;
     xr_vector<std::uint8_t> mesh_payload_;
     xr_vector<ozz::sample::Mesh> meshes_;
-    xr_vector<xr_unique_ptr<COzzSkinnedSurface>> surfaces_;
+    xr_vector<COzzSkinnedSurface*> surfaces_;
     xr_vector<Fmatrix> bone_palette_;
     bool palette_dirty_ = true;
 };

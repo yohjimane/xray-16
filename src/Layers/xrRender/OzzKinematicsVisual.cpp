@@ -5,10 +5,11 @@
 
 #include "BufferUtils.h"
 #include "FVisual.h"
-#include "Render.h"
+#include "xrEngine/Render.h"
 
 #include "xrAnimation/OzzConversion.h"
 #include "xrCore/FMesh.hpp"
+#include "xrCore/xrMemory.h"
 
 #include "xrCommon/xr_string.h"
 
@@ -20,6 +21,9 @@
 
 namespace xray::render::RENDER_NAMESPACE
 {
+using inherited = FHierrarhyVisual;
+using XRay::Animation::ConvertOzzMatrixToXRay;
+
 namespace
 {
 constexpr u32 kMaxDumpedBones = 4;
@@ -101,6 +105,7 @@ constexpr VertexElement OzzVertexDecl[] =
     { 0, 40, D3DDECLTYPE_FLOAT2, D3DDECLMETHOD_DEFAULT, D3DDECLUSAGE_TEXCOORD, 0 },
     D3DDECL_END()
 };
+} // namespace
 
 class COzzSkinnedSurface final : public dxRender_Visual
 {
@@ -276,13 +281,6 @@ void COzzSkinnedSurface::InitializeGeometry(const ozz::sample::Mesh& mesh)
 
     geom_.create(OzzVertexDecl, *vertex_buffer_, *index_buffer_);
 
-    vBase = 0;
-    vCount = vertex_count_;
-    vStride = sizeof(OzzGpuVertex);
-    iBase = 0;
-    iCount = static_cast<u32>(indices_.size());
-    dwPrimitives = primitive_count_;
-
     dirty_ = true;
 }
 
@@ -342,7 +340,7 @@ void COzzSkinnedSurface::UpdateGeometry()
         OzzGpuVertex& dst = gpu_vertices[vertex];
         dst.position = skinned_pos;
         dst.normal = skinned_normal;
-        dst.tangent.set(skinned_tangent, src.tangent.w);
+        dst.tangent.set(skinned_tangent.x, skinned_tangent.y, skinned_tangent.z, src.tangent.w);
         dst.uv = src.uv;
     }
 
@@ -371,14 +369,29 @@ void COzzSkinnedSurface::Release()
     vertex_buffer_.reset();
     index_buffer_.reset();
 }
-} // namespace
 
 COzzKinematicsVisual::COzzKinematicsVisual()
 {
     Type = MT_OZZ_BUNDLE;
 }
 
-COzzKinematicsVisual::~COzzKinematicsVisual() = default;
+COzzKinematicsVisual::~COzzKinematicsVisual()
+{
+    DestroySurfaces();
+}
+
+void COzzKinematicsVisual::DestroySurfaces()
+{
+    for (auto* surface : surfaces_)
+    {
+        if (!surface)
+            continue;
+
+        surface->Release();
+        xr_delete(surface);
+    }
+    surfaces_.clear();
+}
 
 void COzzKinematicsVisual::Load(const char* N, IReader* data, u32)
 {
@@ -392,7 +405,8 @@ bool COzzKinematicsVisual::LoadFromBundle(const char* name, const std::filesyste
 #endif
 
     XRay::Animation::OzzxBundle bundle;
-    xr_string error_msg = "Failed to read .ozzx bundle: " + path.string();
+    xr_string error_msg = "Failed to read .ozzx bundle: ";
+    error_msg += path.string().c_str();
     R_ASSERT2(XRay::Animation::ReadOzzxBundle(path, bundle), error_msg.c_str());
 
     R_ASSERT2(!bundle.skeleton.empty(), "Ozz bundle missing skeleton payload");
@@ -401,7 +415,8 @@ bool COzzKinematicsVisual::LoadFromBundle(const char* name, const std::filesyste
     mesh_payload_.assign(bundle.mesh.begin(), bundle.mesh.end());
 
     ozz::span<const std::byte> skeleton_span(reinterpret_cast<const std::byte*>(skeleton_payload_.data()), skeleton_payload_.size());
-    xr_string init_error = "Failed to initialize OzzKinematics from bundle: " + path.string();
+    xr_string init_error = "Failed to initialize OzzKinematics from bundle: ";
+    init_error += path.string().c_str();
     R_ASSERT2(kinematics_.InitializeFromOzzBuffer(skeleton_span), init_error.c_str());
 
     meshes_.clear();
@@ -419,14 +434,14 @@ bool COzzKinematicsVisual::LoadFromBundle(const char* name, const std::filesyste
         }
     }
 
+    DestroySurfaces();
     children.clear();
-    surfaces_.clear();
     surfaces_.reserve(meshes_.size());
     for (const auto& mesh : meshes_)
     {
-        auto surface = xr_make_unique<COzzSkinnedSurface>(*this, mesh);
-        children.push_back(surface.get());
-        surfaces_.emplace_back(std::move(surface));
+        auto* surface = xr_new<COzzSkinnedSurface>(*this, mesh);
+        children.push_back(surface);
+        surfaces_.push_back(surface);
     }
     bDontDelete = TRUE;
 
@@ -456,14 +471,14 @@ void COzzKinematicsVisual::Copy(dxRender_Visual* pFrom)
             R_ASSERT2(kinematics_.InitializeFromOzzBuffer(span), "Failed to copy OzzKinematicsVisual state");
         }
 
+        DestroySurfaces();
         children.clear();
-        surfaces_.clear();
         surfaces_.reserve(meshes_.size());
         for (const auto& mesh : meshes_)
         {
-            auto surface = xr_make_unique<COzzSkinnedSurface>(*this, mesh);
-            children.push_back(surface.get());
-            surfaces_.emplace_back(std::move(surface));
+            auto* surface = xr_new<COzzSkinnedSurface>(*this, mesh);
+            children.push_back(surface);
+            surfaces_.push_back(surface);
         }
         bDontDelete = TRUE;
 
@@ -482,8 +497,8 @@ void COzzKinematicsVisual::Release()
     kinematics_.SetUpdateCallbackParam(nullptr);
     skeleton_payload_.clear();
     mesh_payload_.clear();
+    DestroySurfaces();
     children.clear();
-    surfaces_.clear();
     bone_palette_.clear();
     inherited::Release();
 }
@@ -511,7 +526,7 @@ void COzzKinematicsVisual::UpdateBounds()
 void COzzKinematicsVisual::UpdateSkinningPalette()
 {
     palette_dirty_ = true;
-    for (auto& surface : surfaces_)
+    for (auto* surface : surfaces_)
         surface->MarkDirty();
 }
 
