@@ -45,13 +45,38 @@
 #include "Layers/xrRender/ModelNaming.h"
 
 using XRay::Animation::ConvertOzzMatrixToXRay;
+
+#ifndef PROJECT_ROOT
+#    define PROJECT_ROOT ""
+#endif
 using XRay::Animation::OzzKinematics;
 
 namespace
 {
 std::filesystem::path ResolveProjectPath(const std::string& relative)
 {
-    const std::filesystem::path root(PROJECT_ROOT);
+    static const std::filesystem::path root = []
+    {
+#ifdef PROJECT_ROOT
+        std::filesystem::path from_macro(PROJECT_ROOT);
+        if (!from_macro.empty())
+        {
+#ifdef _WIN32
+            from_macro.make_preferred();
+#endif
+            return from_macro;
+        }
+#endif
+        std::filesystem::path from_file(__FILE__);
+        auto root_path = from_file.parent_path();
+        root_path = root_path.parent_path();
+        root_path = root_path.parent_path();
+        root_path = root_path.parent_path();
+#ifdef _WIN32
+        root_path.make_preferred();
+#endif
+        return root_path;
+    }();
     return root / relative;
 }
 

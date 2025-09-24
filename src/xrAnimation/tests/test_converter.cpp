@@ -25,7 +25,7 @@
 #include "gtest/gtest.h"
 
 #ifndef PROJECT_ROOT
-#    error "PROJECT_ROOT compile definition must be provided"
+#    define PROJECT_ROOT ""
 #endif
 
 #ifdef _WIN32
@@ -59,7 +59,29 @@ using Json = nlohmann::json;
 
 fs::path ProjectRoot()
 {
-    static const fs::path root = fs::path(PROJECT_ROOT);
+    static const fs::path root = []
+    {
+#ifdef PROJECT_ROOT
+        fs::path from_macro(PROJECT_ROOT);
+        if (!from_macro.empty())
+        {
+#ifdef _WIN32
+            from_macro.make_preferred();
+#endif
+            return from_macro;
+        }
+#endif
+
+        fs::path from_file(__FILE__);
+        auto root_path = from_file.parent_path();
+        root_path = root_path.parent_path();
+        root_path = root_path.parent_path();
+        root_path = root_path.parent_path();
+#ifdef _WIN32
+        root_path.make_preferred();
+#endif
+        return root_path;
+    }();
     return root;
 }
 
