@@ -91,7 +91,7 @@ target_compile_definitions(xrODE
     "$<$<CONFIG:Release,ReleaseMasterGold>:dNODEBUG>"
     PRIVATE
     $<$<BOOL:${BUILD_SHARED_LIBS}>:ODE_DLL>
-    $<$<BOOL:${BUILD_SHARED_LIBS}>:ODE_PLATFORM_WINDOWS>
+    $<$<AND:$<BOOL:${BUILD_SHARED_LIBS}>,$<PLATFORM_ID:Windows>>:ODE_PLATFORM_WINDOWS>
 )
 
 set_target_properties(xrODE PROPERTIES
