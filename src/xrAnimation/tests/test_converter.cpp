@@ -61,6 +61,11 @@ namespace
 {
 using Json = nlohmann::json;
 
+std::string PathToString(const fs::path& path)
+{
+    return path.generic_string();
+}
+
 fs::path ProjectRoot()
 {
     static const fs::path root = []
@@ -1995,8 +2000,10 @@ TEST(ConverterIntegration, SkeletonWrittenToTestdataDirectory)
     ASSERT_TRUE(ConvertSkeleton(true));
 
     const auto expected_path = ResolveProjectPath("src/xrAnimation/tests/testdata/stalker_hero_1.ozz");
-    EXPECT_EQ(SkeletonOutputPath(), expected_path);
-    EXPECT_TRUE(fs::exists(expected_path)) << "expected converted skeleton missing at " << expected_path;
+    const auto actual_path = SkeletonOutputPath();
+
+    EXPECT_EQ(PathToString(actual_path), PathToString(expected_path));
+    EXPECT_TRUE(fs::exists(expected_path)) << "expected converted skeleton missing at " << PathToString(expected_path);
 }
 
 TEST(ConverterIntegration, GenerateMesh)
@@ -2063,7 +2070,7 @@ TEST(LegacyOmfConverter, ConvertsCriticalHitOmf)
 {
     const auto bundle_path = ResolveProjectPath("src/xrAnimation/tests/testdata/stalker_hero.ozzx");
     XRay::Animation::OzzxBundle bundle;
-    ASSERT_TRUE(XRay::Animation::ReadOzzxBundle(bundle_path, bundle)) << "Failed to read bundle: " << bundle_path;
+    ASSERT_TRUE(XRay::Animation::ReadOzzxBundle(bundle_path, bundle)) << "Failed to read bundle: " << PathToString(bundle_path);
 
     ozz::animation::Skeleton skeleton;
     ozz::io::MemoryStream skeleton_stream;
@@ -2085,8 +2092,9 @@ TEST(LegacyOmfConverter, ConvertsCriticalHitOmf)
 
     for (const auto& entry : converted)
     {
-        ASSERT_NE(entry.animation, nullptr);
-        EXPECT_EQ(entry.animation->num_tracks(), skeleton.num_joints());
+        const ozz::animation::Animation* animation_ptr = entry.animation.get();
+        ASSERT_TRUE(animation_ptr != nullptr);
+        EXPECT_EQ(animation_ptr->num_tracks(), skeleton.num_joints());
     }
 }
 } // namespace

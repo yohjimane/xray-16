@@ -71,6 +71,7 @@
     <ClInclude Include="..\..\Include\xrRender\UIShader.h" />
     <ClInclude Include="..\..\Include\xrRender\WallMarkArray.h" />
     <ClInclude Include="..\..\utils\xrLC_Light\R_light.h" />
+    <ClInclude Include="..\..\xrAnimation\LegacyOmfConverter.h" />
     <ClInclude Include="..\xrRenderDX11\3DFluid\dx113DFluidBlenders.h" />
     <ClInclude Include="..\xrRenderDX11\3DFluid\dx113DFluidData.h" />
     <ClInclude Include="..\xrRenderDX11\3DFluid\dx113DFluidEmitters.h" />
@@ -236,6 +237,7 @@
     <ClInclude Include="stdafx.h" />
   </ItemGroup>
   <ItemGroup>
+    <ClCompile Include="..\..\xrAnimation\LegacyOmfConverter.cpp" />
     <ClCompile Include="..\xrRenderDX11\3DFluid\dx113DFluidBlenders.cpp" />
     <ClCompile Include="..\xrRenderDX11\3DFluid\dx113DFluidData.cpp" />
     <ClCompile Include="..\xrRenderDX11\3DFluid\dx113DFluidEmitters.cpp" />
@@ -376,7 +378,7 @@
     <ClCompile Include="..\xrRender\SkeletonXSkinXW_SSE.cpp" />
     <ClCompile Include="..\xrRender\stats_manager.cpp" />
     <ClCompile Include="..\xrRender\TextureDescrManager.cpp" />
-    <ClCompile Include="..\..\..\Externals\ozz-animation\samples\framework\mesh.cc" >
+    <ClCompile Include="..\..\..\Externals\ozz-animation\samples\framework\mesh.cc">
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
     </ClCompile>
     <ClCompile Include="..\xrRender\OzzKinematicsVisual.cpp" />
