@@ -408,6 +408,9 @@ bool COzzKinematicsVisual::LoadFromBundle(const char* name, const std::filesyste
     animation_applied_ = false;
     last_animation_update_frame_ = u32(-1);
 
+    if (!motion_references_.empty())
+        BuildLegacyMotionLibrary();
+
     meshes_.clear();
     if (!mesh_payload_.empty())
     {
@@ -639,7 +642,7 @@ void COzzKinematicsVisual::UpdateAnimation(float dt)
     UpdateSkinningPalette();
 }
 
-xr_vector<xr_string> COzzKinematicsVisual::CollectSkeletonBoneNames() const
+xr_vector<xr_string> COzzKinematicsVisual::CollectSkeletonBoneNames()
 {
     xr_vector<xr_string> names;
     const u16 bone_count = kinematics_.LL_BoneCount();
@@ -778,8 +781,14 @@ bool COzzKinematicsVisual::PlayLegacyMotion(const xr_string& motion_name)
     return LoadLegacyMotion(motion_name);
 }
 
-xr_vector<xr_string> COzzKinematicsVisual::LegacyMotionNames() const
+xr_vector<xr_string> COzzKinematicsVisual::LegacyMotionNames()
 {
+    if (legacy_motion_metadata_.empty() && !motion_references_.empty())
+    {
+        if (legacy_motion_library_.empty())
+            BuildLegacyMotionLibrary();
+    }
+
     xr_vector<xr_string> names;
     names.reserve(legacy_motion_metadata_.size());
     for (const auto& entry : legacy_motion_metadata_)

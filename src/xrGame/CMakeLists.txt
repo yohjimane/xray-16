@@ -2481,6 +2481,8 @@ target_include_directories(xrGame
     "${CMAKE_SOURCE_DIR}/Externals/ode/include"
     "${CMAKE_SOURCE_DIR}/Externals/OpenAutomate/inc"
     "${CMAKE_SOURCE_DIR}/sdk/include"
+    "${CMAKE_SOURCE_DIR}/Externals/ozz-animation/include"
+    "${CMAKE_SOURCE_DIR}/Externals/ozz-animation/samples"
 )
 
 target_link_libraries(xrGame

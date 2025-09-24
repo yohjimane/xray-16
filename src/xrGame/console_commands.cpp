@@ -53,8 +53,8 @@
 #include "xrPhysics/console_vars.h"
 #include "GametaskManager.h"
 
-#include "Layers/xrRender/OzzKinematicsVisual.h"
 
+#include <algorithm>
 #include <filesystem>
 
 #ifdef DEBUG
@@ -1885,13 +1885,6 @@ public:
 		if (!GEnv.Render)
 			return;
 
-		auto* ozz_visual = visual->getType() == MT_OZZ_BUNDLE ? static_cast<COzzKinematicsVisual*>(visual) : nullptr;
-		if (!ozz_visual)
-		{
-			Msg("[ozz] actor visual is not an Ozz bundle");
-			return;
-		}
-
 		auto trim_input = [](std::string_view value) -> std::string
 		{
 			const auto begin = value.find_first_not_of(" \t");
@@ -1945,15 +1938,14 @@ public:
 			return;
 		}
 
-		if (ozz_visual->PlayLegacyMotion(trimmed.c_str()))
+		if (GEnv.Render->PlayOzzLegacyMotion(visual, xr_string(trimmed.c_str())))
 		{
 			Msg("[ozz] playing legacy motion '%s'", trimmed.c_str());
 			return;
 		}
 
-		Msg("[ozz] legacy motion '%s' unavailable", trimmed.c_str());
-		auto available = ozz_visual->LegacyMotionNames();
-		if (available.empty())
+		xr_vector<xr_string> available;
+		if (!GEnv.Render->EnumerateOzzLegacyMotions(visual, available) || available.empty())
 		{
 			Msg("[ozz] bundle has no legacy motions indexed yet");
 			return;
@@ -1961,6 +1953,11 @@ public:
 
 		const size_t preview_count = std::min<size_t>(available.size(), 8);
 		Msg("[ozz] available motions (%zu of %zu):", preview_count, available.size());
+		std::sort(available.begin(), available.end(),
+		    [](const xr_string& lhs, const xr_string& rhs)
+		    {
+		        return xr_stricmp(lhs.c_str(), rhs.c_str()) < 0;
+		    });
 		for (size_t idx = 0; idx < preview_count; ++idx)
 			Msg("    %s", available[idx].c_str());
 		if (available.size() > preview_count)
@@ -2004,6 +2001,60 @@ public:
 	void Info(TInfo& I) override
 	{
 		xr_strcpy(I, "stop the currently playing .ozz animation for the actor");
+	}
+};
+
+class CCC_ListDevOzzAnimations : public IConsole_Command
+{
+public:
+	CCC_ListDevOzzAnimations(LPCSTR N) : IConsole_Command(N) { bEmptyArgsHandled = true; }
+
+	void Execute(LPCSTR /*arguments*/) override
+	{
+		CActor* actor = Actor();
+		if (!actor)
+		{
+			Msg("[ozz] no active actor to inspect animations");
+			return;
+		}
+
+		IRenderVisual* visual = actor->Visual();
+		if (!visual)
+		{
+			Msg("[ozz] actor has no visual");
+			return;
+		}
+
+		if (!GEnv.Render)
+			return;
+
+		xr_vector<xr_string> names;
+		if (!GEnv.Render->EnumerateOzzLegacyMotions(visual, names))
+		{
+			Msg("[ozz] actor visual is not an Ozz bundle");
+			return;
+		}
+
+		if (names.empty())
+		{
+			Msg("[ozz] no legacy motions indexed");
+			return;
+		}
+
+		std::sort(names.begin(), names.end(),
+		    [](const xr_string& lhs, const xr_string& rhs)
+		    {
+		        return xr_stricmp(lhs.c_str(), rhs.c_str()) < 0;
+		    });
+
+		Msg("[ozz] available motions (%zu):", names.size());
+		for (const auto& name : names)
+			Msg("    %s", name.c_str());
+	}
+
+	void Info(TInfo& I) override
+	{
+		xr_strcpy(I, "list legacy motions available on the current Ozz actor");
 	}
 };
 
@@ -2567,6 +2618,7 @@ void CCC_RegisterCommands()
     CMD1(CCC_SwitchDevOzzActor, "g_dev_ozz_actor");
     CMD1(CCC_SetDevOzzAnimation, "g_dev_ozz_animation");
     CMD1(CCC_StopDevOzzAnimation, "g_dev_ozz_animation_stop");
+    CMD1(CCC_ListDevOzzAnimations, "g_dev_ozz_animation_list");
 #endif // DEBUG
 
 #ifndef MASTER_GOLD

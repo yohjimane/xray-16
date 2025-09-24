@@ -665,6 +665,26 @@ void CRender::StopOzzAnimation(IRenderVisual* visual)
     ozz_visual->StopAnimation();
 }
 
+bool CRender::PlayOzzLegacyMotion(IRenderVisual* visual, const xr_string& motion_name)
+{
+    if (!visual || visual->getType() != MT_OZZ_BUNDLE)
+        return false;
+
+    auto* ozz_visual = static_cast<COzzKinematicsVisual*>(visual);
+    return ozz_visual->PlayLegacyMotion(motion_name);
+}
+
+bool CRender::EnumerateOzzLegacyMotions(IRenderVisual* visual, xr_vector<xr_string>& out_names)
+{
+    out_names.clear();
+    if (!visual || visual->getType() != MT_OZZ_BUNDLE)
+        return false;
+
+    auto* ozz_visual = static_cast<COzzKinematicsVisual*>(visual);
+    out_names = ozz_visual->LegacyMotionNames();
+    return true;
+}
+
 bool CRender::ConsumeOzzPaletteDebugDumpRequest()
 {
     bool expected = true;

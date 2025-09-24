@@ -14,6 +14,24 @@
   2. Toggle the developer flag: `g_use_ozz_visuals 1`.
   3. Spawn or reload actors/HUD items; the loader will prefer `.ozzx` when present and fall back to `.ogf` otherwise.
 
+## Ozz In-Game Smoke Test
+- Context: Validate `.ozzx` bundles can hydrate animations on demand via legacy motion refs.
+- Workflow:
+  1. Generate fresh test assets (produces `.ozz/.ozzx` under `src/xrAnimation/tests/testdata`):
+     `cmake --build ozz_utils --target xray_to_ozz_converter xrAnimation_converter_tests -j`
+     `bin/x86_64/Mixed/xrAnimation_converter_tests --gtest_filter=ConverterIntegration.*`
+  2. Mirror the converted bundle into the runtime search path. Example (Developer build, Linux):
+     `install -D src/xrAnimation/tests/testdata/stalker_hero.ozzx bin/x86_64/Mixed/gamedata/meshes/actors/dev_stalker.ozzx`
+     `install -D src/xrAnimation/tests/testdata/critical_hit_grup_1.ozz bin/x86_64/Mixed/gamedata/anims/critical_hit_grup_1.ozz`
+  3. Launch the engine with developer flags (replace `-fsltx` with your configuration).
+  4. In the in-game console:
+     - Enable Ozz visuals: `g_use_ozz_visuals 1`
+     - Swap player model: `g_dev_ozz_actor 1`
+     - List discoverable legacy motions converted from OMF: `g_dev_ozz_animation_list`
+     - Play a motion by name: `g_dev_ozz_animation actors\stalker_animation`
+     - Stop playback if needed: `g_dev_ozz_animation_stop`
+  5. Optional: capture palette output for debug parity via `debug_dump_ozz_palette` / `debug_dump_ozz_palette_toggle`.
+
 ## Bone Rest Pose Dump (Blender)
 - Context: Needed the rest-pose transforms for the `stalker_hero_1.ogf` armature in Blender.
 - Workflow:

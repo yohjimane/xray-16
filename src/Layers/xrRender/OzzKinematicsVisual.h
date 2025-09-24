@@ -51,7 +51,7 @@ public:
     const xr_vector<ozz::sample::Mesh>& Meshes() const { return meshes_; }
 
     bool PlayLegacyMotion(const xr_string& motion_name);
-    xr_vector<xr_string> LegacyMotionNames() const;
+    xr_vector<xr_string> LegacyMotionNames();
 
     void EnsureSkinningPalette();
     void OnPoseUpdated();
@@ -68,7 +68,7 @@ private:
     void BuildLegacyMotionLibrary();
     xr_vector<xr_string> ResolveMotionReference(const xr_string& reference) const;
     bool ConvertLegacyOmfFile(const xr_string& relative_path, const xr_vector<xr_string>& skeleton_bone_names);
-    xr_vector<xr_string> CollectSkeletonBoneNames() const;
+    xr_vector<xr_string> CollectSkeletonBoneNames();
     bool LoadLegacyMotion(const xr_string& motion_name);
 
 private:
