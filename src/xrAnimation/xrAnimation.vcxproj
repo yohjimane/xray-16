@@ -227,6 +227,7 @@
     </Lib>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClInclude Include="OzzAnimationController.h" />
     <ClInclude Include="OzzBundle.h" />
     <ClInclude Include="OzzConversion.h" />
     <ClInclude Include="OzzKinematics.h" />
@@ -234,6 +235,7 @@
     <ClInclude Include="xrAnimation.h" />
   </ItemGroup>
   <ItemGroup>
+    <ClCompile Include="OzzAnimationController.cpp" />
     <ClCompile Include="OzzBundle.cpp" />
     <ClCompile Include="OzzKinematics.cpp" />
     <ClCompile Include="stdafx.cpp">

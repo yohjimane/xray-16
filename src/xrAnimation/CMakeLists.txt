@@ -26,6 +26,8 @@ set(SOURCES
     xrAnimation.h
     OzzBundle.cpp
     OzzBundle.h
+    OzzAnimationController.cpp
+    OzzAnimationController.h
     OzzKinematics.cpp
     OzzKinematics.h
 )

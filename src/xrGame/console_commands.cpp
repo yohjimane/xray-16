@@ -53,6 +53,8 @@
 #include "xrPhysics/console_vars.h"
 #include "GametaskManager.h"
 
+#include <filesystem>
+
 #ifdef DEBUG
 #include "PHDebug.h"
 #include "ui/UIDebugFonts.h"
@@ -1851,6 +1853,103 @@ public:
 	}
 };
 
+class CCC_SetDevOzzAnimation : public IConsole_Command
+{
+public:
+	CCC_SetDevOzzAnimation(LPCSTR N) : IConsole_Command(N) {}
+
+	void Execute(LPCSTR arguments) override
+	{
+		if (!arguments || !*arguments)
+		{
+			Msg("[ozz] animation path required");
+			return;
+		}
+
+		CActor* actor = Actor();
+		if (!actor)
+		{
+			Msg("[ozz] no active actor to load animation");
+			return;
+		}
+
+		IRenderVisual* visual = actor->Visual();
+		if (!visual)
+		{
+			Msg("[ozz] actor has no visual");
+			return;
+		}
+
+		if (!GEnv.Render)
+			return;
+
+		std::filesystem::path resolved_path;
+		const std::filesystem::path requested(arguments);
+		if (requested.is_absolute())
+		{
+			resolved_path = requested;
+		}
+		else
+		{
+			string_path buffer;
+			if (!FS.exist(buffer, "$game_anims$", arguments))
+			{
+				Msg("[ozz] animation '%s' not found under $game_anims$", arguments);
+				return;
+			}
+			resolved_path = buffer;
+		}
+
+		if (GEnv.Render->LoadOzzAnimation(visual, resolved_path))
+		{
+			Msg("[ozz] loaded animation %s", resolved_path.string().c_str());
+		}
+		else
+		{
+			Msg("[ozz] failed to load animation %s", resolved_path.string().c_str());
+		}
+	}
+
+	void Info(TInfo& I) override
+	{
+		xr_strcpy(I, "load a .ozz animation from $game_anims$ (or absolute path) for the current actor");
+	}
+};
+
+class CCC_StopDevOzzAnimation : public IConsole_Command
+{
+public:
+	CCC_StopDevOzzAnimation(LPCSTR N) : IConsole_Command(N) { bEmptyArgsHandled = true; }
+
+	void Execute(LPCSTR /*arguments*/) override
+	{
+		CActor* actor = Actor();
+		if (!actor)
+		{
+			Msg("[ozz] no active actor to stop animation");
+			return;
+		}
+
+		IRenderVisual* visual = actor->Visual();
+		if (!visual)
+		{
+			Msg("[ozz] actor has no visual");
+			return;
+		}
+
+		if (!GEnv.Render)
+			return;
+
+		GEnv.Render->StopOzzAnimation(visual);
+		Msg("[ozz] stopped Ozz animation");
+	}
+
+	void Info(TInfo& I) override
+	{
+		xr_strcpy(I, "stop the currently playing .ozz animation for the actor");
+	}
+};
+
 
 extern void show_animation_stats();
 
@@ -2409,6 +2508,8 @@ void CCC_RegisterCommands()
 
     CMD1(CCC_ShowAnimationStats, "ai_show_animation_stats");
     CMD1(CCC_SwitchDevOzzActor, "g_dev_ozz_actor");
+    CMD1(CCC_SetDevOzzAnimation, "g_dev_ozz_animation");
+    CMD1(CCC_StopDevOzzAnimation, "g_dev_ozz_animation_stop");
 #endif // DEBUG
 
 #ifndef MASTER_GOLD

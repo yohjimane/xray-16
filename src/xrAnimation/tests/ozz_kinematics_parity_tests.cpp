@@ -27,6 +27,7 @@
 
 #include "OzzConversion.h"
 #include "OzzKinematics.h"
+#include "OzzAnimationController.h"
 #include "OzzBundle.h"
 #include "../samples/framework/mesh.h"
 
@@ -37,6 +38,8 @@
 #include "ozz/base/io/archive.h"
 #include "ozz/base/io/stream.h"
 #include "ozz/base/maths/soa_transform.h"
+#include "ozz/base/maths/simd_math.h"
+#include "ozz/base/maths/transform.h"
 #include "ozz/base/span.h"
 
 #include "xrCore/Animation/SkeletonMotionDefs.hpp"
@@ -985,6 +988,26 @@ std::optional<BindPoseSample> LoadOzzBindPoseSample(const std::filesystem::path&
 
     return sample;
 }
+ozz::math::Transform ExtractTransformLane(const ozz::math::SoaTransform& soa, int lane)
+{
+    R_ASSERT(lane >= 0 && lane < 4);
+
+    ozz::math::SimdFloat4 translations[4];
+    ozz::math::Transpose3x4(&soa.translation.x, translations);
+
+    ozz::math::SimdFloat4 rotations[4];
+    ozz::math::Transpose4x4(&soa.rotation.x, rotations);
+
+    ozz::math::SimdFloat4 scales[4];
+    ozz::math::Transpose3x4(&soa.scale.x, scales);
+
+    ozz::math::Transform result;
+    ozz::math::Store3PtrU(translations[lane], &result.translation.x);
+    ozz::math::StorePtrU(rotations[lane], &result.rotation.x);
+    ozz::math::Store3PtrU(scales[lane], &result.scale.x);
+    return result;
+}
+
 } // namespace
 
 TEST(OzzKinematicsBootstrap, MatchesJointCountWithReferenceSkeleton)
@@ -1397,6 +1420,83 @@ TEST(OzzKinematicsVisibility, SetBonesVisibleControlsMask)
     EXPECT_NEAR(baseline_second.c.x, restored_second.c.x, 1e-4f);
     EXPECT_NEAR(baseline_second.c.y, restored_second.c.y, 1e-4f);
     EXPECT_NEAR(baseline_second.c.z, restored_second.c.z, 1e-4f);
+}
+
+TEST(OzzAnimationController, LoadsStandaloneClip)
+{
+    const auto skeleton_path = ResolveProjectPath("src/xrAnimation/tests/testdata/stalker_hero_1.ozz");
+    const auto animation_path = ResolveProjectPath("src/xrAnimation/tests/testdata/critical_hit_grup_1_single.ozz");
+
+    ASSERT_TRUE(std::filesystem::exists(skeleton_path));
+    ASSERT_TRUE(std::filesystem::exists(animation_path));
+
+    ozz::animation::Skeleton skeleton;
+    {
+        ozz::io::File file(skeleton_path.string().c_str(), "rb");
+        ASSERT_TRUE(file.opened()) << "failed to open skeleton " << skeleton_path;
+        ozz::io::IArchive archive(&file);
+        ASSERT_TRUE(archive.TestTag<ozz::animation::Skeleton>());
+        archive >> skeleton;
+    }
+
+    XRay::Animation::OzzAnimationController controller;
+    EXPECT_TRUE(controller.Initialize(skeleton));
+    EXPECT_FALSE(controller.HasAnimation());
+    EXPECT_FLOAT_EQ(0.f, controller.Duration());
+    EXPECT_FALSE(controller.Update(0.016f));
+
+    EXPECT_TRUE(controller.LoadAnimation(animation_path));
+    EXPECT_TRUE(controller.HasAnimation());
+    EXPECT_GT(controller.Duration(), 0.f);
+
+    EXPECT_TRUE(controller.Update(0.f));
+    const auto locals_start_span = controller.SampledLocals();
+    ASSERT_EQ(locals_start_span.size(), static_cast<size_t>(skeleton.num_soa_joints()));
+    std::vector<ozz::math::SoaTransform> locals_start(locals_start_span.begin(), locals_start_span.end());
+    const float advance_time = std::max(0.0f, std::min(controller.Duration() * 0.25f, controller.Duration()));
+    EXPECT_TRUE(controller.Update(advance_time));
+    const auto locals_mid_span = controller.SampledLocals();
+    ASSERT_EQ(locals_mid_span.size(), locals_start.size());
+    std::vector<ozz::math::SoaTransform> locals_mid(locals_mid_span.begin(), locals_mid_span.end());
+    float max_delta = 0.f;
+    for (int soa_index = 0; soa_index < skeleton.num_soa_joints(); ++soa_index)
+    {
+        for (int lane = 0; lane < 4; ++lane)
+        {
+            const int joint_index = soa_index * 4 + lane;
+            if (joint_index >= skeleton.num_joints())
+                break;
+
+            const ozz::math::Transform start_transform = ExtractTransformLane(locals_start[soa_index], lane);
+            const ozz::math::Transform mid_transform = ExtractTransformLane(locals_mid[soa_index], lane);
+
+            const float translation_delta = std::fabs(start_transform.translation.x - mid_transform.translation.x) +
+                std::fabs(start_transform.translation.y - mid_transform.translation.y) +
+                std::fabs(start_transform.translation.z - mid_transform.translation.z);
+
+            const float rotation_delta = std::fabs(start_transform.rotation.x - mid_transform.rotation.x) +
+                std::fabs(start_transform.rotation.y - mid_transform.rotation.y) +
+                std::fabs(start_transform.rotation.z - mid_transform.rotation.z) +
+                std::fabs(start_transform.rotation.w - mid_transform.rotation.w);
+
+            const float scale_delta = std::fabs(start_transform.scale.x - mid_transform.scale.x) +
+                std::fabs(start_transform.scale.y - mid_transform.scale.y) +
+                std::fabs(start_transform.scale.z - mid_transform.scale.z);
+
+            max_delta = std::max({ max_delta, translation_delta, rotation_delta, scale_delta });
+        }
+    }
+
+    EXPECT_GT(max_delta, 1e-7f) << "animation locals remained static";
+
+    controller.SetLooping(false);
+    EXPECT_TRUE(controller.Update(controller.Duration() * 2.f));
+    EXPECT_TRUE(controller.Update(0.f));
+
+    controller.ClearAnimation();
+    EXPECT_FALSE(controller.HasAnimation());
+    EXPECT_FLOAT_EQ(0.f, controller.Duration());
+    EXPECT_TRUE(controller.SampledLocals().empty());
 }
 
 TEST(OzzKinematicsCallbacks, InvokesBoneCallbackAndHonorsOverwrite)

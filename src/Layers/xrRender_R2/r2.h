@@ -24,6 +24,7 @@
 #include "xrCore/FMesh.hpp"
 
 #include <atomic>
+#include <filesystem>
 
 namespace xray::render::RENDER_NAMESPACE
 {
@@ -486,6 +487,8 @@ public:
     void EnableOzzPaletteDebugDump(bool enabled) override;
     bool IsOzzPaletteDebugDumpEnabled() const override;
     void RequestOzzPaletteDebugDump() override;
+    bool LoadOzzAnimation(IRenderVisual* visual, const std::filesystem::path& path) override;
+    void StopOzzAnimation(IRenderVisual* visual) override;
     bool ConsumeOzzPaletteDebugDumpRequest();
 
     void Calculate() override;

@@ -398,6 +398,11 @@ bool COzzKinematicsVisual::LoadFromBundle(const char* name, const std::filesyste
     init_error += path.string().c_str();
     R_ASSERT2(kinematics_.InitializeFromOzzBuffer(skeleton_span), init_error.c_str());
 
+    animation_controller_ = xr_make_unique<XRay::Animation::OzzAnimationController>();
+    animation_controller_->Initialize(kinematics_.Skeleton());
+    animation_applied_ = false;
+    last_animation_update_frame_ = u32(-1);
+
     meshes_.clear();
     if (!mesh_payload_.empty())
     {
@@ -467,6 +472,7 @@ void COzzKinematicsVisual::Copy(dxRender_Visual* pFrom)
         kinematics_.CalculateBones(TRUE);
         OnPoseUpdated();
         EnsureSkinningPalette();
+        last_animation_update_frame_ = u32(-1);
     }
 }
 
@@ -479,6 +485,10 @@ void COzzKinematicsVisual::Release()
     DestroySurfaces();
     children.clear();
     bone_palette_.clear();
+    animation_controller_.reset();
+    animation_applied_ = false;
+    last_animation_update_frame_ = u32(-1);
+    palette_dirty_ = true;
     inherited::Release();
 }
 
@@ -506,13 +516,23 @@ void COzzKinematicsVisual::UpdateSkinningPalette()
 {
     palette_dirty_ = true;
     for (auto* surface : surfaces_)
-        surface->MarkDirty();
+    {
+        if (surface)
+            surface->MarkDirty();
+    }
 }
 
 void COzzKinematicsVisual::EnsureSkinningPalette()
 {
     if (!palette_dirty_ && !bone_palette_.empty())
         return;
+
+    const u32 frame_id = Device.dwFrame;
+    if (frame_id != last_animation_update_frame_)
+    {
+        UpdateAnimation(Device.fTimeDelta);
+        last_animation_update_frame_ = frame_id;
+    }
 
     if (!kinematics_.HasBones())
     {
@@ -521,6 +541,7 @@ void COzzKinematicsVisual::EnsureSkinningPalette()
         return;
     }
 
+    kinematics_.CalculateBones(TRUE);
     kinematics_.BuildSkinningPalette(bone_palette_, true);
     palette_dirty_ = false;
 
@@ -545,5 +566,63 @@ void COzzKinematicsVisual::HandleKinematicsUpdated(IKinematics* kin)
     if (!visual)
         return;
     visual->OnPoseUpdated();
+}
+
+bool COzzKinematicsVisual::LoadAnimationFromFile(const std::filesystem::path& path)
+{
+    if (!animation_controller_)
+    {
+        animation_controller_ = xr_make_unique<XRay::Animation::OzzAnimationController>();
+        animation_controller_->Initialize(kinematics_.Skeleton());
+    }
+
+    if (!animation_controller_->LoadAnimation(path))
+        return false;
+
+    animation_applied_ = false;
+    last_animation_update_frame_ = u32(-1);
+    UpdateSkinningPalette();
+    return true;
+}
+
+void COzzKinematicsVisual::StopAnimation()
+{
+    if (!animation_controller_)
+        return;
+    animation_controller_->ClearAnimation();
+    animation_applied_ = false;
+    kinematics_.ClearPose();
+    UpdateSkinningPalette();
+    last_animation_update_frame_ = u32(-1);
+}
+
+void COzzKinematicsVisual::UpdateAnimation(float dt)
+{
+    if (!animation_controller_)
+        return;
+
+    if (!animation_controller_->HasAnimation())
+    {
+        if (animation_applied_)
+        {
+            kinematics_.ClearPose();
+            animation_applied_ = false;
+            UpdateSkinningPalette();
+        }
+        return;
+    }
+
+    if (!animation_controller_->Update(dt))
+        return;
+
+    const auto locals = animation_controller_->SampledLocals();
+    if (locals.empty())
+        return;
+
+    if (!kinematics_.SetPoseLocals(locals))
+        return;
+
+    animation_applied_ = true;
+    UpdateSkinningPalette();
 }
 } // namespace xray::render::RENDER_NAMESPACE

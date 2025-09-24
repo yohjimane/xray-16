@@ -10,10 +10,13 @@
 #include "Layers/xrRender/SkeletonCustom.h"
 #include "Layers/xrRender/dxWallMarkArray.h"
 #include "Layers/xrRender/dxUIShader.h"
+#include "Layers/xrRender/OzzKinematicsVisual.h"
 
 #if defined(USE_DX11)
 #include "Layers/xrRenderDX11/3DFluid/dx113DFluidManager.h"
 #endif
+
+#include <filesystem>
 
 namespace xray::render::RENDER_NAMESPACE
 {
@@ -642,6 +645,24 @@ bool CRender::IsOzzPaletteDebugDumpEnabled() const
 void CRender::RequestOzzPaletteDebugDump()
 {
     m_ozzDumpOnce.store(true, std::memory_order_release);
+}
+
+bool CRender::LoadOzzAnimation(IRenderVisual* visual, const std::filesystem::path& path)
+{
+    if (!visual || visual->getType() != MT_OZZ_BUNDLE)
+        return false;
+
+    auto* ozz_visual = static_cast<COzzKinematicsVisual*>(visual);
+    return ozz_visual->LoadAnimationFromFile(path);
+}
+
+void CRender::StopOzzAnimation(IRenderVisual* visual)
+{
+    if (!visual || visual->getType() != MT_OZZ_BUNDLE)
+        return;
+
+    auto* ozz_visual = static_cast<COzzKinematicsVisual*>(visual);
+    ozz_visual->StopAnimation();
 }
 
 bool CRender::ConsumeOzzPaletteDebugDumpRequest()

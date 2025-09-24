@@ -7,6 +7,8 @@
 #include "Include/xrRender/FactoryPtr.h"
 #include "xrCore/xr_resource.h"
 
+#include <filesystem>
+
 class IUIShader;
 typedef FactoryPtr<IUIShader> wm_shader;
 // refs
@@ -272,6 +274,8 @@ public:
     virtual void EnableOzzPaletteDebugDump(bool enabled) = 0;
     virtual bool IsOzzPaletteDebugDumpEnabled() const = 0;
     virtual void RequestOzzPaletteDebugDump() = 0;
+    virtual bool LoadOzzAnimation(IRenderVisual* visual, const std::filesystem::path& path) = 0;
+    virtual void StopOzzAnimation(IRenderVisual* visual) = 0;
 
     // Loading / Unloading
     virtual void create() = 0;

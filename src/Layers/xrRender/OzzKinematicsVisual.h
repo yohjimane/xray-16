@@ -4,6 +4,7 @@
 
 #include "xrAnimation/OzzKinematics.h"
 #include "xrAnimation/OzzBundle.h"
+#include "xrAnimation/OzzAnimationController.h"
 
 #include "xrCore/_fbox.h"
 #include "xrCore/_sphere.h"
@@ -51,9 +52,13 @@ public:
     void UpdateSkinningPalette();
     static void HandleKinematicsUpdated(IKinematics* kin);
 
+    bool LoadAnimationFromFile(const std::filesystem::path& path);
+    void StopAnimation();
+
 private:
     void UpdateBounds();
     void DestroySurfaces();
+    void UpdateAnimation(float dt);
 
 private:
     OzzKinematics kinematics_;
@@ -63,5 +68,8 @@ private:
     xr_vector<COzzSkinnedSurface*> surfaces_;
     xr_vector<Fmatrix> bone_palette_;
     bool palette_dirty_ = true;
+    xr_unique_ptr<XRay::Animation::OzzAnimationController> animation_controller_;
+    bool animation_applied_ = false;
+    u32 last_animation_update_frame_ = u32(-1);
 };
 } // namespace xray::render::RENDER_NAMESPACE
