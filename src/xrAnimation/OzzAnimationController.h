@@ -7,6 +7,7 @@
 #include "ozz/base/span.h"
 
 #include <filesystem>
+#include <memory>
 #include <vector>
 
 namespace XRay
@@ -21,13 +22,14 @@ public:
 
     bool Initialize(const ozz::animation::Skeleton& skeleton);
     bool LoadAnimation(const std::filesystem::path& path);
+    bool LoadAnimation(std::shared_ptr<ozz::animation::Animation> animation);
     void ClearAnimation();
 
     void SetLooping(bool loop) { loop_ = loop; }
     void SetPlaybackSpeed(float speed) { playback_speed_ = speed; }
 
     bool HasAnimation() const { return animation_loaded_; }
-    float Duration() const { return animation_loaded_ ? animation_.duration() : 0.f; }
+    float Duration() const { return animation_loaded_ && animation_ ? animation_->duration() : 0.f; }
 
     bool Update(float dt);
 
@@ -38,7 +40,7 @@ private:
 
 private:
     const ozz::animation::Skeleton* skeleton_;
-    ozz::animation::Animation animation_;
+    std::shared_ptr<ozz::animation::Animation> animation_;
     ozz::animation::SamplingJob::Context sampling_context_;
     std::vector<ozz::math::SoaTransform> locals_;
     bool animation_loaded_;

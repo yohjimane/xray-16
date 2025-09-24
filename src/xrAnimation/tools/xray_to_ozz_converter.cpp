@@ -798,6 +798,16 @@ std::string to_lower_copy(std::string value)
     return value;
 }
 
+std::string trim_copy(std::string_view value)
+{
+    const auto begin = value.find_first_not_of(" \t\r\n");
+    if (begin == std::string_view::npos)
+        return {};
+
+    const auto end = value.find_last_not_of(" \t\r\n");
+    return std::string(value.substr(begin, end - begin + 1));
+}
+
 std::string read_string_crlf(BinaryReader& reader)
 {
     std::string value;
@@ -816,6 +826,26 @@ std::string read_string_crlf(BinaryReader& reader)
         value.push_back(ch);
     }
     return value;
+}
+
+std::vector<std::string> split_motion_ref_string(const std::string& combined)
+{
+    std::vector<std::string> result;
+    std::string_view source(combined);
+    size_t cursor = 0;
+    while (cursor < source.size())
+    {
+        const size_t separator = source.find(',', cursor);
+        const size_t length = separator == std::string_view::npos ? source.size() - cursor : separator - cursor;
+        const std::string trimmed = trim_copy(source.substr(cursor, length));
+        if (!trimmed.empty())
+            result.emplace_back(trimmed);
+
+        if (separator == std::string_view::npos)
+            break;
+        cursor = separator + 1;
+    }
+    return result;
 }
 
 std::vector<BoneRecord> read_bone_names(const Chunk& chunk)
@@ -999,6 +1029,42 @@ std::vector<BoneRecord> load_skeleton_bones_from_ogf(const fs::path& path)
     convert_locals_to_blender_basis(bones);
     compute_global_transforms(bones);
     return bones;
+}
+
+std::vector<std::string> load_motion_refs_from_ogf(const fs::path& path)
+{
+    const auto file_data = load_file(path);
+    const auto chunks = parse_chunks(file_data.data(), file_data.size());
+
+    std::vector<std::string> references;
+
+    const auto refs2_it = chunks.find(OGF_S_MOTION_REFS2);
+    if (refs2_it != chunks.end())
+    {
+        BinaryReader reader{ refs2_it->second.data, refs2_it->second.size };
+        const u32 count = reader.read<u32>();
+        references.reserve(count);
+        for (u32 index = 0; index < count; ++index)
+        {
+            std::string entry = reader.read_stringz();
+            entry = trim_copy(entry);
+            if (!entry.empty())
+                references.emplace_back(std::move(entry));
+        }
+        return references;
+    }
+
+    const auto refs_it = chunks.find(OGF_S_MOTION_REFS);
+    if (refs_it == chunks.end())
+        return references;
+
+    BinaryReader reader{ refs_it->second.data, refs_it->second.size };
+    if (reader.size == 0)
+        return references;
+
+    std::string combined = reader.read_stringz();
+    references = split_motion_ref_string(combined);
+    return references;
 }
 
 void finalize_influences(MeshVertex& vertex, const std::array<uint16_t, 4>& bone_ids, const std::array<float, 4>& weights, uint32_t link_type)
@@ -2301,9 +2367,15 @@ void convert_bundle(const BundleConfig& config)
     convert_mesh(mesh_cfg);
 
     XRay::Animation::OzzxBundle bundle;
-    bundle.version = 1u;
+    bundle.version = 2u;
     bundle.skeleton = ReadBinaryFileBytes(skeleton_temp);
     bundle.mesh = ReadBinaryFileBytes(mesh_temp);
+
+    const auto motion_refs = load_motion_refs_from_ogf(config.input_ogf);
+    bundle.motion_refs.clear();
+    bundle.motion_refs.reserve(motion_refs.size());
+    for (const auto& reference : motion_refs)
+        bundle.motion_refs.emplace_back(reference.c_str());
 
     if (!XRay::Animation::WriteOzzxBundle(config.output_ozzx, bundle))
         throw std::runtime_error("failed to write .ozzx bundle: " + config.output_ozzx.string());

@@ -28,6 +28,8 @@ set(SOURCES
     OzzBundle.h
     OzzAnimationController.cpp
     OzzAnimationController.h
+    LegacyOmfConverter.cpp
+    LegacyOmfConverter.h
     OzzKinematics.cpp
     OzzKinematics.h
 )

@@ -53,6 +53,8 @@
 #include "xrPhysics/console_vars.h"
 #include "GametaskManager.h"
 
+#include "Layers/xrRender/OzzKinematicsVisual.h"
+
 #include <filesystem>
 
 #ifdef DEBUG
@@ -1883,36 +1885,91 @@ public:
 		if (!GEnv.Render)
 			return;
 
-		std::filesystem::path resolved_path;
-		const std::filesystem::path requested(arguments);
-		if (requested.is_absolute())
+		auto* ozz_visual = visual->getType() == MT_OZZ_BUNDLE ? static_cast<COzzKinematicsVisual*>(visual) : nullptr;
+		if (!ozz_visual)
 		{
-			resolved_path = requested;
-		}
-		else
-		{
-			string_path buffer;
-			if (!FS.exist(buffer, "$game_anims$", arguments))
-			{
-				Msg("[ozz] animation '%s' not found under $game_anims$", arguments);
-				return;
-			}
-			resolved_path = buffer;
+			Msg("[ozz] actor visual is not an Ozz bundle");
+			return;
 		}
 
-		if (GEnv.Render->LoadOzzAnimation(visual, resolved_path))
+		auto trim_input = [](std::string_view value) -> std::string
 		{
-			Msg("[ozz] loaded animation %s", resolved_path.string().c_str());
-		}
-		else
+			const auto begin = value.find_first_not_of(" \t");
+			if (begin == std::string_view::npos)
+				return {};
+			const auto end = value.find_last_not_of(" \t");
+			return std::string(value.substr(begin, end - begin + 1));
+		};
+
+		const std::string trimmed = trim_input(arguments);
+		if (trimmed.empty())
 		{
-			Msg("[ozz] failed to load animation %s", resolved_path.string().c_str());
+			Msg("[ozz] animation identifier required");
+			return;
 		}
+
+		std::filesystem::path requested(trimmed);
+		std::string extension;
+		if (requested.has_extension())
+		{
+			extension = requested.extension().string();
+			std::transform(extension.begin(), extension.end(), extension.begin(),
+			    [](unsigned char ch)
+			    {
+			        return static_cast<char>(std::tolower(ch));
+			    });
+		}
+
+		if (extension == ".ozz")
+		{
+			std::filesystem::path resolved_path;
+			if (requested.is_absolute())
+			{
+				resolved_path = requested;
+			}
+			else
+			{
+				string_path buffer;
+				if (!FS.exist(buffer, "$game_anims$", trimmed.c_str()))
+				{
+					Msg("[ozz] animation '%s' not found under $game_anims$", trimmed.c_str());
+					return;
+				}
+				resolved_path = buffer;
+			}
+
+			if (GEnv.Render->LoadOzzAnimation(visual, resolved_path))
+				Msg("[ozz] loaded animation %s", resolved_path.string().c_str());
+			else
+				Msg("[ozz] failed to load animation %s", resolved_path.string().c_str());
+			return;
+		}
+
+		if (ozz_visual->PlayLegacyMotion(trimmed.c_str()))
+		{
+			Msg("[ozz] playing legacy motion '%s'", trimmed.c_str());
+			return;
+		}
+
+		Msg("[ozz] legacy motion '%s' unavailable", trimmed.c_str());
+		auto available = ozz_visual->LegacyMotionNames();
+		if (available.empty())
+		{
+			Msg("[ozz] bundle has no legacy motions indexed yet");
+			return;
+		}
+
+		const size_t preview_count = std::min<size_t>(available.size(), 8);
+		Msg("[ozz] available motions (%zu of %zu):", preview_count, available.size());
+		for (size_t idx = 0; idx < preview_count; ++idx)
+			Msg("    %s", available[idx].c_str());
+		if (available.size() > preview_count)
+			Msg("    ...");
 	}
 
 	void Info(TInfo& I) override
 	{
-		xr_strcpy(I, "load a .ozz animation from $game_anims$ (or absolute path) for the current actor");
+		xr_strcpy(I, "play a .ozz clip or legacy motion name on the current Ozz actor");
 	}
 };
 

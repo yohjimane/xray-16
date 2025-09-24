@@ -14,7 +14,7 @@ namespace Animation
 namespace
 {
 constexpr char kOzzxMagic[8] = { 'O', 'Z', 'Z', 'X', 'P', 'A', 'C', 'K' };
-constexpr std::uint32_t kCurrentBundleVersion = 1;
+constexpr std::uint32_t kCurrentBundleVersion = 2;
 }
 
 static bool ReadFully(std::ifstream& stream, void* buffer, std::size_t size)
@@ -85,6 +85,45 @@ bool ReadOzzxBundle(const std::filesystem::path& path, OzzxBundle& out_bundle)
         return false;
     }
 
+    out_bundle.motion_refs.clear();
+    if (version >= 2)
+    {
+        std::uint32_t motion_ref_count = 0;
+        if (!ReadFully(stream, &motion_ref_count, sizeof(motion_ref_count)))
+        {
+            std::cerr << "Failed to read motion reference count from: " << path << std::endl;
+            return false;
+        }
+
+        if (motion_ref_count > 0)
+        {
+            out_bundle.motion_refs.reserve(motion_ref_count);
+            for (std::uint32_t index = 0; index < motion_ref_count; ++index)
+            {
+                std::uint32_t length = 0;
+                if (!ReadFully(stream, &length, sizeof(length)))
+                {
+                    std::cerr << "Failed to read motion reference length from: " << path << std::endl;
+                    return false;
+                }
+
+                xr_string entry;
+                entry.resize(length, '\0');
+
+                if (length > 0)
+                {
+                    if (!ReadFully(stream, entry.data(), length))
+                    {
+                        std::cerr << "Failed to read motion reference data from: " << path << std::endl;
+                        return false;
+                    }
+                }
+
+                out_bundle.motion_refs.emplace_back(std::move(entry));
+            }
+        }
+    }
+
     return true;
 }
 
@@ -122,6 +161,7 @@ bool WriteOzzxBundle(const std::filesystem::path& path, const OzzxBundle& bundle
     const std::uint32_t version = bundle.version == 0 ? kCurrentBundleVersion : bundle.version;
     const std::uint32_t skeleton_size = static_cast<std::uint32_t>(bundle.skeleton.size());
     const std::uint32_t mesh_size = static_cast<std::uint32_t>(bundle.mesh.size());
+    const std::uint32_t motion_ref_count = static_cast<std::uint32_t>(bundle.motion_refs.size());
 
     if (!WriteFully(stream, &version, sizeof(version)) ||
         !WriteFully(stream, &skeleton_size, sizeof(skeleton_size)) ||
@@ -141,6 +181,34 @@ bool WriteOzzxBundle(const std::filesystem::path& path, const OzzxBundle& bundle
     {
         std::cerr << "Failed to write mesh payload: " << path << std::endl;
         return false;
+    }
+
+    if (version >= 2)
+    {
+        if (!WriteFully(stream, &motion_ref_count, sizeof(motion_ref_count)))
+        {
+            std::cerr << "Failed to write motion reference count: " << path << std::endl;
+            return false;
+        }
+
+        for (const auto& reference : bundle.motion_refs)
+        {
+            const std::uint32_t length = static_cast<std::uint32_t>(reference.size());
+            if (!WriteFully(stream, &length, sizeof(length)))
+            {
+                std::cerr << "Failed to write motion reference length: " << path << std::endl;
+                return false;
+            }
+
+            if (length > 0)
+            {
+                if (!WriteFully(stream, reference.data(), length))
+                {
+                    std::cerr << "Failed to write motion reference data: " << path << std::endl;
+                    return false;
+                }
+            }
+        }
     }
 
     return true;

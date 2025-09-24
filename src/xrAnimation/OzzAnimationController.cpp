@@ -109,9 +109,10 @@ bool OzzAnimationController::LoadAnimation(const std::filesystem::path& path)
     }
 
     ozz::io::IArchive archive(&file);
+    std::shared_ptr<ozz::animation::Animation> animation = std::make_shared<ozz::animation::Animation>();
     if (archive.TestTag<ozz::animation::Animation>())
     {
-        archive >> animation_;
+        archive >> *animation;
     }
     else
     {
@@ -127,10 +128,8 @@ bool OzzAnimationController::LoadAnimation(const std::filesystem::path& path)
             return false;
         }
 
-        ozz::animation::Animation candidate;
-        aggregate >> candidate;
+        aggregate >> *animation;
         SkipOzzAnimationMetadata(aggregate);
-        animation_ = std::move(candidate);
 
         for (uint32_t idx = 1; idx < animation_count; ++idx)
         {
@@ -140,19 +139,23 @@ bool OzzAnimationController::LoadAnimation(const std::filesystem::path& path)
         }
     }
 
-    if (animation_.num_tracks() != skeleton_->num_joints())
+    return LoadAnimation(std::move(animation));
+}
+
+bool OzzAnimationController::LoadAnimation(std::shared_ptr<ozz::animation::Animation> animation)
+{
+    if (!skeleton_ || !animation)
+        return false;
+
+    if (animation->num_tracks() != skeleton_->num_joints())
     {
-        Msg("[ozz] animation %s has %d tracks, expected %d for skeleton", path.u8string().c_str(),
-            animation_.num_tracks(), skeleton_->num_joints());
-        animation_ = ozz::animation::Animation();
-        sampling_context_.Resize(0);
-        ResetLocals();
-        animation_loaded_ = false;
-        time_ = 0.f;
+        Msg("[ozz] animation has %d tracks, expected %d for skeleton", animation->num_tracks(),
+            skeleton_->num_joints());
         return false;
     }
 
-    sampling_context_.Resize(animation_.num_tracks());
+    animation_ = std::move(animation);
+    sampling_context_.Resize(animation_->num_tracks());
     ResetLocals();
     animation_loaded_ = true;
     time_ = 0.f;
@@ -161,7 +164,7 @@ bool OzzAnimationController::LoadAnimation(const std::filesystem::path& path)
 
 void OzzAnimationController::ClearAnimation()
 {
-    animation_ = ozz::animation::Animation();
+    animation_.reset();
     animation_loaded_ = false;
     time_ = 0.f;
     sampling_context_.Resize(0);
@@ -170,17 +173,17 @@ void OzzAnimationController::ClearAnimation()
 
 bool OzzAnimationController::Update(float dt)
 {
-    if (!animation_loaded_ || !skeleton_)
+    if (!animation_loaded_ || !skeleton_ || !animation_)
         return false;
 
-    if (animation_.duration() <= 0.f)
+    if (animation_->duration() <= 0.f)
         return false;
 
     time_ += dt * playback_speed_;
 
     if (loop_)
     {
-        const float duration = animation_.duration();
+        const float duration = animation_->duration();
         if (duration > 0.f)
         {
             while (time_ < 0.f)
@@ -193,11 +196,11 @@ bool OzzAnimationController::Update(float dt)
     {
         if (time_ < 0.f)
             time_ = 0.f;
-        if (time_ > animation_.duration())
-            time_ = animation_.duration();
+        if (time_ > animation_->duration())
+            time_ = animation_->duration();
     }
 
-    const float duration = animation_.duration();
+    const float duration = animation_->duration();
     float ratio = duration > 0.f ? time_ / duration : 0.f;
     if (!loop_)
     {
@@ -211,7 +214,7 @@ bool OzzAnimationController::Update(float dt)
         ResetLocals();
 
     ozz::animation::SamplingJob job;
-    job.animation = &animation_;
+    job.animation = animation_.get();
     job.context = &sampling_context_;
     job.ratio = ratio;
     job.output = ozz::span<ozz::math::SoaTransform>(locals_.data(), locals_.size());
@@ -227,7 +230,7 @@ bool OzzAnimationController::Update(float dt)
 
 ozz::span<const ozz::math::SoaTransform> OzzAnimationController::SampledLocals() const
 {
-    if (!animation_loaded_)
+    if (!animation_loaded_ || !animation_)
         return {};
     return ozz::span<const ozz::math::SoaTransform>(locals_.data(), locals_.size());
 }

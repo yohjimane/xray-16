@@ -10,6 +10,7 @@
 
 #include "xrAnimation/OzzConversion.h"
 #include "xrCore/FMesh.hpp"
+#include "xrCore/FS_impl.h"
 #include "xrCore/xrMemory.h"
 
 #include "xrCommon/xr_string.h"
@@ -392,6 +393,10 @@ bool COzzKinematicsVisual::LoadFromBundle(const char* name, const std::filesyste
 
     skeleton_payload_.assign(bundle.skeleton.begin(), bundle.skeleton.end());
     mesh_payload_.assign(bundle.mesh.begin(), bundle.mesh.end());
+    motion_references_ = bundle.motion_refs;
+    legacy_motion_library_.clear();
+    legacy_motion_metadata_.clear();
+    converted_motion_sources_.clear();
 
     ozz::span<const std::byte> skeleton_span(reinterpret_cast<const std::byte*>(skeleton_payload_.data()), skeleton_payload_.size());
     xr_string init_error = "Failed to initialize OzzKinematics from bundle: ";
@@ -448,6 +453,10 @@ void COzzKinematicsVisual::Copy(dxRender_Visual* pFrom)
         skeleton_payload_ = other->skeleton_payload_;
         mesh_payload_ = other->mesh_payload_;
         meshes_ = other->meshes_;
+        motion_references_ = other->motion_references_;
+        legacy_motion_library_ = other->legacy_motion_library_;
+        legacy_motion_metadata_ = other->legacy_motion_metadata_;
+        converted_motion_sources_ = other->converted_motion_sources_;
 
         if (!skeleton_payload_.empty())
         {
@@ -482,6 +491,10 @@ void COzzKinematicsVisual::Release()
     kinematics_.SetUpdateCallbackParam(nullptr);
     skeleton_payload_.clear();
     mesh_payload_.clear();
+    motion_references_.clear();
+    legacy_motion_library_.clear();
+    legacy_motion_metadata_.clear();
+    converted_motion_sources_.clear();
     DestroySurfaces();
     children.clear();
     bone_palette_.clear();
@@ -624,5 +637,159 @@ void COzzKinematicsVisual::UpdateAnimation(float dt)
 
     animation_applied_ = true;
     UpdateSkinningPalette();
+}
+
+xr_vector<xr_string> COzzKinematicsVisual::CollectSkeletonBoneNames() const
+{
+    xr_vector<xr_string> names;
+    const u16 bone_count = kinematics_.LL_BoneCount();
+    names.reserve(bone_count);
+    for (u16 idx = 0; idx < bone_count; ++idx)
+    {
+        const LPCSTR name = kinematics_.LL_BoneName_dbg(idx);
+        names.emplace_back(name ? name : "");
+    }
+    return names;
+}
+
+xr_vector<xr_string> COzzKinematicsVisual::ResolveMotionReference(const xr_string& reference) const
+{
+    xr_vector<xr_string> results;
+    if (reference.empty())
+        return results;
+
+    if (reference.find('*') != xr_string::npos)
+    {
+        FS_FileSet files;
+        FS.file_list(files, "$level$", FS_ListFiles, reference.c_str());
+        FS.file_list(files, "$game_meshes$", FS_ListFiles, reference.c_str());
+
+        xr_set<xr_string> unique;
+        for (const auto& entry : files)
+            unique.emplace(entry.name.c_str());
+
+        results.reserve(unique.size());
+        for (const auto& name : unique)
+            results.emplace_back(name);
+        return results;
+    }
+
+    xr_string candidate = reference;
+    constexpr size_t ext_length = 4;
+    if (candidate.size() < ext_length || xr_stricmp(candidate.c_str() + candidate.size() - ext_length, ".omf") != 0)
+        candidate += ".omf";
+
+    results.emplace_back(std::move(candidate));
+    return results;
+}
+
+bool COzzKinematicsVisual::ConvertLegacyOmfFile(const xr_string& relative_path, const xr_vector<xr_string>& skeleton_bone_names)
+{
+    if (converted_motion_sources_.find(relative_path) != converted_motion_sources_.end())
+        return true;
+
+    string_path resolved;
+    if (!FS.exist(resolved, "$level$", relative_path.c_str()))
+    {
+        if (!FS.exist(resolved, "$game_meshes$", relative_path.c_str()))
+        {
+            Msg("[ozz] legacy animation source '%s' not found", relative_path.c_str());
+            return false;
+        }
+    }
+
+    xr_vector<XRay::Animation::ConvertedOmfAnimation> converted;
+    if (!XRay::Animation::ConvertLegacyOmf(std::filesystem::path(resolved), skeleton_bone_names, kinematics_.Skeleton(), converted))
+    {
+        Msg("[ozz] failed to convert legacy animation '%s'", relative_path.c_str());
+        return false;
+    }
+
+    for (auto& entry : converted)
+    {
+        if (!entry.animation)
+            continue;
+
+        const xr_string motion_name = entry.name;
+        if (legacy_motion_library_.find(motion_name) != legacy_motion_library_.end())
+        {
+            Msg("[ozz] duplicate legacy motion '%s' encountered in '%s'", motion_name.c_str(), relative_path.c_str());
+            continue;
+        }
+
+        legacy_motion_metadata_[motion_name] = entry.metadata;
+        auto deleter = entry.animation.get_deleter();
+        legacy_motion_library_[motion_name] = std::shared_ptr<ozz::animation::Animation>(entry.animation.release(), deleter);
+    }
+
+    converted_motion_sources_.insert(relative_path);
+    return true;
+}
+
+void COzzKinematicsVisual::BuildLegacyMotionLibrary()
+{
+    if (motion_references_.empty())
+        return;
+
+    const auto bone_names = CollectSkeletonBoneNames();
+    if (bone_names.empty())
+        return;
+
+    for (const auto& reference : motion_references_)
+    {
+        const auto candidates = ResolveMotionReference(reference);
+        for (const auto& candidate : candidates)
+            ConvertLegacyOmfFile(candidate, bone_names);
+    }
+}
+
+bool COzzKinematicsVisual::LoadLegacyMotion(const xr_string& motion_name)
+{
+    if (!animation_controller_)
+    {
+        animation_controller_ = xr_make_unique<XRay::Animation::OzzAnimationController>();
+        animation_controller_->Initialize(kinematics_.Skeleton());
+    }
+
+    if (legacy_motion_library_.empty() && !motion_references_.empty())
+        BuildLegacyMotionLibrary();
+
+    const auto it = legacy_motion_library_.find(motion_name);
+    if (it == legacy_motion_library_.end() || !it->second)
+    {
+        Msg("[ozz] legacy motion '%s' not available", motion_name.c_str());
+        return false;
+    }
+
+    if (!animation_controller_->LoadAnimation(it->second))
+    {
+        Msg("[ozz] failed to bind legacy motion '%s'", motion_name.c_str());
+        return false;
+    }
+
+    animation_applied_ = false;
+    last_animation_update_frame_ = u32(-1);
+    UpdateSkinningPalette();
+    return true;
+}
+
+bool COzzKinematicsVisual::PlayLegacyMotion(const xr_string& motion_name)
+{
+    return LoadLegacyMotion(motion_name);
+}
+
+xr_vector<xr_string> COzzKinematicsVisual::LegacyMotionNames() const
+{
+    xr_vector<xr_string> names;
+    names.reserve(legacy_motion_metadata_.size());
+    for (const auto& entry : legacy_motion_metadata_)
+        names.push_back(entry.first);
+
+    std::sort(names.begin(), names.end(),
+        [](const xr_string& lhs, const xr_string& rhs)
+        {
+            return xr_stricmp(lhs.c_str(), rhs.c_str()) < 0;
+        });
+    return names;
 }
 } // namespace xray::render::RENDER_NAMESPACE
