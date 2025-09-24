@@ -67,7 +67,7 @@ private:
     void UpdateAnimation(float dt);
     void BuildLegacyMotionLibrary();
     xr_vector<xr_string> ResolveMotionReference(const xr_string& reference) const;
-    bool ConvertLegacyOmfFile(const xr_string& relative_path);
+    bool ConvertLegacyOmfFile(const xr_string& relative_path, const xr_vector<xr_string>& skeleton_bone_names);
     xr_vector<xr_string> CollectSkeletonBoneNames() const;
     bool LoadLegacyMotion(const xr_string& motion_name);
 

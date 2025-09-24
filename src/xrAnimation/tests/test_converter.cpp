@@ -51,10 +51,9 @@
 #include "../../../Externals/ozz-animation/samples/framework/mesh.h"
 #include "../../../Externals/ozz-animation/src/animation/offline/gltf/extern/json.hpp"
 
+#include "xrCore/xrCore.h"
 #include "OzzBundle.h"
 #include "LegacyOmfConverter.h"
-
-#include <ozz/base/io/memory_stream.h>
 
 namespace fs = std::filesystem;
 
@@ -88,6 +87,15 @@ fs::path ProjectRoot()
         return root_path;
     }();
     return root;
+}
+
+fs::path ResolveProjectPath(const std::string& relative)
+{
+    fs::path path = ProjectRoot() / relative;
+#ifdef _WIN32
+    path.make_preferred();
+#endif
+    return path;
 }
 
 struct ChunkView
