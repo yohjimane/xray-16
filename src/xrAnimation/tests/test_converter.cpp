@@ -311,7 +311,7 @@ fs::path AnimationInputPath()
 
 fs::path SkeletonOutputPath()
 {
-    return TestArtifactsDir() / "stalker_hero_bind_pose.ozz";
+    return TestArtifactsDir() / "stalker_hero_1.ozz";
 }
 
 fs::path SkeletonCsvPath()
@@ -884,9 +884,27 @@ std::string QuoteForShell(const std::string& value)
 
 fs::path ResolveBinary(const std::string& executable_name)
 {
-    const fs::path build_bin = ProjectRoot() / "ozz_utils" / "bin";
+    const fs::path root = ProjectRoot();
+    const auto make_candidate = [&](const fs::path& dir) -> fs::path
+    {
+        return dir / executable_name;
+    };
 
-    const std::array<fs::path, 2> candidates = { build_bin / "Debug" / executable_name, build_bin / executable_name };
+    const std::array<fs::path, 8> search_roots = {
+        root / "ozz_utils" / "bin" / "Mixed",
+        root / "ozz_utils" / "bin" / "Debug",
+        root / "ozz_utils" / "bin" / "Release",
+        root / "ozz_utils" / "bin",
+        root / "bin" / "x86_64" / "Mixed",
+        root / "bin" / "Mixed",
+        root / "build" / "bin" / "Mixed",
+        root / "build" / "bin" / "ReleaseMasterGold",
+    };
+
+    std::vector<fs::path> candidates;
+    candidates.reserve(search_roots.size());
+    for (const auto& directory : search_roots)
+        candidates.emplace_back(make_candidate(directory));
 
     for (const auto& path : candidates)
     {
@@ -1847,7 +1865,7 @@ bool TestAssetBundleContainsSkeletonAndMesh()
     if (!XRay::Animation::ReadOzzxBundle(BundleOutputPath(), bundle))
         return false;
 
-    if (bundle.version != 1u)
+    if (bundle.version < 2u)
     {
         std::cerr << "unexpected bundle version " << bundle.version << std::endl;
         return false;
@@ -1862,6 +1880,60 @@ bool TestAssetBundleContainsSkeletonAndMesh()
     if (bundle.mesh.empty())
     {
         std::cerr << "bundle missing mesh payload" << std::endl;
+        return false;
+    }
+
+    if (bundle.motion_refs.empty())
+    {
+        std::cerr << "bundle missing motion references" << std::endl;
+        return false;
+    }
+
+    const std::array<const char*, 4> expected_refs = {
+        "actors\\stalker_animation",
+        "actors\\stalker_scenario_animation",
+        "actors\\stalker_scripts_animation",
+        "actors\\stalker_smart_cover_animation"
+    };
+
+    auto normalize = [](xr_string value)
+    {
+        std::transform(value.begin(), value.end(), value.begin(),
+            [](unsigned char ch)
+            {
+                if (ch == '\\')
+                    return '/';
+                return static_cast<char>(std::tolower(ch));
+            });
+        return value;
+    };
+
+    xr_vector<xr_string> normalized_refs;
+    normalized_refs.reserve(bundle.motion_refs.size());
+    for (const auto& ref : bundle.motion_refs)
+        normalized_refs.push_back(normalize(ref));
+
+    bool all_expected_present = true;
+    for (const char* expected : expected_refs)
+    {
+        const xr_string normalized_expected = normalize(xr_string(expected));
+        const bool present = std::any_of(normalized_refs.begin(), normalized_refs.end(),
+            [&](const xr_string& value)
+            {
+                return value == normalized_expected;
+            });
+        if (!present)
+        {
+            std::cerr << "bundle motion refs missing expected entry '" << expected << "'" << std::endl;
+            all_expected_present = false;
+        }
+    }
+
+    if (!all_expected_present)
+    {
+        std::cerr << "available motion refs (" << bundle.motion_refs.size() << "):\n";
+        for (const auto& ref : bundle.motion_refs)
+            std::cerr << "  " << ref.c_str() << '\n';
         return false;
     }
 
@@ -1916,6 +1988,15 @@ bool TestAssetBundleContainsSkeletonAndMesh()
 TEST(ConverterIntegration, GenerateSkeleton)
 {
     EXPECT_TRUE(TestGenerateSkeleton());
+}
+
+TEST(ConverterIntegration, SkeletonWrittenToTestdataDirectory)
+{
+    ASSERT_TRUE(ConvertSkeleton(true));
+
+    const auto expected_path = ResolveProjectPath("src/xrAnimation/tests/testdata/stalker_hero_1.ozz");
+    EXPECT_EQ(SkeletonOutputPath(), expected_path);
+    EXPECT_TRUE(fs::exists(expected_path)) << "expected converted skeleton missing at " << expected_path;
 }
 
 TEST(ConverterIntegration, GenerateMesh)
