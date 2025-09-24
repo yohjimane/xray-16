@@ -106,7 +106,7 @@
       <ConformanceMode>true</ConformanceMode>
       <PrecompiledHeader>Use</PrecompiledHeader>
       <PrecompiledHeaderFile>stdafx.h</PrecompiledHeaderFile>
-      <AdditionalIncludeDirectories>$(ProjectDir);$(ProjectDir)../;$(ProjectDir)../Include;$(ProjectDir)../xrCore;$(ProjectDir)../xrEngine;$(ProjectDir)../Common;$(ProjectDir)../../Externals/ozz-animation/include;$(ProjectDir)../../Externals/ozz-animation/extern/gtest/fused-src;$(ProjectDir)../../Externals/tracy/public;$(ProjectDir)../../Externals/imgui;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(ProjectDir);$(ProjectDir)../;$(ProjectDir)../Include;$(ProjectDir)../xrCore;$(ProjectDir)../xrEngine;$(ProjectDir)../Common;$(ProjectDir)../../Externals/ozz-animation/include;$(ProjectDir)../../Externals/ozz-animation/samples;$(ProjectDir)../../Externals/ozz-animation/extern/gtest/fused-src;$(ProjectDir)../../Externals/tracy/public;$(ProjectDir)../../Externals/imgui;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <MultiProcessorCompilation>true</MultiProcessorCompilation>
       <LanguageStandard>stdcpp17</LanguageStandard>
     </ClCompile>
@@ -128,7 +128,7 @@
       <ConformanceMode>true</ConformanceMode>
       <PrecompiledHeader>Use</PrecompiledHeader>
       <PrecompiledHeaderFile>stdafx.h</PrecompiledHeaderFile>
-      <AdditionalIncludeDirectories>$(ProjectDir);$(ProjectDir)../;$(ProjectDir)../Include;$(ProjectDir)../xrCore;$(ProjectDir)../xrEngine;$(ProjectDir)../Common;$(ProjectDir)../../Externals/ozz-animation/include;$(ProjectDir)../../Externals/ozz-animation/extern/gtest/fused-src;$(ProjectDir)../../Externals/tracy/public;$(ProjectDir)../../Externals/imgui;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(ProjectDir);$(ProjectDir)../;$(ProjectDir)../Include;$(ProjectDir)../xrCore;$(ProjectDir)../xrEngine;$(ProjectDir)../Common;$(ProjectDir)../../Externals/ozz-animation/include;$(ProjectDir)../../Externals/ozz-animation/samples;$(ProjectDir)../../Externals/ozz-animation/extern/gtest/fused-src;$(ProjectDir)../../Externals/tracy/public;$(ProjectDir)../../Externals/imgui;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <MultiProcessorCompilation>true</MultiProcessorCompilation>
       <LanguageStandard>stdcpp17</LanguageStandard>
     </ClCompile>
@@ -150,7 +150,7 @@
       <ConformanceMode>true</ConformanceMode>
       <PrecompiledHeader>Use</PrecompiledHeader>
       <PrecompiledHeaderFile>stdafx.h</PrecompiledHeaderFile>
-      <AdditionalIncludeDirectories>$(ProjectDir);$(ProjectDir)../;$(ProjectDir)../Include;$(ProjectDir)../xrCore;$(ProjectDir)../xrEngine;$(ProjectDir)../Common;$(ProjectDir)../../Externals/ozz-animation/include;$(ProjectDir)../../Externals/ozz-animation/extern/gtest/fused-src;$(ProjectDir)../../Externals/tracy/public;$(ProjectDir)../../Externals/imgui;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(ProjectDir);$(ProjectDir)../;$(ProjectDir)../Include;$(ProjectDir)../xrCore;$(ProjectDir)../xrEngine;$(ProjectDir)../Common;$(ProjectDir)../../Externals/ozz-animation/include;$(ProjectDir)../../Externals/ozz-animation/samples;$(ProjectDir)../../Externals/ozz-animation/extern/gtest/fused-src;$(ProjectDir)../../Externals/tracy/public;$(ProjectDir)../../Externals/imgui;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <MultiProcessorCompilation>true</MultiProcessorCompilation>
       <LanguageStandard>stdcpp17</LanguageStandard>
     </ClCompile>
@@ -172,7 +172,7 @@
       <ConformanceMode>true</ConformanceMode>
       <PrecompiledHeader>Use</PrecompiledHeader>
       <PrecompiledHeaderFile>stdafx.h</PrecompiledHeaderFile>
-      <AdditionalIncludeDirectories>$(ProjectDir);$(ProjectDir)../;$(ProjectDir)../Include;$(ProjectDir)../xrCore;$(ProjectDir)../xrEngine;$(ProjectDir)../Common;$(ProjectDir)../../Externals/ozz-animation/include;$(ProjectDir)../../Externals/ozz-animation/extern/gtest/fused-src;$(ProjectDir)../../Externals/tracy/public;$(ProjectDir)../../Externals/imgui;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(ProjectDir);$(ProjectDir)../;$(ProjectDir)../Include;$(ProjectDir)../xrCore;$(ProjectDir)../xrEngine;$(ProjectDir)../Common;$(ProjectDir)../../Externals/ozz-animation/include;$(ProjectDir)../../Externals/ozz-animation/samples;$(ProjectDir)../../Externals/ozz-animation/extern/gtest/fused-src;$(ProjectDir)../../Externals/tracy/public;$(ProjectDir)../../Externals/imgui;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <MultiProcessorCompilation>true</MultiProcessorCompilation>
       <LanguageStandard>stdcpp17</LanguageStandard>
     </ClCompile>
@@ -194,7 +194,7 @@
       <ConformanceMode>true</ConformanceMode>
       <PrecompiledHeader>Use</PrecompiledHeader>
       <PrecompiledHeaderFile>stdafx.h</PrecompiledHeaderFile>
-      <AdditionalIncludeDirectories>$(ProjectDir);$(ProjectDir)../;$(ProjectDir)../Include;$(ProjectDir)../xrCore;$(ProjectDir)../xrEngine;$(ProjectDir)../Common;$(ProjectDir)../../Externals/ozz-animation/include;$(ProjectDir)../../Externals/ozz-animation/extern/gtest/fused-src;$(ProjectDir)../../Externals/tracy/public;$(ProjectDir)../../Externals/imgui;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(ProjectDir);$(ProjectDir)../;$(ProjectDir)../Include;$(ProjectDir)../xrCore;$(ProjectDir)../xrEngine;$(ProjectDir)../Common;$(ProjectDir)../../Externals/ozz-animation/include;$(ProjectDir)../../Externals/ozz-animation/samples;$(ProjectDir)../../Externals/ozz-animation/extern/gtest/fused-src;$(ProjectDir)../../Externals/tracy/public;$(ProjectDir)../../Externals/imgui;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <MultiProcessorCompilation>true</MultiProcessorCompilation>
       <LanguageStandard>stdcpp17</LanguageStandard>
     </ClCompile>
@@ -214,7 +214,7 @@
       <ConformanceMode>true</ConformanceMode>
       <PrecompiledHeader>Use</PrecompiledHeader>
       <PrecompiledHeaderFile>stdafx.h</PrecompiledHeaderFile>
-      <AdditionalIncludeDirectories>$(ProjectDir);$(ProjectDir)../;$(ProjectDir)../Include;$(ProjectDir)../xrCore;$(ProjectDir)../xrEngine;$(ProjectDir)../Common;$(ProjectDir)../../Externals/ozz-animation/include;$(ProjectDir)../../Externals/ozz-animation/extern/gtest/fused-src;$(ProjectDir)../../Externals/tracy/public;$(ProjectDir)../../Externals/imgui;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(ProjectDir);$(ProjectDir)../;$(ProjectDir)../Include;$(ProjectDir)../xrCore;$(ProjectDir)../xrEngine;$(ProjectDir)../Common;$(ProjectDir)../../Externals/ozz-animation/include;$(ProjectDir)../../Externals/ozz-animation/samples;$(ProjectDir)../../Externals/ozz-animation/extern/gtest/fused-src;$(ProjectDir)../../Externals/tracy/public;$(ProjectDir)../../Externals/imgui;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <MultiProcessorCompilation>true</MultiProcessorCompilation>
       <LanguageStandard>stdcpp17</LanguageStandard>
     </ClCompile>
