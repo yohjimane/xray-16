@@ -22,6 +22,14 @@ if (NOT TARGET gtest)
     add_subdirectory(${OZZ_ROOT}/extern/gtest ${CMAKE_BINARY_DIR}/ozz_gtest)
 endif()
 
+# Ensure GoogleTest fused headers are reachable when the ozz gtest target is
+# brought in via our super-build. The upstream CMakeLists.txt assumes
+# PROJECT_SOURCE_DIR points at the ozz tree, which is not the case here.
+if (TARGET gtest)
+    target_include_directories(gtest PUBLIC
+        $<BUILD_INTERFACE:${OZZ_ROOT}/extern/gtest/fused-src>)
+endif()
+
 set_property(TARGET gtest PROPERTY EXCLUDE_FROM_DEFAULT_BUILD_RELEASEMASTERGOLD ON)
 
 add_executable(xrAnimation_converter_tests

@@ -29,6 +29,9 @@
 #endif
 
 #ifdef _WIN32
+#    ifndef NOMINMAX
+#        define NOMINMAX // prevent Windows headers from defining min/max macros
+#    endif
 #    include <windows.h>
 #else
 #    include <sys/wait.h>
