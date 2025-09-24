@@ -105,6 +105,7 @@ target_sources(xrRenderPC_R4 PRIVATE
     ${XR_RENDERPC_R4_DX11_SOURCES}
     ${XR_RENDERPC_R4_R2_SOURCES}
     ${XR_IMGUI_SOURCES}
+    ../../../Externals/ozz-animation/samples/framework/mesh.cc
 )
 
 target_include_directories(xrRenderPC_R4
@@ -135,6 +136,11 @@ target_link_libraries(xrRenderPC_R4
     xrScriptEngine
     xrAPI
     xrMiscMath
+    xrAnimation
+    ozz_animation
+    ozz_animation_offline
+    ozz_base
+    ozz_animation_tools
 )
 
 if (MSVC)

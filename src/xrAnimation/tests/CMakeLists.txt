@@ -1,5 +1,18 @@
 cmake_minimum_required(VERSION 3.8)
 
+set(_xrAnimation_skip_tests FALSE)
+if(NOT CMAKE_CONFIGURATION_TYPES)
+    string(TOUPPER "${CMAKE_BUILD_TYPE}" _xrAnimation_effective_config)
+    if(_xrAnimation_effective_config STREQUAL "RELEASEMASTERGOLD")
+        set(_xrAnimation_skip_tests TRUE)
+    endif()
+endif()
+
+if(_xrAnimation_skip_tests)
+    message(STATUS "Skipping xrAnimation tests for ReleaseMasterGold configuration")
+    return()
+endif()
+
 enable_testing()
 
 set(OZZ_ROOT ${CMAKE_SOURCE_DIR}/Externals/ozz-animation)
@@ -8,6 +21,8 @@ set(OZZ_SAMPLES_ROOT ${OZZ_ROOT}/samples)
 if (NOT TARGET gtest)
     add_subdirectory(${OZZ_ROOT}/extern/gtest ${CMAKE_BINARY_DIR}/ozz_gtest)
 endif()
+
+set_property(TARGET gtest PROPERTY EXCLUDE_FROM_DEFAULT_BUILD_RELEASEMASTERGOLD ON)
 
 add_executable(xrAnimation_converter_tests
     test_converter.cpp
@@ -19,15 +34,19 @@ target_include_directories(xrAnimation_converter_tests PRIVATE
     ${OZZ_SAMPLES_ROOT}
     ${CMAKE_SOURCE_DIR}/Externals/tracy/public)
 
+target_sources(xrAnimation_converter_tests PRIVATE
+    ${OZZ_SAMPLES_ROOT}/framework/mesh.cc)
+
 target_link_libraries(xrAnimation_converter_tests PRIVATE
     xrAnimation
     ozz_animation
     ozz_animation_offline
     ozz_base
-    sample_framework
     xrEngine
     xrScriptEngine
     gtest)
+
+set_property(TARGET xrAnimation_converter_tests PROPERTY EXCLUDE_FROM_DEFAULT_BUILD_RELEASEMASTERGOLD ON)
 
 target_compile_features(xrAnimation_converter_tests PRIVATE cxx_std_17)
 
@@ -49,14 +68,18 @@ target_include_directories(ozz_kinematics_tests PRIVATE
     ${OZZ_ROOT}/include
     ${CMAKE_SOURCE_DIR}/Externals/tracy/public)
 
+target_sources(ozz_kinematics_tests PRIVATE
+    ${OZZ_SAMPLES_ROOT}/framework/mesh.cc)
+
 target_link_libraries(ozz_kinematics_tests PRIVATE
     xrAnimation
     ozz_animation
     ozz_base
-    sample_framework
     gtest
     xrEngine
     xrScriptEngine)
+
+set_property(TARGET ozz_kinematics_tests PROPERTY EXCLUDE_FROM_DEFAULT_BUILD_RELEASEMASTERGOLD ON)
 
 target_compile_features(ozz_kinematics_tests PRIVATE cxx_std_17)
 
@@ -67,3 +90,10 @@ set_target_properties(ozz_kinematics_tests PROPERTIES
     FOLDER "xrAnimation/Tests")
 
 add_test(NAME ozz_kinematics_tests COMMAND ozz_kinematics_tests)
+
+if(CMAKE_CONFIGURATION_TYPES)
+    set_tests_properties(
+        xrAnimation_converter_tests
+        ozz_kinematics_tests
+        PROPERTIES LABELS "skip_release_master_gold")
+endif()

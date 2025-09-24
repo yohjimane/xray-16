@@ -627,6 +627,29 @@ void CRender::reset_end()
     m_bFirstFrameAfterReset = true;
 }
 
+void CRender::EnableOzzPaletteDebugDump(bool enabled)
+{
+    m_ozzDumpContinuous.store(enabled, std::memory_order_release);
+    if (!enabled)
+        m_ozzDumpOnce.store(false, std::memory_order_release);
+}
+
+bool CRender::IsOzzPaletteDebugDumpEnabled() const
+{
+    return m_ozzDumpContinuous.load(std::memory_order_acquire);
+}
+
+void CRender::RequestOzzPaletteDebugDump()
+{
+    m_ozzDumpOnce.store(true, std::memory_order_release);
+}
+
+bool CRender::ConsumeOzzPaletteDebugDumpRequest()
+{
+    bool expected = true;
+    return m_ozzDumpOnce.compare_exchange_strong(expected, false, std::memory_order_acq_rel);
+}
+
 void CRender::OnCameraUpdated()
 {
     ZoneScoped;

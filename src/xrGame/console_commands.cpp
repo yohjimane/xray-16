@@ -41,7 +41,7 @@
 #include "xrAICore/Navigation/level_graph.h"
 #include "xrNetServer/NET_Messages.h"
 
-#include "Layers/xrRender/OzzDebugTools.h"
+#include "xrEngine/Render.h"
 
 #include "CameraLook.h"
 #include "character_hit_animations_params.h"
@@ -1775,17 +1775,21 @@ public:
 
 	void Execute(LPCSTR arguments) override
 	{
-		bool enable = !xray::render::RENDER_NAMESPACE::IsOzzPaletteDebugDumpEnabled();
+		if (!GEnv.Render)
+			return;
+
+		bool enable = !GEnv.Render->IsOzzPaletteDebugDumpEnabled();
 		if (arguments && *arguments)
 			enable = int(atoi(arguments)) != 0;
 
-		xray::render::RENDER_NAMESPACE::EnableOzzPaletteDebugDump(enable);
+		GEnv.Render->EnableOzzPaletteDebugDump(enable);
 		Msg("[ozz] palette dump %s", enable ? "enabled" : "disabled");
 	}
 
 	void GetStatus(TStatus& S) override
 	{
-		xr_sprintf(S, sizeof(S), "%d", xray::render::RENDER_NAMESPACE::IsOzzPaletteDebugDumpEnabled() ? 1 : 0);
+		const bool enabled = GEnv.Render && GEnv.Render->IsOzzPaletteDebugDumpEnabled();
+		xr_sprintf(S, sizeof(S), "%d", enabled ? 1 : 0);
 	}
 
 	void Info(TInfo& I) override
@@ -1804,7 +1808,8 @@ public:
 
 	void Execute(LPCSTR /*arguments*/) override
 	{
-		xray::render::RENDER_NAMESPACE::RequestOzzPaletteDebugDump();
+		if (GEnv.Render)
+			GEnv.Render->RequestOzzPaletteDebugDump();
 		Msg("[ozz] palette snapshot requested");
 	}
 
@@ -1835,7 +1840,8 @@ public:
 		shared_str dev_visual("actors\\dev_stalker.ozzx");
 		actor->cNameVisual_set(dev_visual);
 
-		xray::render::RENDER_NAMESPACE::RequestOzzPaletteDebugDump();
+		if (GEnv.Render)
+			GEnv.Render->RequestOzzPaletteDebugDump();
 		Msg("[ozz] actor visual forced to %s", dev_visual.c_str());
 	}
 

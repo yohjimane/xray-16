@@ -96,6 +96,7 @@ target_compile_definitions(xrODE
 
 set_target_properties(xrODE PROPERTIES
     PREFIX ""
+    OUTPUT_NAME "ODE"
     UNITY_BUILD OFF
 )
 

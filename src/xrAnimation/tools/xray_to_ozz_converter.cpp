@@ -58,6 +58,10 @@
 
 #include "../OzzBundle.h"
 
+#ifdef main
+#    undef main
+#endif
+
 namespace fs = std::filesystem;
 
 namespace

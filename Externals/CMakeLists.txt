@@ -18,6 +18,13 @@ add_compile_options(${XRAY_DISABLE_WARNINGS})
 
 add_subdirectory(GameSpy)
 add_subdirectory(imgui-proj)
+
+if(MSVC AND CMAKE_GENERATOR MATCHES "Visual Studio")
+    set(ozz_build_samples OFF CACHE BOOL "Build ozz sample executables" FORCE)
+    set(ozz_build_howtos OFF CACHE BOOL "Build ozz howtos" FORCE)
+    set(ozz_build_tests OFF CACHE BOOL "Build ozz unit tests" FORCE)
+endif()
+
 add_subdirectory(ozz-animation)
 
 if (NOT TARGET xrLuabind)

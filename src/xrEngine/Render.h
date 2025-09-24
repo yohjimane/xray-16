@@ -268,6 +268,11 @@ public:
     virtual bool is_sun_static() = 0;
     virtual u32 get_dx_level() = 0;
 
+    // Ozz debug helpers
+    virtual void EnableOzzPaletteDebugDump(bool enabled) = 0;
+    virtual bool IsOzzPaletteDebugDumpEnabled() const = 0;
+    virtual void RequestOzzPaletteDebugDump() = 0;
+
     // Loading / Unloading
     virtual void create() = 0;
     virtual void destroy() = 0;

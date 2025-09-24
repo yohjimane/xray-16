@@ -3,6 +3,7 @@
 
 #include "Actor_Flags.h"
 #include "Include/xrRender/RenderVisual.h"
+#include "xrEngine/Render.h"
 #include "xrPhysics/PhysicsShell.h"
 #include "ai_space.h"
 #include "CustomMonster.h"
@@ -18,7 +19,6 @@
 #include "game_cl_base.h"
 #include "object_factory.h"
 #include "Include/xrRender/Kinematics.h"
-#include "Layers/xrRender/OzzDebugTools.h"
 #include "xrCore/FMesh.hpp"
 #include "xrAICore/Navigation/ai_object_location.h"
 #include "xrAICore/Navigation/ai_object_location_impl.h"
@@ -160,8 +160,8 @@ void CGameObject::cNameVisual_set(shared_str N)
         if (resolved_ozz_bundle)
             Msg("[ozz] '%s' resolved to bundle '%s'", requested_visual, load_visual);
 #endif
-        if (renderable.visual && renderable.visual->getType() == MT_OZZ_BUNDLE)
-            xray::render::RENDER_NAMESPACE::RequestOzzPaletteDebugDump();
+        if (renderable.visual && renderable.visual->getType() == MT_OZZ_BUNDLE && GEnv.Render)
+            GEnv.Render->RequestOzzPaletteDebugDump();
         IKinematics* old_k = old_v ? old_v->dcast_PKinematics() : NULL;
         IKinematics* new_k = renderable.visual->dcast_PKinematics();
         /*

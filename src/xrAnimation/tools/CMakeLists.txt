@@ -5,11 +5,11 @@ set(_converter_src ${CMAKE_CURRENT_SOURCE_DIR}/xray_to_ozz_converter.cpp)
 if(EXISTS ${_converter_src})
     add_executable(xray_to_ozz_converter
         xray_to_ozz_converter.cpp
+        ../../../Externals/ozz-animation/samples/framework/mesh.cc
     )
 
     target_link_libraries(xray_to_ozz_converter
         PRIVATE
-        sample_framework
         xrAnimation
         xrCore
         xrEngine
@@ -39,48 +39,56 @@ if(EXISTS ${_converter_src})
 endif()
 
 # ozz animation viewer tool (using ozz playback sample)
-add_executable(ozz_animation_viewer
-    ozz_animation_viewer.cpp
-    ../../../Externals/imgui/imgui.cpp
-    ../../../Externals/imgui/imgui_draw.cpp
-    ../../../Externals/imgui/imgui_tables.cpp
-    ../../../Externals/imgui/imgui_widgets.cpp
-    ../../../Externals/imgui/backends/imgui_impl_glfw.cpp
-    ../../../Externals/imgui/backends/imgui_impl_opengl3.cpp
-)
+set(_ozz_animation_viewer_supported ON)
+if(CMAKE_GENERATOR MATCHES "Visual Studio")
+    set(_ozz_animation_viewer_supported OFF)
+    message(STATUS "Skipping ozz_animation_viewer for Visual Studio generators")
+endif()
 
-# Link to the existing ozz sample_framework
-target_link_libraries(ozz_animation_viewer
-    PRIVATE
-    sample_framework  # From ozz-animation
-    glfw
-    xrAnimation
-    xrCore
-    xrScriptEngine
-    xrEngine
-    ozz_animation
-    ozz_base
-)
+if(_ozz_animation_viewer_supported)
+    add_executable(ozz_animation_viewer
+        ozz_animation_viewer.cpp
+        ../../../Externals/imgui/imgui.cpp
+        ../../../Externals/imgui/imgui_draw.cpp
+        ../../../Externals/imgui/imgui_tables.cpp
+        ../../../Externals/imgui/imgui_widgets.cpp
+        ../../../Externals/imgui/backends/imgui_impl_glfw.cpp
+        ../../../Externals/imgui/backends/imgui_impl_opengl3.cpp
+    )
 
-target_include_directories(ozz_animation_viewer
-    PRIVATE
-    ${CMAKE_CURRENT_SOURCE_DIR}/..
-    ${CMAKE_CURRENT_SOURCE_DIR}/../..
-    ${CMAKE_CURRENT_SOURCE_DIR}/../../Include
-    ${CMAKE_CURRENT_SOURCE_DIR}/../../../Externals/ozz-animation/include
-    ${CMAKE_CURRENT_SOURCE_DIR}/../../../Externals/ozz-animation/samples
-    ${CMAKE_CURRENT_SOURCE_DIR}/../../../Externals/imgui
-    ${CMAKE_CURRENT_SOURCE_DIR}/../../../Externals/imgui/backends
-)
+    # Link to the existing ozz sample_framework
+    target_link_libraries(ozz_animation_viewer
+        PRIVATE
+        sample_framework  # From ozz-animation
+        glfw
+        xrAnimation
+        xrCore
+        xrScriptEngine
+        xrEngine
+        ozz_animation
+        ozz_base
+    )
 
-# Set properties
-set_target_properties(ozz_animation_viewer PROPERTIES
-    CXX_STANDARD 17
-    CXX_STANDARD_REQUIRED ON
-    RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin/${CMAKE_BUILD_TYPE}
-)
+    target_include_directories(ozz_animation_viewer
+        PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}/..
+        ${CMAKE_CURRENT_SOURCE_DIR}/../..
+        ${CMAKE_CURRENT_SOURCE_DIR}/../../Include
+        ${CMAKE_CURRENT_SOURCE_DIR}/../../../Externals/ozz-animation/include
+        ${CMAKE_CURRENT_SOURCE_DIR}/../../../Externals/ozz-animation/samples
+        ${CMAKE_CURRENT_SOURCE_DIR}/../../../Externals/imgui
+        ${CMAKE_CURRENT_SOURCE_DIR}/../../../Externals/imgui/backends
+    )
 
-list(APPEND _xrAnimation_tool_targets ozz_animation_viewer)
+    # Set properties
+    set_target_properties(ozz_animation_viewer PROPERTIES
+        CXX_STANDARD 17
+        CXX_STANDARD_REQUIRED ON
+        RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin/${CMAKE_BUILD_TYPE}
+    )
+
+    list(APPEND _xrAnimation_tool_targets ozz_animation_viewer)
+endif()
 
 # Install any tools that have been enabled
 if(_xrAnimation_tool_targets)

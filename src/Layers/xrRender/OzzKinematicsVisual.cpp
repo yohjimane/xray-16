@@ -1,7 +1,8 @@
 #include "stdafx.h"
 
 #include "OzzKinematicsVisual.h"
-#include "OzzDebugTools.h"
+
+#include "Layers/xrRender_R2/r2.h"
 
 #include "BufferUtils.h"
 #include "FVisual.h"
@@ -15,7 +16,6 @@
 
 #include <algorithm>
 #include <array>
-#include <atomic>
 #include <cstring>
 #include <string>
 
@@ -28,16 +28,12 @@ namespace
 {
 constexpr u32 kMaxDumpedBones = 4;
 
-std::atomic<bool> g_dump_palette_once{ false };
-bool g_dump_palette_continuous = false;
-
 bool ShouldDumpPalette()
 {
-    if (g_dump_palette_continuous)
+    if (RImplementation.IsOzzPaletteDebugDumpEnabled())
         return true;
 
-    bool expected = true;
-    return g_dump_palette_once.compare_exchange_strong(expected, false, std::memory_order_acq_rel);
+    return RImplementation.ConsumeOzzPaletteDebugDumpRequest();
 }
 
 void DebugDumpPalette(const COzzKinematicsVisual& visual, const xr_vector<Fmatrix>& palette)
@@ -69,23 +65,6 @@ void DebugDumpPalette(const COzzKinematicsVisual& visual, const xr_vector<Fmatri
         Msg("[ozz][palette] ... (omitted %u bones)", bone_count - print_count);
 }
 } // namespace
-
-ENGINE_API void EnableOzzPaletteDebugDump(bool enabled)
-{
-    g_dump_palette_continuous = enabled;
-    if (!enabled)
-        g_dump_palette_once.store(false, std::memory_order_release);
-}
-
-ENGINE_API bool IsOzzPaletteDebugDumpEnabled()
-{
-    return g_dump_palette_continuous;
-}
-
-ENGINE_API void RequestOzzPaletteDebugDump()
-{
-    g_dump_palette_once.store(true, std::memory_order_release);
-}
 
 namespace
 {

@@ -23,6 +23,8 @@
 #include "xrCore/Threading/TaskManager.hpp"
 #include "xrCore/FMesh.hpp"
 
+#include <atomic>
+
 namespace xray::render::RENDER_NAMESPACE
 {
 class CRenderTarget;
@@ -481,6 +483,11 @@ public:
     // Main
     void OnCameraUpdated() override;
 
+    void EnableOzzPaletteDebugDump(bool enabled) override;
+    bool IsOzzPaletteDebugDumpEnabled() const override;
+    void RequestOzzPaletteDebugDump() override;
+    bool ConsumeOzzPaletteDebugDumpRequest();
+
     void Calculate() override;
     void Render() override;
     void RenderMenu() override;
@@ -518,6 +525,9 @@ private:
 #else
 #   error No graphics API selected or enabled!
 #endif
+
+    std::atomic<bool> m_ozzDumpOnce{ false };
+    std::atomic<bool> m_ozzDumpContinuous{ false };
 
     IRender_Sector::sector_id_t largest_sector_id{ IRender_Sector::INVALID_SECTOR_ID };
 };

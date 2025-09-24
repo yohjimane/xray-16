@@ -26,7 +26,7 @@ cmake --build xray-16/ozz_utils -j$(nproc)
 ```
 
 - **Converters**: `xray-16/ozz_utils/bin/<cfg>/xray_to_ozz_converter`
-- **Viewer**: `xray-16/ozz_utils/bin/<cfg>/ozz_animation_viewer --bundle=<path>.ozzx`
+- **Viewer**: `xray-16/ozz_utils/bin/<cfg>/ozz_animation_viewer --bundle=<path>.ozzx` (disabled when generating Visual Studio solutions)
 
 Helper scripts in the repository root (e.g. `run_stalker_hero_conversion.sh`) regenerate sample assets under `src/xrAnimation/tests/testdata/` and launch the viewer in verification modes.
 
