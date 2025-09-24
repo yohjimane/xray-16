@@ -56,6 +56,26 @@ if (WIN32)
         COMMENT "Copying Windows runtime dependencies"
         VERBATIM
     )
+
+    if (TARGET ozz_animation)
+        add_custom_command(TARGET xr_3da POST_BUILD
+            COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                "$<TARGET_FILE:ozz_animation>"
+                "$<TARGET_FILE_DIR:xr_3da>/"
+            COMMENT "Copying ozz_animation runtime"
+            VERBATIM
+        )
+    endif()
+
+    if (TARGET ozz_base)
+        add_custom_command(TARGET xr_3da POST_BUILD
+            COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                "$<TARGET_FILE:ozz_base>"
+                "$<TARGET_FILE_DIR:xr_3da>/"
+            COMMENT "Copying ozz_base runtime"
+            VERBATIM
+        )
+    endif()
 endif()
 
 set_target_properties(xr_3da PROPERTIES
