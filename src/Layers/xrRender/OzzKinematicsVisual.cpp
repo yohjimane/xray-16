@@ -127,7 +127,7 @@ private:
     xr_vector<u16> indices_;
     xr_vector<Fmatrix> inverse_bind_poses_;
     xr_vector<u16> joint_remaps_;
-    xr_unique_ptr<VertexStagingBuffer> vertex_buffer_;
+    xr_unique_ptr<VertexStreamBuffer> vertex_buffer_;
     xr_unique_ptr<IndexStagingBuffer> index_buffer_;
     ref_geom geom_;
     u32 vertex_count_ = 0;
@@ -247,8 +247,8 @@ void COzzSkinnedSurface::InitializeGeometry(const ozz::sample::Mesh& mesh)
 
     indices_.assign(mesh.triangle_indices.begin(), mesh.triangle_indices.end());
 
-    vertex_buffer_ = xr_make_unique<VertexStagingBuffer>();
-    vertex_buffer_->Create(static_cast<size_t>(vertex_count_) * sizeof(OzzGpuVertex), true);
+    vertex_buffer_ = xr_make_unique<VertexStreamBuffer>();
+    vertex_buffer_->Create(static_cast<size_t>(vertex_count_) * sizeof(OzzGpuVertex));
 
     index_buffer_ = xr_make_unique<IndexStagingBuffer>();
     index_buffer_->Create(static_cast<size_t>(indices_.size()) * sizeof(u16), false, true);
@@ -282,7 +282,14 @@ void COzzSkinnedSurface::UpdateGeometry()
             skin_matrices[idx] = inverse_bind_poses_[idx];
     }
 
-    auto* gpu_vertices = static_cast<OzzGpuVertex*>(vertex_buffer_->Map());
+    if (!vertex_buffer_ || !vertex_buffer_->IsValid() || vertex_count_ == 0)
+    {
+        dirty_ = false;
+        return;
+    }
+
+    const size_t buffer_size = static_cast<size_t>(vertex_count_) * sizeof(OzzGpuVertex);
+    auto* gpu_vertices = static_cast<OzzGpuVertex*>(vertex_buffer_->Map(0, buffer_size, true));
     for (u32 vertex = 0; vertex < vertex_count_; ++vertex)
     {
         const SourceVertex& src = source_vertices_[vertex];
@@ -324,7 +331,7 @@ void COzzSkinnedSurface::UpdateGeometry()
         dst.uv = src.uv;
     }
 
-    vertex_buffer_->Unmap(true);
+    vertex_buffer_->Unmap();
     dirty_ = false;
 }
 
