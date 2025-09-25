@@ -164,6 +164,10 @@ void CWeapon::UpdateXForm()
         return;
 
     IKinematics* V = smart_cast<IKinematics*>(E->Visual());
+
+    if (!V)
+        return;
+
     VERIFY(V);
 
     // Get matrices

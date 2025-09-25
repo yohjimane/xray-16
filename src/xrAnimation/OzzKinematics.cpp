@@ -671,10 +671,26 @@ void OzzKinematics::CalculateBones(BOOL bForceExact)
     if (!bForceExact && last_update_time_ != 0 && current_time < last_update_time_ + UCalc_Interval)
         return;
 
-    if (model_transforms_.size() != bone_instances_.size())
-        model_transforms_.resize(bone_instances_.size());
-    if (cached_transforms_pre_callbacks_.size() != bone_instances_.size())
-        cached_transforms_pre_callbacks_.resize(bone_instances_.size());
+    const size_t expected_joint_count = static_cast<size_t>(skeleton_.num_joints());
+    if (bone_instances_.size() != expected_joint_count)
+    {
+        Msg("[OzzKinematics] Bone instance array size mismatch (have %zu, expected %zu). Reinitializing.",
+            bone_instances_.size(), expected_joint_count);
+        bone_instances_.resize(expected_joint_count);
+        for (CBoneInstance& instance : bone_instances_)
+            instance.construct();
+    }
+
+    if (model_transforms_.size() != expected_joint_count)
+    {
+        model_transforms_.resize(expected_joint_count);
+        std::fill(model_transforms_.begin(), model_transforms_.end(), ozz::math::Float4x4::identity());
+    }
+    if (cached_transforms_pre_callbacks_.size() != expected_joint_count)
+    {
+        cached_transforms_pre_callbacks_.resize(expected_joint_count);
+        std::fill(cached_transforms_pre_callbacks_.begin(), cached_transforms_pre_callbacks_.end(), Fidentity);
+    }
 
     ozz::animation::LocalToModelJob job;
     job.skeleton = &skeleton_;

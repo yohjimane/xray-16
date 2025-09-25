@@ -179,11 +179,14 @@ void CGameObject::cNameVisual_set(shared_str N)
     }
     else
     {
+        OnBeforeChangeVisual();
         GEnv.Render->model_Delete(renderable.visual);
         NameVisual = nullptr;
     }
     OnChangeVisual();
 }
+
+void CGameObject::OnBeforeChangeVisual() {}
 
 // flagging
 void CGameObject::processing_activate()

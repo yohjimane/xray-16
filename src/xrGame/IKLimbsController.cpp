@@ -18,9 +18,9 @@
 
 CIKLimbsController::CIKLimbsController()
 #ifdef DEBUG
-    : m_legs_blend(nullptr), m_object(nullptr), anim_name(nullptr), anim_set_name(nullptr), m_supports_ozz(false) {}
+    : m_legs_blend(nullptr), m_object(nullptr), m_supports_ozz(false), m_pending_legacy_teardown(false), anim_name(nullptr), anim_set_name(nullptr) {}
 #else
-    : m_legs_blend(nullptr), m_object(nullptr), m_supports_ozz(false) {}
+    : m_legs_blend(nullptr), m_object(nullptr), m_supports_ozz(false), m_pending_legacy_teardown(false) {}
 #endif
 
 void CIKLimbsController::Create(CGameObject* O)
@@ -33,6 +33,7 @@ void CIKLimbsController::Create(CGameObject* O)
     VERIFY(K);
 
     m_supports_ozz = (m_object->Visual()->dcast_PKinematicsAnimated() == nullptr);
+    m_pending_legacy_teardown = false;
 
     if (m_supports_ozz)
     {
@@ -266,11 +267,15 @@ int ik_shift_object = 1;
 void CIKLimbsController::Calculate()
 {
     if (m_supports_ozz)
+    {
+        TeardownLegacyLimbs();
         return;
+    }
 
     if (!m_object->Visual()->dcast_PKinematicsAnimated())
     {
         SwitchToOzzMode();
+        TeardownLegacyLimbs();
         return;
     }
 
@@ -288,12 +293,18 @@ void CIKLimbsController::Calculate()
     if (!m_object->Visual()->dcast_PKinematicsAnimated())
     {
         SwitchToOzzMode();
+        TeardownLegacyLimbs();
         return;
     }
     for (i = b; e != i; ++i)
     {
         cd[i - b] = SCalculateData(*i, obj);
         LimbCalculate(cd[i - b]);
+        if (m_supports_ozz)
+        {
+            TeardownLegacyLimbs();
+            return;
+        }
     }
 
     IKinematics* K = m_object->Visual()->dcast_PKinematics();
@@ -354,8 +365,13 @@ void CIKLimbsController::Destroy(CGameObject* O)
             i->Destroy();
         _bone_chains.clear();
     }
+    else
+    {
+        TeardownLegacyLimbs();
+    }
 
     m_supports_ozz = false;
+    m_pending_legacy_teardown = false;
 }
 
 void CIKLimbsController::SwitchToOzzMode()
@@ -364,11 +380,11 @@ void CIKLimbsController::SwitchToOzzMode()
         return;
 
     m_supports_ozz = true;
+    m_pending_legacy_teardown = true;
     m_legs_blend = nullptr;
 
     for (auto& limb : _bone_chains)
         limb.Destroy();
-    _bone_chains.clear();
 
     if (m_object)
     {
@@ -383,6 +399,15 @@ void CIKLimbsController::SwitchToOzzMode()
         Msg("[ik] disabling limb controller for '%s' (visual '%s') due to missing IKinematicsAnimated",
             m_object->cName().c_str(), m_object->cNameVisual().c_str());
 #endif
+}
+
+void CIKLimbsController::TeardownLegacyLimbs()
+{
+    if (!m_pending_legacy_teardown)
+        return;
+
+    _bone_chains.clear();
+    m_pending_legacy_teardown = false;
 }
 
 void CIKLimbsController::IKVisualCallback(IKinematics* K)
@@ -408,6 +433,7 @@ void CIKLimbsController::PlayLegs(CBlend* b)
     if (m_supports_ozz)
     {
         m_legs_blend = nullptr;
+        TeardownLegacyLimbs();
         return;
     }
 
@@ -416,6 +442,7 @@ void CIKLimbsController::PlayLegs(CBlend* b)
     if (!skeleton_animated)
     {
         SwitchToOzzMode();
+        TeardownLegacyLimbs();
         return;
     }
 #ifdef DEBUG
@@ -434,11 +461,15 @@ void CIKLimbsController::Update()
         return;
 #endif
     if (m_supports_ozz)
+    {
+        TeardownLegacyLimbs();
         return;
+    }
     IKinematicsAnimated* skeleton_animated = m_object->Visual()->dcast_PKinematicsAnimated();
     if (!skeleton_animated)
     {
         SwitchToOzzMode();
+        TeardownLegacyLimbs();
         return;
     }
 
@@ -448,7 +479,14 @@ void CIKLimbsController::Update()
     _pose_extrapolation.update(m_object->XFORM());
     xr_vector<CIKLimb>::iterator i = _bone_chains.begin(), e = _bone_chains.end();
     for (; e != i; ++i)
+    {
         LimbUpdate(*i);
+        if (m_supports_ozz)
+        {
+            TeardownLegacyLimbs();
+            return;
+        }
+    }
 
     /*
     Fmatrix predict;
