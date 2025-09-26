@@ -5,6 +5,8 @@
 #include "OzzConversion.h"
 
 #include "xrEngine/device.h"
+#include "xrCore/FS.h"
+#include "xrCore/FS_impl.h"
 
 #include "ozz/animation/runtime/skeleton_utils.h"
 #include "ozz/base/io/archive.h"
@@ -139,6 +141,277 @@ void OzzKinematics::ResetRuntimeState()
     last_update_time_ = 0;
     visibility_counter_ = 0;
     skeleton_ = ozz::animation::Skeleton();
+
+    ResetAnimationState();
+    initialized_ = false;
+}
+
+void OzzKinematics::ResetAnimationState()
+{
+    animation_controller_.reset();
+    motion_references_.clear();
+    legacy_motion_metadata_.clear();
+    legacy_motion_library_.clear();
+    converted_motion_sources_.clear();
+    blend_destroy_callback_ = nullptr;
+    update_tracks_callback_ = nullptr;
+    animation_applied_ = false;
+}
+
+bool OzzKinematics::EnsureAnimationController()
+{
+    if (!initialized_)
+        return false;
+
+    if (!animation_controller_)
+    {
+        animation_controller_ = xr_make_unique<OzzAnimationController>();
+        if (!animation_controller_->Initialize(skeleton_))
+        {
+            Msg("[OzzKinematics] Failed to initialize animation controller for skeleton");
+            animation_controller_.reset();
+            return false;
+        }
+    }
+
+    return true;
+}
+
+void OzzKinematics::SetLegacyMotionReferences(const xr_vector<xr_string>& references)
+{
+    motion_references_ = references;
+    legacy_motion_metadata_.clear();
+    legacy_motion_library_.clear();
+    converted_motion_sources_.clear();
+}
+
+xr_vector<xr_string> OzzKinematics::LegacyMotionNames()
+{
+    if (legacy_motion_metadata_.empty() && !motion_references_.empty())
+    {
+        if (legacy_motion_library_.empty())
+            BuildLegacyMotionLibrary();
+    }
+
+    xr_vector<xr_string> names;
+    names.reserve(legacy_motion_metadata_.size());
+    for (const auto& entry : legacy_motion_metadata_)
+        names.push_back(entry.first);
+
+    std::sort(names.begin(), names.end(),
+        [](const xr_string& lhs, const xr_string& rhs)
+        {
+            return xr_stricmp(lhs.c_str(), rhs.c_str()) < 0;
+        });
+    return names;
+}
+
+bool OzzKinematics::BuildLegacyMotionLibrary()
+{
+    if (motion_references_.empty())
+        return false;
+
+    const auto bone_names = CollectSkeletonBoneNames();
+    if (bone_names.empty())
+        return false;
+
+    bool converted_any = false;
+    for (const auto& reference : motion_references_)
+    {
+        const auto candidates = ResolveMotionReference(reference);
+        for (const auto& candidate : candidates)
+            converted_any |= ConvertLegacyOmfFile(candidate, bone_names);
+    }
+
+    return converted_any;
+}
+
+bool OzzKinematics::LoadLegacyMotion(const xr_string& motion_name)
+{
+    if (!EnsureAnimationController())
+        return false;
+
+    if (legacy_motion_library_.empty() && !motion_references_.empty())
+        BuildLegacyMotionLibrary();
+
+    const auto it = legacy_motion_library_.find(motion_name);
+    if (it == legacy_motion_library_.end() || !it->second)
+    {
+        Msg("[OzzKinematics] Legacy motion '%s' not available", motion_name.c_str());
+        return false;
+    }
+
+    if (!animation_controller_->LoadAnimation(it->second))
+    {
+        Msg("[OzzKinematics] Failed to bind legacy motion '%s'", motion_name.c_str());
+        return false;
+    }
+
+    animation_applied_ = false;
+    CalculateBones_Invalidate();
+    return true;
+}
+
+bool OzzKinematics::PlayLegacyMotion(const xr_string& motion_name)
+{
+    return LoadLegacyMotion(motion_name);
+}
+
+bool OzzKinematics::LoadAnimationFromFile(const std::filesystem::path& path)
+{
+    if (!EnsureAnimationController())
+        return false;
+
+    if (!animation_controller_->LoadAnimation(path))
+        return false;
+
+    animation_applied_ = false;
+    CalculateBones_Invalidate();
+    return true;
+}
+
+void OzzKinematics::StopAnimation()
+{
+    if (!animation_controller_)
+        return;
+
+    animation_controller_->ClearAnimation();
+    animation_applied_ = false;
+    ClearPose();
+    CalculateBones_Invalidate();
+}
+
+bool OzzKinematics::AdvanceAnimation(float dt)
+{
+    if (!EnsureAnimationController())
+        return false;
+
+    if (!animation_controller_->HasAnimation())
+    {
+        if (animation_applied_)
+        {
+            ClearPose();
+            animation_applied_ = false;
+            return true;
+        }
+        return false;
+    }
+
+    if (!animation_controller_->Update(dt))
+        return false;
+
+    const auto locals = animation_controller_->SampledLocals();
+    if (locals.empty())
+        return false;
+
+    if (!SetPoseLocals(locals))
+        return false;
+
+    animation_applied_ = true;
+    return true;
+}
+
+bool OzzKinematics::HasLoadedAnimation() const
+{
+    return animation_controller_ && animation_controller_->HasAnimation();
+}
+
+xr_vector<xr_string> OzzKinematics::CollectSkeletonBoneNames() const
+{
+    xr_vector<xr_string> names;
+    if (!initialized_)
+        return names;
+
+    const int bone_count = skeleton_.num_joints();
+    if (bone_count <= 0)
+        return names;
+
+    names.reserve(static_cast<size_t>(bone_count));
+    const auto joint_names = skeleton_.joint_names();
+    for (int idx = 0; idx < bone_count; ++idx)
+    {
+        const char* name = (static_cast<size_t>(idx) < joint_names.size() && joint_names[idx]) ? joint_names[idx] : "";
+        names.emplace_back(name ? name : "");
+    }
+    return names;
+}
+
+xr_vector<xr_string> OzzKinematics::ResolveMotionReference(const xr_string& reference) const
+{
+    xr_vector<xr_string> results;
+    if (reference.empty())
+        return results;
+
+    if (reference.find('*') != xr_string::npos)
+    {
+        FS_FileSet files;
+        FS.file_list(files, "$level$", FS_ListFiles, reference.c_str());
+        FS.file_list(files, "$game_meshes$", FS_ListFiles, reference.c_str());
+
+        xr_set<xr_string> unique;
+        for (const auto& entry : files)
+            unique.emplace(entry.name.c_str());
+
+        results.reserve(unique.size());
+        for (const auto& name : unique)
+            results.emplace_back(name);
+        return results;
+    }
+
+    xr_string candidate = reference;
+    constexpr size_t ext_length = 4;
+    if (candidate.size() < ext_length ||
+        xr_stricmp(candidate.c_str() + candidate.size() - ext_length, ".omf") != 0)
+    {
+        candidate += ".omf";
+    }
+
+    results.emplace_back(std::move(candidate));
+    return results;
+}
+
+bool OzzKinematics::ConvertLegacyOmfFile(const xr_string& relative_path, const xr_vector<xr_string>& skeleton_bone_names)
+{
+    if (converted_motion_sources_.find(relative_path) != converted_motion_sources_.end())
+        return true;
+
+    string_path resolved;
+    if (!FS.exist(resolved, "$level$", relative_path.c_str()))
+    {
+        if (!FS.exist(resolved, "$game_meshes$", relative_path.c_str()))
+        {
+            Msg("[ozz] legacy animation source '%s' not found", relative_path.c_str());
+            return false;
+        }
+    }
+
+    xr_vector<ConvertedOmfAnimation> converted;
+    if (!ConvertLegacyOmf(std::filesystem::path(resolved), skeleton_bone_names, skeleton_, converted))
+    {
+        Msg("[ozz] failed to convert legacy animation '%s'", relative_path.c_str());
+        return false;
+    }
+
+    for (auto& entry : converted)
+    {
+        if (!entry.animation)
+            continue;
+
+        const xr_string motion_name = entry.name;
+        if (legacy_motion_library_.find(motion_name) != legacy_motion_library_.end())
+        {
+            Msg("[ozz] duplicate legacy motion '%s' encountered in '%s'", motion_name.c_str(), relative_path.c_str());
+            continue;
+        }
+
+        legacy_motion_metadata_[motion_name] = entry.metadata;
+        auto deleter = entry.animation.get_deleter();
+        legacy_motion_library_[motion_name] =
+            std::shared_ptr<ozz::animation::Animation>(entry.animation.release(), deleter);
+    }
+
+    converted_motion_sources_.insert(relative_path);
+    return true;
 }
 
 bool OzzKinematics::LoadSkeletonFromStream(ozz::io::Stream* stream, pcstr debug_source)
@@ -242,6 +515,12 @@ bool OzzKinematics::FinalizeSkeletonInitialization(pcstr debug_source)
     last_update_time_ = 0;
     visibility_counter_ = 0;
 
+    initialized_ = true;
+
+    animation_controller_.reset();
+    animation_applied_ = false;
+    EnsureAnimationController();
+
     return true;
 }
 
@@ -326,6 +605,9 @@ void OzzKinematics::ApplyAdditionalBoneTransforms(u16 bone_id, Fmatrix& transfor
 
 bool OzzKinematics::SetPoseLocals(ozz::span<const ozz::math::SoaTransform> locals)
 {
+    if (!initialized_)
+        return false;
+
     if (locals.empty())
     {
         sampled_locals_.clear();
@@ -346,6 +628,9 @@ bool OzzKinematics::SetPoseLocals(ozz::span<const ozz::math::SoaTransform> local
 
 void OzzKinematics::ClearPose()
 {
+    if (!initialized_)
+        return;
+
     sampled_locals_.clear();
     CalculateBones_Invalidate();
 }
@@ -362,22 +647,53 @@ ozz::animation::SamplingJob::Context& OzzKinematics::SamplingContext()
 
 void OzzKinematics::BuildSkinningPalette(xr_vector<Fmatrix>& out_matrices, bool render_space) const
 {
-    const size_t count = bone_instances_.size();
-    out_matrices.resize(count);
+    if (!initialized_)
+    {
+        out_matrices.clear();
+        return;
+    }
+
+    const size_t expected = static_cast<size_t>(skeleton_.num_joints());
+    if (expected == 0)
+    {
+        out_matrices.clear();
+        return;
+    }
+
+    const size_t instance_count = bone_instances_.size();
+    const size_t model_count = model_transforms_.size();
+    const size_t available = std::min(instance_count, std::min(model_count, expected));
+
+    out_matrices.resize(expected);
+
+    if (available != expected)
+    {
+        Msg("[OzzKinematics] BuildSkinningPalette requested before bone buffers ready (instances=%zu, model=%zu, expected=%zu)",
+            instance_count, model_count, expected);
+
+        for (size_t idx = 0; idx < expected; ++idx)
+            out_matrices[idx] = Fidentity;
+        return;
+    }
 
     if (render_space)
     {
-        for (size_t idx = 0; idx < count; ++idx)
+        for (size_t idx = 0; idx < expected; ++idx)
             out_matrices[idx] = bone_instances_[idx].mRenderTransform;
     }
     else
     {
-        for (size_t idx = 0; idx < count; ++idx)
+        for (size_t idx = 0; idx < expected; ++idx)
             out_matrices[idx] = bone_instances_[idx].mTransform;
     }
 }
 
 void OzzKinematics::Bone_Calculate(CBoneData* /*bd*/, Fmatrix* /*parent*/)
+{
+    CalculateBones(TRUE);
+}
+
+void OzzKinematics::OnCalculateBones()
 {
     CalculateBones(TRUE);
 }
@@ -662,6 +978,9 @@ void OzzKinematics::LL_ClearAdditionalTransform(u16 bone_id)
 
 void OzzKinematics::CalculateBones(BOOL bForceExact)
 {
+    if (!initialized_)
+        return;
+
     if (skeleton_.num_joints() == 0 || bone_instances_.empty())
         return;
 
@@ -788,19 +1107,224 @@ void* OzzKinematics::GetUpdateCallbackParam()
     return update_callback_param_;
 }
 
+u32 OzzKinematics::LL_PartBlendsCount(u32 /*bone_part_id*/)
+{
+    return 0;
+}
+
+CBlend* OzzKinematics::LL_PartBlend(u32 /*bone_part_id*/, u32 /*n*/)
+{
+    return nullptr;
+}
+
+void OzzKinematics::LL_IterateBlends(IterateBlendsCallback& /*callback*/)
+{
+}
+
+u16 OzzKinematics::LL_MotionsSlotCount()
+{
+    return 0;
+}
+
+const shared_motions& OzzKinematics::LL_MotionsSlot(u16 /*idx*/)
+{
+    static shared_motions dummy;
+    return dummy;
+}
+
+CMotionDef* OzzKinematics::LL_GetMotionDef(MotionID /*id*/)
+{
+    return nullptr;
+}
+
+CMotion* OzzKinematics::LL_GetRootMotion(MotionID /*id*/)
+{
+    return nullptr;
+}
+
+CMotion* OzzKinematics::LL_GetMotion(MotionID /*id*/, u16 /*bone_id*/)
+{
+    return nullptr;
+}
+
+void OzzKinematics::LL_BuldBoneMatrixDequatize(const CBoneData* /*bd*/, u8 /*channel_mask*/, SKeyTable& /*keys*/)
+{
+    NotImplemented(__FUNCTION__);
+}
+
+void OzzKinematics::LL_BoneMatrixBuild(CBoneInstance& /*bi*/, const Fmatrix* /*parent*/, const SKeyTable& /*keys*/)
+{
+    NotImplemented(__FUNCTION__);
+}
+
+IBlendDestroyCallback* OzzKinematics::GetBlendDestroyCallback()
+{
+    return blend_destroy_callback_;
+}
+
+void OzzKinematics::SetBlendDestroyCallback(IBlendDestroyCallback* cb)
+{
+    blend_destroy_callback_ = cb;
+}
+
+void OzzKinematics::SetUpdateTracksCalback(IUpdateTracksCallback* callback)
+{
+    update_tracks_callback_ = callback;
+}
+
+IUpdateTracksCallback* OzzKinematics::GetUpdateTracksCalback()
+{
+    return update_tracks_callback_;
+}
+
+MotionID OzzKinematics::LL_MotionID(LPCSTR /*B*/)
+{
+    return MotionID();
+}
+
+u16 OzzKinematics::LL_PartID(LPCSTR /*B*/)
+{
+    return BI_NONE;
+}
+
+CBlend* OzzKinematics::LL_PlayCycle(u16 /*partition*/, MotionID /*motion*/, BOOL /*bMixing*/, float /*blendAccrue*/,
+    float /*blendFalloff*/, float /*Speed*/, BOOL /*noloop*/, PlayCallback /*Callback*/, LPVOID /*CallbackParam*/, u8 /*channel*/)
+{
+    return nullptr;
+}
+
+CBlend* OzzKinematics::LL_PlayCycle(
+    u16 /*partition*/, MotionID /*motion*/, BOOL /*bMixIn*/, PlayCallback /*Callback*/, LPVOID /*CallbackParam*/, u8 /*channel*/)
+{
+    return nullptr;
+}
+
+void OzzKinematics::LL_CloseCycle(u16 /*partition*/, u8 /*mask_channel*/)
+{
+}
+
+void OzzKinematics::LL_SetChannelFactor(u16 /*channel*/, float /*factor*/)
+{
+}
+
+void OzzKinematics::UpdateTracks()
+{
+    LL_UpdateTracks(Device.fTimeDelta, true, false);
+}
+
+void OzzKinematics::LL_UpdateTracks(float dt, bool /*b_force*/, bool /*leave_blends*/)
+{
+    const bool advanced = AdvanceAnimation(dt);
+    if (update_tracks_callback_)
+        (*update_tracks_callback_)(dt, *this);
+
+    if (advanced && blend_destroy_callback_)
+    {
+        // Ozz runtime currently does not maintain blend instances, so nothing to flush here.
+    }
+}
+
+MotionID OzzKinematics::ID_Cycle(LPCSTR /*N*/)
+{
+    return MotionID();
+}
+
+MotionID OzzKinematics::ID_Cycle_Safe(LPCSTR /*N*/)
+{
+    return MotionID();
+}
+
+MotionID OzzKinematics::ID_Cycle(shared_str /*N*/)
+{
+    return MotionID();
+}
+
+MotionID OzzKinematics::ID_Cycle_Safe(shared_str /*N*/)
+{
+    return MotionID();
+}
+
+CBlend* OzzKinematics::PlayCycle(LPCSTR /*N*/, BOOL /*bMixIn*/, PlayCallback /*Callback*/, LPVOID /*CallbackParam*/, u8 /*channel*/)
+{
+    return nullptr;
+}
+
+CBlend* OzzKinematics::PlayCycle(MotionID /*M*/, BOOL /*bMixIn*/, PlayCallback /*Callback*/, LPVOID /*CallbackParam*/, u8 /*channel*/)
+{
+    return nullptr;
+}
+
+CBlend* OzzKinematics::PlayCycle(u16 /*partition*/, MotionID /*M*/, BOOL /*bMixIn*/, PlayCallback /*Callback*/,
+    LPVOID /*CallbackParam*/, u8 /*channel*/)
+{
+    return nullptr;
+}
+
+MotionID OzzKinematics::ID_FX(LPCSTR /*N*/)
+{
+    return MotionID();
+}
+
+MotionID OzzKinematics::ID_FX_Safe(LPCSTR /*N*/)
+{
+    return MotionID();
+}
+
+CBlend* OzzKinematics::PlayFX(LPCSTR /*N*/, float /*power_scale*/)
+{
+    return nullptr;
+}
+
+CBlend* OzzKinematics::PlayFX(MotionID /*M*/, float /*power_scale*/)
+{
+    return nullptr;
+}
+
+CBlend* OzzKinematics::PlayFX_Safe(cpcstr /*N*/, float /*power_scale*/)
+{
+    return nullptr;
+}
+
+const CPartition& OzzKinematics::partitions() const
+{
+    return default_partition_;
+}
+
+float OzzKinematics::get_animation_length(MotionID /*motion_ID*/)
+{
+    if (animation_controller_)
+        return animation_controller_->Duration();
+    return 0.f;
+}
+
 IRenderVisual* OzzKinematics::dcast_RenderVisual()
 {
     NotImplemented(__FUNCTION__);
     return nullptr;
 }
 
+IKinematics* OzzKinematics::dcast_PKinematics()
+{
+    return this;
+}
+
 IKinematicsAnimated* OzzKinematics::dcast_PKinematicsAnimated()
 {
-    NotImplemented(__FUNCTION__);
-    return nullptr;
+    return this;
 }
 
 #ifdef DEBUG
+std::pair<LPCSTR, LPCSTR> OzzKinematics::LL_MotionDefName_dbg(MotionID /*ID*/)
+{
+    static xr_string empty;
+    return { empty.c_str(), empty.c_str() };
+}
+
+void OzzKinematics::LL_DumpBlends_dbg()
+{
+    Msg("[OzzKinematics] LL_DumpBlends_dbg not implemented");
+}
+
 void OzzKinematics::DebugRender(Fmatrix& /*XFORM*/)
 {
     NotImplemented(__FUNCTION__);

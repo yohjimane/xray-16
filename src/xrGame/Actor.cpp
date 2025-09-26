@@ -1611,6 +1611,9 @@ void CActor::shedule_Update(u32 DT)
 #include "debug_renderer.h"
 void CActor::renderable_Render(u32 context_id, IRenderable* root)
 {
+    IRenderVisual* vis = Visual();
+    IKinematics* kin = vis ? vis->dcast_PKinematics() : nullptr;
+
     VERIFY(_valid(XFORM()));
     inherited::renderable_Render(context_id, root);
     CInventoryOwner::renderable_Render(context_id, root);

@@ -2,6 +2,8 @@
 
 ## Latest Session Notes
 - `OzzKinematics` now evaluates bind pose and sampled animation with visibility masks, callbacks, and additional transforms; parity tests compare results against the legacy runtime.
+- Initialization guards prevent palette/skinning requests until `OzzKinematics` has populated bone instances, avoiding crashes during pooled visual swaps.
+- `OzzKinematics` implements `IKinematicsAnimated`, so gameplay callers obtain a valid `IKinematicsAnimated*` from `.ozzx` visuals while animation playback is proxied through the runtime.
 - README and docs updated to describe the façade-first strategy and highlight remaining work around `.ozzx` runtime integration.
 - `.ozzx` visuals instantiate CPU-skinned surfaces that honour engine containers (`xr_vector`, `xr_unique_ptr`) and feed geometry through the existing renderer; traversal code now treats `MT_OZZ_BUNDLE` like legacy skeletons.
 - Developer toggle `g_use_ozz_visuals` enables loading converted `.ozzx` bundles (e.g., `dev_stalker.ozzx`) through the standard model pool for in-engine smoke tests.
