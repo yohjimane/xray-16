@@ -558,10 +558,9 @@ void ParseMotions(const Chunk& chunk, const LegacyOmfData& params, LegacyOmfData
     }
 }
 
-LegacyOmfData ParseOmfFile(const std::filesystem::path& path, const xr_vector<xr_string>& skeleton_bone_names)
+LegacyOmfData ParseOmfBuffer(const std::byte* data, size_t size, const xr_vector<xr_string>& skeleton_bone_names)
 {
-    const auto data = LoadFileBytes(path);
-    const auto chunks = ParseChunks(data.data(), data.size());
+    const auto chunks = ParseChunks(data, size);
 
     const auto params_it = chunks.find(OGF_S_SMPARAMS);
     if (params_it == chunks.end())
@@ -575,6 +574,12 @@ LegacyOmfData ParseOmfFile(const std::filesystem::path& path, const xr_vector<xr
     ParseSmparams(params_it->second, skeleton_bone_names, output);
     ParseMotions(motions_it->second, output, output);
     return output;
+}
+
+LegacyOmfData ParseOmfFile(const std::filesystem::path& path, const xr_vector<xr_string>& skeleton_bone_names)
+{
+    const auto data = LoadFileBytes(path);
+    return ParseOmfBuffer(data.data(), data.size(), skeleton_bone_names);
 }
 
 ozz::animation::offline::RawAnimation BuildRawAnimation(const LegacyOmfMotion& motion, const LegacyOmfData& omf)
@@ -661,17 +666,13 @@ LegacyOmfMotion const* FindMotionByName(const LegacyOmfData& omf, const xr_strin
     }
     return nullptr;
 }
-} // namespace
 
-bool ConvertLegacyOmf(const std::filesystem::path& omf_path,
-                      const xr_vector<xr_string>& skeleton_bone_names,
-                      const ozz::animation::Skeleton& skeleton,
-                      xr_vector<ConvertedOmfAnimation>& out_animations,
-                      std::optional<xr_string> motion_filter,
-                      bool optimize)
+bool ConvertLegacyOmfImpl(const LegacyOmfData& omf,
+    const ozz::animation::Skeleton& skeleton,
+    xr_vector<ConvertedOmfAnimation>& out_animations,
+    const std::optional<xr_string>& motion_filter,
+    bool optimize)
 {
-    LegacyOmfData omf = ParseOmfFile(omf_path, skeleton_bone_names);
-
     out_animations.clear();
 
     if (motion_filter)
@@ -688,6 +689,33 @@ bool ConvertLegacyOmf(const std::filesystem::path& omf_path,
         out_animations.emplace_back(BuildConvertedAnimation(motion, omf, skeleton, optimize));
 
     return true;
+}
+} // namespace
+
+bool ConvertLegacyOmf(const std::filesystem::path& omf_path,
+                      const xr_vector<xr_string>& skeleton_bone_names,
+                      const ozz::animation::Skeleton& skeleton,
+                      xr_vector<ConvertedOmfAnimation>& out_animations,
+                      std::optional<xr_string> motion_filter,
+                      bool optimize)
+{
+    LegacyOmfData omf = ParseOmfFile(omf_path, skeleton_bone_names);
+    return ConvertLegacyOmfImpl(omf, skeleton, out_animations, motion_filter, optimize);
+}
+
+bool ConvertLegacyOmf(const std::byte* data,
+                      size_t size,
+                      const xr_vector<xr_string>& skeleton_bone_names,
+                      const ozz::animation::Skeleton& skeleton,
+                      xr_vector<ConvertedOmfAnimation>& out_animations,
+                      std::optional<xr_string> motion_filter,
+                      bool optimize)
+{
+    if (!data || size == 0)
+        return false;
+
+    LegacyOmfData omf = ParseOmfBuffer(data, size, skeleton_bone_names);
+    return ConvertLegacyOmfImpl(omf, skeleton, out_animations, motion_filter, optimize);
 }
 }
 } // namespace XRay::Animation

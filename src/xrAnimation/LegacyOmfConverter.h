@@ -3,6 +3,7 @@
 #include "xrCommon/xr_string.h"
 #include "xrCommon/xr_vector.h"
 
+#include <cstddef>
 #include <filesystem>
 #include <memory>
 #include <optional>
@@ -76,6 +77,14 @@ struct ConvertedOmfAnimation
 };
 
 bool ConvertLegacyOmf(const std::filesystem::path& omf_path,
+                      const xr_vector<xr_string>& skeleton_bone_names,
+                      const ozz::animation::Skeleton& skeleton,
+                      xr_vector<ConvertedOmfAnimation>& out_animations,
+                      std::optional<xr_string> motion_filter = std::nullopt,
+                      bool optimize = false);
+
+bool ConvertLegacyOmf(const std::byte* data,
+                      size_t size,
                       const xr_vector<xr_string>& skeleton_bone_names,
                       const ozz::animation::Skeleton& skeleton,
                       xr_vector<ConvertedOmfAnimation>& out_animations,

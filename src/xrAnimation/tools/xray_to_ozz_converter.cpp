@@ -2386,7 +2386,7 @@ void convert_bundle(const BundleConfig& config)
 
     const auto duration_ms = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - start_time).count();
 
-    std::cout << "Converted bundle written to " << config.output_ozzx << " (" << duration_ms << " ms)" << std::endl;
+    std::cout << "Converted bundle written to " << config.output_ozzx << " (" << duration_ms << " ms, version=" << bundle.version <<")" << std::endl;
 }
 } // namespace
 

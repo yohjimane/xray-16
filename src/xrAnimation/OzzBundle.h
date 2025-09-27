@@ -14,7 +14,7 @@ namespace Animation
 {
 struct OzzxBundle
 {
-    std::uint32_t version = 1;
+    std::uint32_t version{ 2u };
     std::vector<std::uint8_t> skeleton;
     std::vector<std::uint8_t> mesh;
     xr_vector<xr_string> motion_refs;

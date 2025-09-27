@@ -99,8 +99,6 @@ public:
     void Copy(dxRender_Visual* from) override;
     void Release() override;
 
-    void MarkDirty() { dirty_ = true; }
-
 private:
     struct Influence
     {
@@ -134,7 +132,6 @@ private:
     ref_geom geom_;
     u32 vertex_count_ = 0;
     u32 primitive_count_ = 0;
-    bool dirty_ = true;
 };
 
 static inline Fvector2 ReadUV(const ozz::vector<float>& uvs, int index)
@@ -272,23 +269,18 @@ void COzzSkinnedSurface::InitializeGeometry(const ozz::sample::Mesh& mesh)
         vis.box.modify(vertex.position);
     }
     vis.box.getsphere(vis.sphere.P, vis.sphere.R);
-
-    dirty_ = true;
 }
 
 void COzzSkinnedSurface::UpdateGeometry()
 {
-    if (!dirty_ || source_vertices_.empty())
-        return;
-
     if (!owner_.IsKinematicsReady())
     {
-        dirty_ = true;
         return;
     }
 
     const xr_vector<Fmatrix>& palette = owner_.SkinningPalette();
-    if (palette.empty())
+
+    if (source_vertices_.empty() || palette.empty())
         return;
 
     xr_vector<Fmatrix> remapped_palette(joint_remaps_.size());
@@ -315,7 +307,6 @@ void COzzSkinnedSurface::UpdateGeometry()
 
     if (!vertex_buffer_ || !vertex_buffer_->IsValid() || vertex_count_ == 0)
     {
-        dirty_ = false;
         return;
     }
 
@@ -375,7 +366,6 @@ void COzzSkinnedSurface::UpdateGeometry()
     }
 
     vertex_buffer_->Unmap();
-    dirty_ = false;
 
 #ifdef DEBUG
     int idx_debug_print_ = 0;
@@ -611,11 +601,6 @@ void COzzKinematicsVisual::UpdateBounds()
 void COzzKinematicsVisual::UpdateSkinningPalette()
 {
     palette_dirty_ = true;
-    for (auto* surface : surfaces_)
-    {
-        if (surface)
-            surface->MarkDirty();
-    }
 }
 
 void COzzKinematicsVisual::EnsureSkinningPalette()

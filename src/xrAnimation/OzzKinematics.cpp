@@ -15,6 +15,7 @@
 #include "ozz/base/span.h"
 
 #include <algorithm>
+#include <cstring>
 #include <vector>
 
 namespace XRay
@@ -376,17 +377,52 @@ bool OzzKinematics::ConvertLegacyOmfFile(const xr_string& relative_path, const x
         return true;
 
     string_path resolved;
-    if (!FS.exist(resolved, "$level$", relative_path.c_str()))
+    const char* search_roots[] = { "$level$", "$game_meshes$" };
+    const char* located_root = nullptr;
+    FileStatus status(false, false);
+
+    for (const char* root : search_roots)
     {
-        if (!FS.exist(resolved, "$game_meshes$", relative_path.c_str()))
+        status = FS.exist(resolved, root, relative_path.c_str());
+        if (status)
         {
-            Msg("[ozz] legacy animation source '%s' not found", relative_path.c_str());
-            return false;
+            located_root = root;
+            break;
         }
     }
 
+    if (!located_root)
+    {
+        Msg("[ozz] legacy animation source '%s' not found", relative_path.c_str());
+        return false;
+    }
+
     xr_vector<ConvertedOmfAnimation> converted;
-    if (!ConvertLegacyOmf(std::filesystem::path(resolved), skeleton_bone_names, skeleton_, converted))
+    bool converted_ok = false;
+
+    if (status.External)
+    {
+        converted_ok = ConvertLegacyOmf(std::filesystem::path(resolved), skeleton_bone_names, skeleton_, converted);
+    }
+    else
+    {
+        IReader* reader = FS.r_open(located_root, relative_path.c_str());
+        if (!reader)
+        {
+            Msg("[ozz] legacy animation source '%s' could not be opened", relative_path.c_str());
+            return false;
+        }
+
+        const size_t payload_size = static_cast<size_t>(reader->length());
+        xr_vector<std::byte> payload(payload_size);
+        if (payload_size > 0)
+            std::memcpy(payload.data(), reader->pointer(), payload_size);
+        FS.r_close(reader);
+
+        converted_ok = ConvertLegacyOmf(payload.data(), payload.size(), skeleton_bone_names, skeleton_, converted);
+    }
+
+    if (!converted_ok)
     {
         Msg("[ozz] failed to convert legacy animation '%s'", relative_path.c_str());
         return false;

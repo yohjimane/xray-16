@@ -2,6 +2,7 @@
 
 ## Latest Session Notes
 - `OzzKinematics` now evaluates bind pose and sampled animation with visibility masks, callbacks, and additional transforms; parity tests compare results against the legacy runtime.
+- Legacy motion conversion pulls `.omf` payloads through the virtual filesystem, so packaged `.db` archives work without unpacking assets when `OzzKinematics` converts legacy motions on demand.
 - Initialization guards prevent palette/skinning requests until `OzzKinematics` has populated bone instances, avoiding crashes during pooled visual swaps.
 - `OzzKinematics` implements `IKinematicsAnimated`, so gameplay callers obtain a valid `IKinematicsAnimated*` from `.ozzx` visuals while animation playback is proxied through the runtime.
 - README and docs updated to describe the façade-first strategy and highlight remaining work around `.ozzx` runtime integration.
