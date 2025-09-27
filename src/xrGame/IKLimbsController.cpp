@@ -15,6 +15,7 @@
 #ifdef DEBUG
 #include "PHDebug.h"
 #endif // DEBUG
+#include "xrCore/FMesh.hpp"
 
 CIKLimbsController::CIKLimbsController()
 #ifdef DEBUG
@@ -32,7 +33,8 @@ void CIKLimbsController::Create(CGameObject* O)
     m_object = O;
     VERIFY(K);
 
-    m_supports_ozz = (m_object->Visual()->dcast_PKinematicsAnimated() == nullptr);
+    IRenderVisual* visual = m_object->Visual();
+    m_supports_ozz = visual && visual->getType() == MT_OZZ_BUNDLE;
     m_pending_legacy_teardown = false;
 
     if (m_supports_ozz)
@@ -81,8 +83,8 @@ void CIKLimbsController::LimbCalculate(SCalculateData& cd)
         return;
     }
 
-    cd.do_collide = m_legs_blend &&
-        !cd.m_limb->KinematicsAnimated()->LL_GetMotionDef(m_legs_blend->motionID)->marks.empty(); // m_legs_blend->;
+    auto* motion_def = m_legs_blend ? cd.m_limb->KinematicsAnimated()->LL_GetMotionDef(m_legs_blend->motionID) : nullptr;
+    cd.do_collide = (m_legs_blend != nullptr) && (motion_def != nullptr) && !motion_def->marks.empty();
     cd.m_limb->ApplyState(cd);
 }
 

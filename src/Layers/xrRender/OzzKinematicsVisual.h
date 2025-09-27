@@ -40,6 +40,7 @@ public:
     bool LoadFromBundle(const char* name, const std::filesystem::path& path);
 
     IKinematics* dcast_PKinematics() override { return &kinematics_; }
+    IKinematicsAnimated* dcast_PKinematicsAnimated() override { return &kinematics_; }
 
     OzzKinematics& Kinematics() { return kinematics_; }
     bool HasGeometry() const { return !meshes_.empty(); }

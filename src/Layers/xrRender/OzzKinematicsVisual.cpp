@@ -161,7 +161,7 @@ static inline Fvector4 ReadVector4(const ozz::vector<float>& data, int index, in
 COzzSkinnedSurface::COzzSkinnedSurface(COzzKinematicsVisual& owner, const ozz::sample::Mesh& mesh)
     : owner_(owner)
 {
-    Type = MT_OZZ_BUNDLE;
+    Type = MT_PROGRESSIVE;
     InitializeGeometry(mesh);
 }
 

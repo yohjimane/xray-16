@@ -128,6 +128,7 @@ void CGameObject::cNameVisual_set(shared_str N)
     // replace model
     if (*N && N[0])
     {
+        OnBeforeChangeVisual();
         IRenderVisual* old_v = renderable.visual;
         NameVisual = N;
         pcstr requested_visual = *N;
