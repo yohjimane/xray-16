@@ -23,6 +23,7 @@ namespace xray::render::RENDER_NAMESPACE
 {
 using inherited = FHierrarhyVisual;
 using XRay::Animation::ConvertOzzMatrixToXRay;
+using XRay::Animation::ConvertOzzVectorToXRay;
 
 namespace
 {
@@ -287,26 +288,29 @@ void COzzSkinnedSurface::UpdateGeometry()
     }
 
     const xr_vector<Fmatrix>& palette = owner_.SkinningPalette();
+    if (palette.empty())
+        return;
 
-    xr_vector<Fmatrix> skin_matrices(inverse_bind_poses_.size());
-    for (size_t idx = 0; idx < inverse_bind_poses_.size(); ++idx)
+    xr_vector<Fmatrix> remapped_palette(joint_remaps_.size());
+    for (size_t idx = 0; idx < joint_remaps_.size(); ++idx)
     {
-        const u16 bone_index = (idx < joint_remaps_.size()) ? joint_remaps_[idx] : 0;
+        const u16 bone_index = joint_remaps_[idx];
         if (bone_index < palette.size())
         {
-            skin_matrices[idx].mul_43(palette[bone_index], inverse_bind_poses_[idx]);
+            remapped_palette[idx] = palette[bone_index];
 #ifdef DEBUG
             if (idx < 4)
             {
                 const Fmatrix& bone = palette[bone_index];
-                Msg("[ozz][surface] matrix idx=%zu bone=%u palette row0(%.3f %.3f %.3f %.3f) inverse row0(%.3f %.3f %.3f %.3f)", idx,
-                    bone_index, bone._11, bone._12, bone._13, bone._14, inverse_bind_poses_[idx]._11, inverse_bind_poses_[idx]._12,
-                    inverse_bind_poses_[idx]._13, inverse_bind_poses_[idx]._14);
+                Msg("[ozz][surface] palette idx=%zu bone=%u row0(%.3f %.3f %.3f %.3f)", idx, bone_index, bone._11, bone._12,
+                    bone._13, bone._14);
             }
 #endif
         }
         else
-            skin_matrices[idx] = inverse_bind_poses_[idx];
+        {
+            remapped_palette[idx] = Fidentity;
+        }
     }
 
     if (!vertex_buffer_ || !vertex_buffer_->IsValid() || vertex_count_ == 0)
@@ -330,7 +334,7 @@ void COzzSkinnedSurface::UpdateGeometry()
             if (data.weight <= 0.f)
                 continue;
 
-            const Fmatrix& skin = (data.remap_index < skin_matrices.size()) ? skin_matrices[data.remap_index] : Fidentity;
+            const Fmatrix& skin = (data.remap_index < remapped_palette.size()) ? remapped_palette[data.remap_index] : Fidentity;
 
             Fvector contribution;
             skin.transform_tiny(contribution, src.position);

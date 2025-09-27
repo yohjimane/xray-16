@@ -8,6 +8,15 @@ namespace XRay
 {
 namespace Animation
 {
+inline Fvector3 ConvertOzzVectorToXRay(float x, float y, float z)
+{
+    Fvector3 result;
+    result.x = x;
+    result.y = y;
+    result.z = -z;
+    return result;
+}
+
 inline Fmatrix CopyOzzMatrixToFMatrix(const ozz::math::Float4x4& matrix)
 {
     float column[4];

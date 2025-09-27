@@ -31,11 +31,15 @@ void CIKLimbsController::Create(CGameObject* O)
 
     IKinematics* K = smart_cast<IKinematics*>(O->Visual());
     m_object = O;
-    VERIFY(K);
 
     IRenderVisual* visual = m_object->Visual();
     m_supports_ozz = visual && visual->getType() == MT_OZZ_BUNDLE;
     m_pending_legacy_teardown = false;
+
+    if (!K)
+    {
+        m_supports_ozz = true;
+    }
 
     if (m_supports_ozz)
     {
@@ -46,6 +50,8 @@ void CIKLimbsController::Create(CGameObject* O)
         _bone_chains.clear();
         return;
     }
+
+    VERIFY(K);
 
     u16 sz = 2;
     if (K->LL_UserData() && K->LL_UserData()->section_exist("ik"))

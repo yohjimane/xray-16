@@ -1141,7 +1141,9 @@ bool CGameObject::UsedAI_Locations() { return (m_server_flags.test(CSE_ALifeObje
 bool CGameObject::TestServerFlag(u32 Flag) const { return (m_server_flags.test(Flag)); }
 void CGameObject::add_visual_callback(visual_callback callback)
 {
-    VERIFY(smart_cast<IKinematics*>(Visual()));
+    IKinematics* kinematics = smart_cast<IKinematics*>(Visual());
+    if (!kinematics)
+        return;
     [[maybe_unused]] auto I = std::find(visual_callbacks().begin(), visual_callbacks().end(), callback);
     VERIFY(I == visual_callbacks().end());
 
@@ -1165,10 +1167,13 @@ void CGameObject::SetKinematicsCallback(bool set)
 {
     if (!Visual())
         return;
-    if (set)
-        smart_cast<IKinematics*>(Visual())->Callback(VisualCallback, this);
-    else
-        smart_cast<IKinematics*>(Visual())->Callback(0, 0);
+    if (IKinematics* kin = smart_cast<IKinematics*>(Visual()))
+    {
+        if (set)
+            kin->Callback(VisualCallback, this);
+        else
+            kin->Callback(0, 0);
+    }
 };
 
 void VisualCallback(IKinematics* tpKinematics)
