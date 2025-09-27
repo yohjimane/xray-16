@@ -72,6 +72,7 @@ struct OzzGpuVertex
 {
     Fvector position;
     Fvector normal;
+    Fvector binormal;
     Fvector4 tangent;
     Fvector2 uv;
 };
@@ -80,8 +81,9 @@ constexpr VertexElement OzzVertexDecl[] =
 {
     { 0, 0,  D3DDECLTYPE_FLOAT3, D3DDECLMETHOD_DEFAULT, D3DDECLUSAGE_POSITION, 0 },
     { 0, 12, D3DDECLTYPE_FLOAT3, D3DDECLMETHOD_DEFAULT, D3DDECLUSAGE_NORMAL,   0 },
-    { 0, 24, D3DDECLTYPE_FLOAT4, D3DDECLMETHOD_DEFAULT, D3DDECLUSAGE_TANGENT,  0 },
-    { 0, 40, D3DDECLTYPE_FLOAT2, D3DDECLMETHOD_DEFAULT, D3DDECLUSAGE_TEXCOORD, 0 },
+    { 0, 24, D3DDECLTYPE_FLOAT3, D3DDECLMETHOD_DEFAULT, D3DDECLUSAGE_BINORMAL, 0 },
+    { 0, 36, D3DDECLTYPE_FLOAT4, D3DDECLMETHOD_DEFAULT, D3DDECLUSAGE_TANGENT,  0 },
+    { 0, 52, D3DDECLTYPE_FLOAT2, D3DDECLMETHOD_DEFAULT, D3DDECLUSAGE_TEXCOORD, 0 },
     D3DDECL_END()
 };
 } // namespace
@@ -163,8 +165,11 @@ COzzSkinnedSurface::COzzSkinnedSurface(COzzKinematicsVisual& owner, const ozz::s
 {
     Type = MT_PROGRESSIVE;
     InitializeGeometry(mesh);
+    dbg_name = mesh.xray_metadata.texture_path.c_str();
+    Msg("Yohji debug - init COzzSkinnedSurface %s", dbg_name.c_str());
 }
 
+using XRay::Animation::ConvertOzzMatrixToXRay;
 void COzzSkinnedSurface::InitializeGeometry(const ozz::sample::Mesh& mesh)
 {
     vertex_count_ = static_cast<u32>(mesh.vertex_count());
@@ -260,6 +265,13 @@ void COzzSkinnedSurface::InitializeGeometry(const ozz::sample::Mesh& mesh)
 
     geom_.create(OzzVertexDecl, *vertex_buffer_, *index_buffer_);
 
+    vis.box.invalidate();
+    for (const SourceVertex& vertex : source_vertices_)
+    {
+        vis.box.modify(vertex.position);
+    }
+    vis.box.getsphere(vis.sphere.P, vis.sphere.R);
+
     dirty_ = true;
 }
 
@@ -281,7 +293,18 @@ void COzzSkinnedSurface::UpdateGeometry()
     {
         const u16 bone_index = (idx < joint_remaps_.size()) ? joint_remaps_[idx] : 0;
         if (bone_index < palette.size())
+        {
             skin_matrices[idx].mul_43(palette[bone_index], inverse_bind_poses_[idx]);
+#ifdef DEBUG
+            if (idx < 4)
+            {
+                const Fmatrix& bone = palette[bone_index];
+                Msg("[ozz][surface] matrix idx=%zu bone=%u palette row0(%.3f %.3f %.3f %.3f) inverse row0(%.3f %.3f %.3f %.3f)", idx,
+                    bone_index, bone._11, bone._12, bone._13, bone._14, inverse_bind_poses_[idx]._11, inverse_bind_poses_[idx]._12,
+                    inverse_bind_poses_[idx]._13, inverse_bind_poses_[idx]._14);
+            }
+#endif
+        }
         else
             skin_matrices[idx] = inverse_bind_poses_[idx];
     }
@@ -328,15 +351,38 @@ void COzzSkinnedSurface::UpdateGeometry()
         if (skinned_tangent.square_magnitude() > EPS_S)
             skinned_tangent.normalize();
 
+        Fvector tangent_dir = skinned_tangent;
+        float tangent_sign = src.tangent.w;
+        if (tangent_dir.square_magnitude() > EPS_S)
+            tangent_dir.normalize();
+        else
+            tangent_dir.set(0.f, 0.f, 0.f);
+
+        Fvector binormal;
+        binormal.crossproduct(skinned_normal, tangent_dir);
+        binormal.mul(tangent_sign);
+
         OzzGpuVertex& dst = gpu_vertices[vertex];
         dst.position = skinned_pos;
         dst.normal = skinned_normal;
-        dst.tangent.set(skinned_tangent.x, skinned_tangent.y, skinned_tangent.z, src.tangent.w);
+        dst.binormal = binormal;
+        dst.tangent.set(tangent_dir.x, tangent_dir.y, tangent_dir.z, tangent_sign);
         dst.uv = src.uv;
     }
 
     vertex_buffer_->Unmap();
     dirty_ = false;
+
+#ifdef DEBUG
+    int idx_debug_print_ = 0;
+    if (vertex_count_ && idx_debug_print_ < 5)
+    {
+        const OzzGpuVertex& v = gpu_vertices[0];
+        Msg("[ozz][surface] skinned v0 pos(%.3f %.3f %.3f) normal(%.3f %.3f %.3f)", v.position.x, v.position.y, v.position.z,
+            v.normal.x, v.normal.y, v.normal.z);
+        ++idx_debug_print_;
+    }
+#endif
 }
 
 void COzzSkinnedSurface::Render(CBackend& cmd_list, float, bool)
@@ -476,6 +522,9 @@ bool COzzKinematicsVisual::LoadFromBundle(const char* name, const std::filesyste
     xr_string init_error = "Failed to initialize OzzKinematics from bundle: ";
     init_error += path.string().c_str();
     R_ASSERT2(InitializeFromPayload(), init_error.c_str());
+
+    Msg("Yohji debug - init COzzKinematicsVisual %s", dbg_name.c_str());
+
 
     return true;
 }

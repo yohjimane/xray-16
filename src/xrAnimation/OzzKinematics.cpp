@@ -524,6 +524,7 @@ bool OzzKinematics::FinalizeSkeletonInitialization(pcstr debug_source)
     return true;
 }
 
+using XRay::Animation::ConvertOzzMatrixToXRay;
 bool OzzKinematics::BuildBoneMetadata()
 {
     const int joint_count = skeleton_.num_joints();
