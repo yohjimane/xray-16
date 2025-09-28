@@ -25,7 +25,7 @@
 1. `CalculateBones` checks the same throttle fields (`UCalc_Time`, `UCalc_Interval`) to preserve caller expectations.
 2. When evaluation is required, run Ozz sampling (`SamplingJob`) with the current animation state (populated by the upcoming `OzzKinematicsAnimated`).
 3. Run `LocalToModelJob` to obtain model-space matrices (ozz column-major float4x4).
-4. Convert each transform to X-Ray `Fmatrix` (row-major, with `(X, -Z, Y)` swizzle per coordinate system reference) and write into the corresponding `CBoneInstance.mTransform`. Apply additional bone transforms (ABT) and callbacks afterwards to preserve legacy overrides.
+4. Convert each transform to X-Ray `Fmatrix` (row-major, applying the `(X, Y, -Z)` swizzle per coordinate system reference) and write into the corresponding `CBoneInstance.mTransform`. Apply additional bone transforms (ABT) and callbacks afterwards to preserve legacy overrides.
 5. Update `mRenderTransform` using precomputed `m2b_transform` exactly as `CKinematics::CLBone` does today so render skinning remains unchanged.
 6. Recompute visibility bounding volumes when the throttle dictates, filling `vis.box` / `vis.sphere` to satisfy `GetBox()` semantics.
 

@@ -23,7 +23,6 @@ namespace xray::render::RENDER_NAMESPACE
 {
 using inherited = FHierrarhyVisual;
 using XRay::Animation::ConvertOzzMatrixToXRay;
-using XRay::Animation::ConvertOzzVectorToXRay;
 
 namespace
 {
@@ -167,7 +166,6 @@ COzzSkinnedSurface::COzzSkinnedSurface(COzzKinematicsVisual& owner, const ozz::s
     Msg("Yohji debug - init COzzSkinnedSurface %s", dbg_name.c_str());
 }
 
-using XRay::Animation::ConvertOzzMatrixToXRay;
 void COzzSkinnedSurface::InitializeGeometry(const ozz::sample::Mesh& mesh)
 {
     vertex_count_ = static_cast<u32>(mesh.vertex_count());
@@ -603,7 +601,7 @@ void COzzKinematicsVisual::EnsureSkinningPalette()
     const u32 frame_id = Device.dwFrame;
     if (frame_id != last_animation_update_frame_ && UpdateAnimation(Device.fTimeDelta))
     {
-            last_animation_update_frame_ = frame_id;
+        last_animation_update_frame_ = frame_id;
     }
 
     if (!kinematics_.HasBones())

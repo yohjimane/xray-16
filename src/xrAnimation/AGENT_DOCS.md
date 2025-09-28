@@ -62,7 +62,7 @@
 
 ## Coordinate System Reference
 - X-Ray is Y-up; ozz/OpenGL is Z-up.
-- Converter outputs skeletons/meshes already in ozz space using `(X, Y, Z)_XRAY → (X, -Z, Y)_ozz`; the runtime now consumes those matrices directly (no additional rotation) so palette and vertex data stay in the same basis.
+- Converter outputs skeletons/meshes already in ozz space using the direct basis flip `(X, Y, Z)_XRAY → (X, Y, -Z)_ozz`; the runtime consumes the inverse (`(X, Y, Z)_ozz → (X, Y, -Z)_XRAY`) so palettes and vertex data share the same frame.
 
 ## Tools & Scripts
 - `convert_assets.sh` (workspace root): converts `res/testdata/npc/stalker_hero_1.ogf` and `res/testdata/npc/critical_hit_grup_1.omf` into `.ozz` assets under `asset_tests/`.

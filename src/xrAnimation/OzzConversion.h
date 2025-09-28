@@ -16,17 +16,12 @@ using Matrix4 = std::array<std::array<float, 4>, 4>;
 
 constexpr Matrix4 kXrayToOzz = {
     std::array<float, 4>{ 1.f, 0.f,  0.f, 0.f },
-    std::array<float, 4>{ 0.f, 0.f, -1.f, 0.f },
     std::array<float, 4>{ 0.f, 1.f,  0.f, 0.f },
+    std::array<float, 4>{ 0.f, 0.f, -1.f, 0.f },
     std::array<float, 4>{ 0.f, 0.f,  0.f, 1.f }
 };
 
-constexpr Matrix4 kOzzToXray = {
-    std::array<float, 4>{ 1.f, 0.f, 0.f, 0.f },
-    std::array<float, 4>{ 0.f, 0.f, 1.f, 0.f },
-    std::array<float, 4>{ 0.f,-1.f, 0.f, 0.f },
-    std::array<float, 4>{ 0.f, 0.f, 0.f, 1.f }
-};
+constexpr Matrix4 kOzzToXray = kXrayToOzz;
 
 inline Matrix4 Multiply(const Matrix4& lhs, const Matrix4& rhs)
 {
@@ -85,23 +80,10 @@ inline std::array<float, 3> ApplyBasis(const Matrix4& basis, const std::array<fl
 }
 } // namespace detail
 
-inline Fvector3 ConvertOzzVectorToXRay(float x, float y, float z)
-{
-    const std::array<float, 3> source{ x, y, z };
-    const auto xray = detail::ApplyBasis(detail::kOzzToXray, source);
-
-    Fvector3 result;
-    result.x = xray[0];
-    result.y = xray[1];
-    result.z = xray[2];
-    return result;
-}
-
 inline Fmatrix ConvertOzzMatrixToXRay(const ozz::math::Float4x4& matrix)
 {
     const auto ozz = detail::LoadOzzMatrix(matrix);
-    const auto xray = detail::ChangeBasis(ozz, detail::kOzzToXray, detail::kXrayToOzz);
-    return detail::ToFmatrix(xray);
+    return detail::ToFmatrix(ozz);
 }
 } // namespace Animation
 } // namespace XRay
