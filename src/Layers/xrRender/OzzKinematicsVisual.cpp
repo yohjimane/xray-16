@@ -279,6 +279,7 @@ void COzzSkinnedSurface::UpdateGeometry()
     }
 
     const xr_vector<Fmatrix>& palette = owner_.SkinningPalette();
+    OzzKinematics& kinematics = owner_.Kinematics();
 
     if (source_vertices_.empty() || palette.empty())
         return;
@@ -287,22 +288,13 @@ void COzzSkinnedSurface::UpdateGeometry()
     for (size_t idx = 0; idx < joint_remaps_.size(); ++idx)
     {
         const u16 bone_index = joint_remaps_[idx];
-        if (bone_index < palette.size())
-        {
-            remapped_palette[idx] = palette[bone_index];
-#ifdef DEBUG
-            if (idx < 4)
-            {
-                const Fmatrix& bone = palette[bone_index];
-                Msg("[ozz][surface] palette idx=%zu bone=%u row0(%.3f %.3f %.3f %.3f)", idx, bone_index, bone._11, bone._12,
-                    bone._13, bone._14);
-            }
-#endif
-        }
-        else
+        if (bone_index >= palette.size())
         {
             remapped_palette[idx] = Fidentity;
+            continue;
         }
+
+        remapped_palette[idx].set(kinematics.LL_GetTransform_R(bone_index));
     }
 
     if (!vertex_buffer_ || !vertex_buffer_->IsValid() || vertex_count_ == 0)
