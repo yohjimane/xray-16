@@ -1,6 +1,7 @@
 # AGENT_DOCS.md - AI Assistant Guide
 
 ## Latest Session Notes
+- Runtime conversion bug traced to missing inverse basis: `ConvertOzzMatrixToXRay` now applies a direct Ozz→X-Ray change-of-basis (`kOzzToXray`), fixing flipped bind poses while keeping legacy palette math intact. The converter switched to the matching direct `kXrayToOzz` transform, dropping the confusing Blender intermediate.
 - `OzzKinematics` now evaluates bind pose and sampled animation with visibility masks, callbacks, and additional transforms; parity tests compare results against the legacy runtime.
 - Legacy motion conversion pulls `.omf` payloads through the virtual filesystem, so packaged `.db` archives work without unpacking assets when `OzzKinematics` converts legacy motions on demand.
 - Initialization guards prevent palette/skinning requests until `OzzKinematics` has populated bone instances, avoiding crashes during pooled visual swaps.
@@ -12,6 +13,7 @@
 - Console helpers `debug_dump_ozz_palette`, `debug_dump_ozz_palette_toggle`, and `g_dev_ozz_actor` snapshot Ozz bone palettes and hot-swap the actor to `dev_stalker.ozzx`, making in-engine parity checks reproducible.
 - IK limbs and step manager paths now bail out cleanly when an Ozz visual is active, so missing `IKinematicsAnimated` no longer hard-asserts during experiments.
 - `OzzBundleRuntime` regression test hydrates `OzzKinematics` and mesh payloads from a `.ozzx` bundle to guard bundle/runtime parity.
+- Parity/unit tests require the generated `src/xrAnimation/tests/testdata/stalker_hero_1.ozz` and `.ozzx` fixtures; rerun `convert_assets.sh` if they are missing before executing the suites.
 
 ## Active Objective
 - Integrate a runtime visual that consumes `.ozzx` bundles, owns an `OzzKinematics`, and pushes bone palettes into the renderer/model pool.

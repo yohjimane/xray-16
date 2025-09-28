@@ -70,27 +70,18 @@ namespace detail
 {
 using Matrix4 = std::array<std::array<float, 4>, 4>;
 
-constexpr Matrix4 kXrayToBlender = {
-    std::array<float, 4>{ 1.f, 0.f, 0.f, 0.f },
-     std::array<float, 4>{ 0.f, 0.f, 1.f, 0.f },
-     std::array<float, 4>{ 0.f, 1.f, 0.f, 0.f },
-    std::array<float, 4>{ 0.f, 0.f, 0.f, 1.f }
-};
-
-constexpr Matrix4 kXrayToBlenderInverse = kXrayToBlender;
-
-constexpr Matrix4 kBlenderToOzz = {
-    std::array<float, 4>{ 1.f,  0.f, 0.f, 0.f },
-     std::array<float, 4>{ 0.f,  0.f, 1.f, 0.f },
-     std::array<float, 4>{ 0.f, -1.f, 0.f, 0.f },
-    std::array<float, 4>{ 0.f,  0.f, 0.f, 1.f }
-};
-
-constexpr Matrix4 kOzzToBlender = {
+constexpr Matrix4 kXrayToOzz = {
     std::array<float, 4>{ 1.f, 0.f,  0.f, 0.f },
-     std::array<float, 4>{ 0.f, 0.f, -1.f, 0.f },
-     std::array<float, 4>{ 0.f, 1.f,  0.f, 0.f },
+    std::array<float, 4>{ 0.f, 0.f, -1.f, 0.f },
+    std::array<float, 4>{ 0.f, 1.f,  0.f, 0.f },
     std::array<float, 4>{ 0.f, 0.f,  0.f, 1.f }
+};
+
+constexpr Matrix4 kOzzToXray = {
+    std::array<float, 4>{ 1.f, 0.f, 0.f, 0.f },
+    std::array<float, 4>{ 0.f, 0.f, 1.f, 0.f },
+    std::array<float, 4>{ 0.f,-1.f, 0.f, 0.f },
+    std::array<float, 4>{ 0.f, 0.f, 0.f, 1.f }
 };
 
 Matrix4 ToColumnMajor(const Fmatrix& source)
@@ -133,29 +124,9 @@ Matrix4 ChangeBasis(const Matrix4& matrix, const Matrix4& basis, const Matrix4& 
     return Multiply(Multiply(basis, matrix), basis_inverse);
 }
 
-Matrix4 ConvertXrayToBlender(const Matrix4& matrix)
-{
-    return ChangeBasis(matrix, kXrayToBlender, kXrayToBlenderInverse);
-}
-
-Matrix4 ConvertBlenderToOzz(const Matrix4& matrix)
-{
-    return ChangeBasis(matrix, kBlenderToOzz, kOzzToBlender);
-}
-
-Fmatrix ApplyXrayToBlender(const Fmatrix& matrix)
-{
-    return ToRowMajor(ConvertXrayToBlender(ToColumnMajor(matrix)));
-}
-
-Matrix4 ConvertBlenderLocalToOzz(const Fmatrix& matrix)
-{
-    return ConvertBlenderToOzz(ToColumnMajor(matrix));
-}
-
 Matrix4 ConvertXrayLocalToOzz(const Fmatrix& matrix)
 {
-    return ConvertBlenderToOzz(ConvertXrayToBlender(ToColumnMajor(matrix)));
+    return ChangeBasis(ToColumnMajor(matrix), kXrayToOzz, kOzzToXray);
 }
 
 std::array<float, 3> ApplyBasis(const Matrix4& matrix, const std::array<float, 3>& vector)
@@ -172,9 +143,7 @@ std::array<float, 3> ApplyBasis(const Matrix4& matrix, const std::array<float, 3
 std::array<float, 3> ConvertVectorXrayToOzz(const Fvector& v)
 {
     const std::array<float, 3> source{ v.x, v.y, v.z };
-    const auto blender = ApplyBasis(kXrayToBlender, source);
-    const auto ozz_vec = ApplyBasis(kBlenderToOzz, blender);
-    return ozz_vec;
+    return ApplyBasis(kXrayToOzz, source);
 }
 
 std::array<float, 2> ConvertUV(const Fvector2& uv)
@@ -964,14 +933,6 @@ void compute_global_transforms(std::vector<BoneRecord>& bones)
         }
 }
 
-void convert_locals_to_blender_basis(std::vector<BoneRecord>& bones)
-{
-    for (auto& bone : bones)
-    {
-        bone.local_transform = detail::ApplyXrayToBlender(bone.local_transform);
-    }
-}
-
 ozz::animation::offline::RawSkeleton build_raw_skeleton(const std::vector<BoneRecord>& bones)
 {
     std::vector<std::vector<int>> children(bones.size());
@@ -992,7 +953,7 @@ ozz::animation::offline::RawSkeleton build_raw_skeleton(const std::vector<BoneRe
     {
         const auto& bone = bones[static_cast<size_t>(index)];
         joint.name = bone.name.c_str();
-        const auto ozz_matrix = detail::ConvertBlenderLocalToOzz(bone.local_transform);
+        const auto ozz_matrix = detail::ConvertXrayLocalToOzz(bone.local_transform);
         joint.transform.translation = detail::ExtractTranslation(ozz_matrix);
         joint.transform.rotation = detail::ExtractQuaternion(ozz_matrix);
         joint.transform.scale = { 1.0f, 1.0f, 1.0f };
@@ -1026,7 +987,6 @@ std::vector<BoneRecord> load_skeleton_bones_from_ogf(const fs::path& path)
     read_ik_data(ik_data_it->second, bones);
     compute_hierarchy(bones);
     compute_local_transforms(bones);
-    convert_locals_to_blender_basis(bones);
     compute_global_transforms(bones);
     return bones;
 }
@@ -1461,7 +1421,7 @@ ozz::sample::Mesh build_mesh(const std::vector<MeshVertex>& vertices, const std:
             if (inserted)
             {
                 joint_remaps.push_back(bone_index);
-                const auto global_matrix = detail::ConvertBlenderToOzz(detail::ToColumnMajor(bones[bone_index].global_transform));
+                const auto global_matrix = detail::ConvertXrayLocalToOzz(bones[bone_index].global_transform);
                 const auto inverse_matrix = detail::InvertMatrix(global_matrix);
                 inverse_bind_poses.push_back(detail::ToOzzFloat4x4(inverse_matrix));
             }

@@ -470,7 +470,6 @@ bool COzzKinematicsVisual::InitializeFromPayload(bool spawn_children)
         kinematics_.SetLegacyMotionReferences(motion_references_);
 
     last_animation_update_frame_ = u32(-1);
-    palette_dirty_ = true;
 
     initialized_ = true;
 
@@ -565,7 +564,6 @@ void COzzKinematicsVisual::Release()
     children.clear();
     bone_palette_.clear();
     last_animation_update_frame_ = u32(-1);
-    palette_dirty_ = true;
     initialized_ = false;
     inherited::Release();
 }
@@ -592,7 +590,6 @@ void COzzKinematicsVisual::UpdateBounds()
 
 void COzzKinematicsVisual::UpdateSkinningPalette()
 {
-    palette_dirty_ = true;
 }
 
 void COzzKinematicsVisual::EnsureSkinningPalette()
@@ -600,31 +597,23 @@ void COzzKinematicsVisual::EnsureSkinningPalette()
     if (!initialized_ || !kinematics_.IsInitialized())
     {
         bone_palette_.clear();
-        palette_dirty_ = true;
         return;
     }
 
     const u32 frame_id = Device.dwFrame;
-    if (frame_id != last_animation_update_frame_)
+    if (frame_id != last_animation_update_frame_ && UpdateAnimation(Device.fTimeDelta))
     {
-        if (UpdateAnimation(Device.fTimeDelta))
-            palette_dirty_ = true;
-        last_animation_update_frame_ = frame_id;
+            last_animation_update_frame_ = frame_id;
     }
-
-    if (!palette_dirty_ && !bone_palette_.empty())
-        return;
 
     if (!kinematics_.HasBones())
     {
         bone_palette_.clear();
-        palette_dirty_ = false;
         return;
     }
 
     kinematics_.CalculateBones(TRUE);
     kinematics_.BuildSkinningPalette(bone_palette_, true);
-    palette_dirty_ = false;
 
     DebugDumpPalette(*this, bone_palette_);
 }
@@ -655,7 +644,6 @@ bool COzzKinematicsVisual::LoadAnimationFromFile(const std::filesystem::path& pa
         return false;
 
     last_animation_update_frame_ = u32(-1);
-    palette_dirty_ = true;
     return true;
 }
 
@@ -663,7 +651,6 @@ void COzzKinematicsVisual::StopAnimation()
 {
     kinematics_.StopAnimation();
     last_animation_update_frame_ = u32(-1);
-    palette_dirty_ = true;
 }
 
 bool COzzKinematicsVisual::UpdateAnimation(float dt)
@@ -677,7 +664,6 @@ bool COzzKinematicsVisual::PlayLegacyMotion(const xr_string& motion_name)
         return false;
 
     last_animation_update_frame_ = u32(-1);
-    palette_dirty_ = true;
     return true;
 }
 

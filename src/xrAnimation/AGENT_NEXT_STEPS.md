@@ -13,9 +13,11 @@
 1. **`.ozzx` Visual Integration**
    - Capture palette uploads and renderer hand-off for `COzzKinematicsVisual`, logging palette deltas to confirm the runtime path mirrors the façade.
    - Extend parity coverage so model pool normalization and bundle hydration stay deterministic.
+   - After the direct basis fix, validate the bind-pose forward axis and first animation frame inside the engine/debug CLI to ensure no residual orientation flips remain.
 2. **Pilot Actor / HUD Harness**
    - Wire a dev-only actor (or HUD item) to the new visual path, play a converted clip, and verify callbacks/physics hooks fire as expected.
    - Capture quirks encountered during animation events, ragdoll bind, or script exposure for follow-up fixes.
+   - Instrument palette dumps pre/post animation sampling to isolate the collapse we observed when the runtime matrices stayed in Ozz space; compare against parity baselines.
 3. **Runtime Telemetry & Docs**
    - Expose lightweight logging/profiling toggles to compare legacy vs. Ozz frame costs and update docs to reflect the façade + visual split.
 
@@ -34,3 +36,4 @@
 - Keep README/agent docs aligned with runtime capabilities after each milestone.
 - Plan the threading story once the façade + visual stabilise (per-actor buffers, deterministic job scheduling, telemetry hooks).
 - Trim build friction by disabling upstream ozz test targets that trigger DLL copy timeouts during CI or local runs.
+- Maintain the simplified direct X-Ray↔Ozz basis helpers across runtime and tools; avoid reintroducing Blender-dependent math paths when adding new converters or debug outputs.

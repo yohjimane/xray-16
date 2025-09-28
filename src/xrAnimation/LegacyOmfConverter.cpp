@@ -73,42 +73,23 @@ Matrix4 ChangeBasis(const Matrix4& matrix, const Matrix4& basis, const Matrix4& 
     return Multiply(Multiply(basis, matrix), basis_inverse);
 }
 
-constexpr Matrix4 kXrayToBlender = {
-    std::array<float, 4>{ 1.f, 0.f, 0.f, 0.f },
-    std::array<float, 4>{ 0.f, 0.f, 1.f, 0.f },
-    std::array<float, 4>{ 0.f, 1.f, 0.f, 0.f },
-    std::array<float, 4>{ 0.f, 0.f, 0.f, 1.f }
-};
-
-constexpr Matrix4 kXrayToBlenderInverse = kXrayToBlender;
-
-constexpr Matrix4 kBlenderToOzz = {
-    std::array<float, 4>{ 1.f, 0.f, 0.f, 0.f },
+constexpr Matrix4 kXrayToOzz = {
+    std::array<float, 4>{ 1.f, 0.f,  0.f, 0.f },
     std::array<float, 4>{ 0.f, 0.f, -1.f, 0.f },
-    std::array<float, 4>{ 0.f, 1.f, 0.f, 0.f },
-    std::array<float, 4>{ 0.f, 0.f, 0.f, 1.f }
+    std::array<float, 4>{ 0.f, 1.f,  0.f, 0.f },
+    std::array<float, 4>{ 0.f, 0.f,  0.f, 1.f }
 };
 
-constexpr Matrix4 kOzzToBlender = {
+constexpr Matrix4 kOzzToXray = {
     std::array<float, 4>{ 1.f, 0.f, 0.f, 0.f },
     std::array<float, 4>{ 0.f, 0.f, 1.f, 0.f },
-    std::array<float, 4>{ 0.f, -1.f, 0.f, 0.f },
+    std::array<float, 4>{ 0.f,-1.f, 0.f, 0.f },
     std::array<float, 4>{ 0.f, 0.f, 0.f, 1.f }
 };
-
-Matrix4 ConvertXrayToBlender(const Matrix4& matrix)
-{
-    return ChangeBasis(matrix, kXrayToBlender, kXrayToBlenderInverse);
-}
-
-Matrix4 ConvertBlenderToOzz(const Matrix4& matrix)
-{
-    return ChangeBasis(matrix, kBlenderToOzz, kOzzToBlender);
-}
 
 Matrix4 ConvertXrayLocalToOzz(const Fmatrix& matrix)
 {
-    return ConvertBlenderToOzz(ConvertXrayToBlender(ToColumnMajor(matrix)));
+    return ChangeBasis(ToColumnMajor(matrix), kXrayToOzz, kOzzToXray);
 }
 
 ozz::math::Float3 ExtractTranslation(const Matrix4& matrix)
