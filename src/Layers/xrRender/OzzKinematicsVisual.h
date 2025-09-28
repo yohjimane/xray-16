@@ -59,6 +59,8 @@ public:
     bool LoadAnimationFromFile(const std::filesystem::path& path);
     void StopAnimation();
 
+    void DebugDumpPalette(const xr_vector<Fmatrix>& palette) const override;
+
 private:
     void UpdateBounds();
     void DestroySurfaces();

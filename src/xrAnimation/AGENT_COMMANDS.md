@@ -14,6 +14,14 @@
   2. Toggle the developer flag: `g_use_ozz_visuals 1`.
   3. Spawn or reload actors/HUD items; the loader will prefer `.ozzx` when present and fall back to `.ogf` otherwise.
 
+## Legacy Bind Pose Toggle
+- Context: Compare `.ogf` visuals against ozz output by forcing the legacy runtime to keep bind-pose matrices.
+- Workflow:
+  1. Enable the switch: `rs_skeleton_force_bind_pose 1`.
+  2. Inspect visuals (legacy skeletons render at bind pose and foot IK stays disabled until you toggle it off).
+  3. Restore normal animation: `rs_skeleton_force_bind_pose 0`.
+  4. Use `debug_dump_ozz_palette` to log legacy and ozz skeleton palettes on demand.
+
 ## Ozz In-Game Smoke Test
 - Context: Validate `.ozzx` bundles can hydrate animations on demand via legacy motion refs.
 - Workflow:

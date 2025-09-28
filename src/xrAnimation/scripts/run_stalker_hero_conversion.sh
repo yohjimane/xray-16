@@ -10,7 +10,6 @@ CATEGORY="npc"
 SKELETON_BASENAME="stalker_hero_1"
 ANIMATION_BASENAMES=(
     "critical_hit_grup_1"
-    "barman_animation"
 )
 
 parse_common_args "$@"

@@ -188,6 +188,7 @@ const xr_token qminmax_sm_token[] = {{"off", 0}, {"on", 1}, {"auto", 2}, {"autod
 
 // Common
 extern int psSkeletonUpdate;
+extern int psSkeletonForceBindPose;
 extern float r__dtex_range;
 
 Flags32 ps_r__common_flags = { RFLAG_ACTOR_SHADOW }; // All renders
@@ -855,6 +856,7 @@ void xrRender_initconsole()
     CMD3(CCC_ColorGrading_Preset, "_colorgrading_preset", &ps_ColorGradingPreset, qcolorgrading_preset_token);
 
     CMD4(CCC_Integer, "rs_skeleton_update", &psSkeletonUpdate, 2, 128);
+    CMD4(CCC_Integer, "rs_skeleton_force_bind_pose", &psSkeletonForceBindPose, 0, 1);
 #ifndef MASTER_GOLD
     CMD1(CCC_DumpResources, "dump_resources");
     CMD1(CCC_MotionsStat, "stat_motions");

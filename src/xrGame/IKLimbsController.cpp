@@ -289,6 +289,12 @@ void CIKLimbsController::Calculate()
 
     update_blend(m_legs_blend);
 
+    if (GEnv.Render && GEnv.Render->LegacyBindPoseForced())
+    {
+        _object_shift.set_taget(0.f, 0.f);
+        return;
+    }
+
     Fmatrix& obj = m_object->XFORM();
 #ifdef DEBUG
     if (ph_dbg_draw_mask1.test(phDbgDrawIKSHiftObject))
@@ -483,6 +489,9 @@ void CIKLimbsController::Update()
 
     skeleton_animated->UpdateTracks();
     update_blend(m_legs_blend);
+
+    if (GEnv.Render && GEnv.Render->LegacyBindPoseForced())
+        return;
 
     _pose_extrapolation.update(m_object->XFORM());
     xr_vector<CIKLimb>::iterator i = _bone_chains.begin(), e = _bone_chains.end();

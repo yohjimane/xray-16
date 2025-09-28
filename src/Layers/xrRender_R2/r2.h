@@ -491,7 +491,7 @@ public:
     void StopOzzAnimation(IRenderVisual* visual) override;
     bool PlayOzzLegacyMotion(IRenderVisual* visual, const xr_string& motion_name) override;
     bool EnumerateOzzLegacyMotions(IRenderVisual* visual, xr_vector<xr_string>& out_names) override;
-    bool ConsumeOzzPaletteDebugDumpRequest();
+    bool ConsumeOzzPaletteDebugDumpRequest() override;
 
     void Calculate() override;
     void Render() override;

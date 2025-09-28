@@ -2,8 +2,6 @@
 
 #include "OzzKinematicsVisual.h"
 
-#include "Layers/xrRender_R2/r2.h"
-
 #include "BufferUtils.h"
 #include "FVisual.h"
 #include "xrEngine/Render.h"
@@ -23,48 +21,6 @@ namespace xray::render::RENDER_NAMESPACE
 {
 using inherited = FHierrarhyVisual;
 using XRay::Animation::ConvertOzzMatrixToXRay;
-
-namespace
-{
-constexpr u32 kMaxDumpedBones = 4;
-
-bool ShouldDumpPalette()
-{
-    if (RImplementation.IsOzzPaletteDebugDumpEnabled())
-        return true;
-
-    return RImplementation.ConsumeOzzPaletteDebugDumpRequest();
-}
-
-void DebugDumpPalette(const COzzKinematicsVisual& visual, const xr_vector<Fmatrix>& palette)
-{
-    if (!ShouldDumpPalette())
-        return;
-
-    const char* label = "<ozz_visual>";
-#ifdef DEBUG
-    if (visual.dbg_name.size())
-        label = visual.dbg_name.c_str();
-#endif
-
-    const u32 bone_count = static_cast<u32>(palette.size());
-    Msg("[ozz][palette] visual=%s bones=%u", label, bone_count);
-
-    const u32 print_count = std::min(bone_count, kMaxDumpedBones);
-    for (u32 idx = 0; idx < print_count; ++idx)
-    {
-        const Fmatrix& bone = palette[idx];
-        Msg("[ozz][palette] bone[%u] i(%.3f %.3f %.3f) j(%.3f %.3f %.3f) k(%.3f %.3f %.3f) c(%.3f %.3f %.3f)", idx,
-            bone.i.x, bone.i.y, bone.i.z,
-            bone.j.x, bone.j.y, bone.j.z,
-            bone.k.x, bone.k.y, bone.k.z,
-            bone.c.x, bone.c.y, bone.c.z);
-    }
-
-    if (bone_count > print_count)
-        Msg("[ozz][palette] ... (omitted %u bones)", bone_count - print_count);
-}
-} // namespace
 
 namespace
 {
@@ -292,7 +248,7 @@ void COzzSkinnedSurface::UpdateGeometry()
             continue;
         }
 
-        remapped_palette[idx].set(kinematics.LL_GetTransform_R(bone_index));
+        remapped_palette[idx].set(palette[idx]);
     }
 
     if (!vertex_buffer_ || !vertex_buffer_->IsValid() || vertex_count_ == 0)
@@ -356,17 +312,6 @@ void COzzSkinnedSurface::UpdateGeometry()
     }
 
     vertex_buffer_->Unmap();
-
-#ifdef DEBUG
-    int idx_debug_print_ = 0;
-    if (vertex_count_ && idx_debug_print_ < 5)
-    {
-        const OzzGpuVertex& v = gpu_vertices[0];
-        Msg("[ozz][surface] skinned v0 pos(%.3f %.3f %.3f) normal(%.3f %.3f %.3f)", v.position.x, v.position.y, v.position.z,
-            v.normal.x, v.normal.y, v.normal.z);
-        ++idx_debug_print_;
-    }
-#endif
 }
 
 void COzzSkinnedSurface::Render(CBackend& cmd_list, float, bool)
@@ -400,6 +345,20 @@ COzzKinematicsVisual::COzzKinematicsVisual()
 COzzKinematicsVisual::~COzzKinematicsVisual()
 {
     DestroySurfaces();
+}
+
+void COzzKinematicsVisual::DebugDumpPalette(const xr_vector<Fmatrix>& palette) const
+{
+    if (!AcquirePaletteDumpTicket())
+        return;
+
+#ifdef DEBUG
+    const char* label = dbg_name.size() ? dbg_name.c_str() : "<ozz_visual>";
+#else
+    const char* label = "<ozz_visual>";
+#endif
+
+    DumpPaletteLog("ozz", label, palette);
 }
 
 void COzzKinematicsVisual::DestroySurfaces()
@@ -613,7 +572,7 @@ void COzzKinematicsVisual::EnsureSkinningPalette()
     kinematics_.CalculateBones(TRUE);
     kinematics_.BuildSkinningPalette(bone_palette_, true);
 
-    DebugDumpPalette(*this, bone_palette_);
+    DebugDumpPalette(bone_palette_);
 }
 
 const xr_vector<Fmatrix>& COzzKinematicsVisual::SkinningPalette()

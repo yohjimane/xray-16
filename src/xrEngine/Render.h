@@ -266,6 +266,7 @@ public:
     bool GenerationIsR1() const { return GetGeneration() == GENERATION_R1; }
     bool GenerationIsR2() const { return GetGeneration() == GENERATION_R2; }
     bool GenerationIsR2OrHigher() const { return GetGeneration() >= GENERATION_R2; }
+    virtual bool LegacyBindPoseForced() const = 0;
 
     virtual BackendAPI GetBackendAPI() const = 0;
 
@@ -276,6 +277,7 @@ public:
     virtual void EnableOzzPaletteDebugDump(bool enabled) = 0;
     virtual bool IsOzzPaletteDebugDumpEnabled() const = 0;
     virtual void RequestOzzPaletteDebugDump() = 0;
+    virtual bool ConsumeOzzPaletteDebugDumpRequest() = 0;
     virtual bool LoadOzzAnimation(IRenderVisual* visual, const std::filesystem::path& path) = 0;
     virtual void StopOzzAnimation(IRenderVisual* visual) = 0;
     virtual bool PlayOzzLegacyMotion(IRenderVisual* visual, const xr_string& motion_name) = 0;

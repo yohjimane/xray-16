@@ -77,7 +77,12 @@ constexpr Matrix4 kXrayToOzz = {
     std::array<float, 4>{ 0.f, 0.f,  0.f, 1.f }
 };
 
-constexpr Matrix4 kOzzToXray = kXrayToOzz;
+constexpr Matrix4 kOzzToXray = {
+    std::array<float, 4>{ 1.f, 0.f,  0.f, 0.f },
+    std::array<float, 4>{ 0.f, 1.f,  0.f, 0.f },
+    std::array<float, 4>{ 0.f, 0.f, -1.f, 0.f },
+    std::array<float, 4>{ 0.f, 0.f,  0.f, 1.f }
+};;
 
 Matrix4 ToColumnMajor(const Fmatrix& source)
 {
