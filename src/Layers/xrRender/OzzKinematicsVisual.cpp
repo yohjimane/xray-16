@@ -33,6 +33,19 @@ struct OzzGpuVertex
     Fvector2 uv;
 };
 
+static inline Fvector ConvertOzzVectorToXRayBasis(Fvector value)
+{
+    value.z = -value.z;
+    return value;
+}
+
+static inline Fvector4 ConvertOzzTangentToXRayBasis(Fvector4 value)
+{
+    value.z = -value.z;
+    value.w = -value.w;
+    return value;
+}
+
 constexpr VertexElement OzzVertexDecl[] =
 {
     { 0, 0,  D3DDECLTYPE_FLOAT3, D3DDECLMETHOD_DEFAULT, D3DDECLUSAGE_POSITION, 0 },
@@ -153,9 +166,12 @@ void COzzSkinnedSurface::InitializeGeometry(const ozz::sample::Mesh& mesh)
             const int vertex_index = vertex_base + local;
             SourceVertex& dst = source_vertices_[vertex_index];
 
-            dst.position = ReadVector3(part.positions, local, ozz::sample::Mesh::Part::kPositionsCpnts);
-            dst.normal = ReadVector3(part.normals, local, ozz::sample::Mesh::Part::kNormalsCpnts);
-            dst.tangent = ReadVector4(part.tangents, local, ozz::sample::Mesh::Part::kTangentsCpnts);
+            dst.position = ConvertOzzVectorToXRayBasis(
+                ReadVector3(part.positions, local, ozz::sample::Mesh::Part::kPositionsCpnts));
+            dst.normal = ConvertOzzVectorToXRayBasis(
+                ReadVector3(part.normals, local, ozz::sample::Mesh::Part::kNormalsCpnts));
+            dst.tangent = ConvertOzzTangentToXRayBasis(
+                ReadVector4(part.tangents, local, ozz::sample::Mesh::Part::kTangentsCpnts));
             dst.uv = ReadUV(part.uvs, local);
 
             dst.influence_count = static_cast<u8>(influences == 0 ? 1 : influences);
@@ -203,6 +219,10 @@ void COzzSkinnedSurface::InitializeGeometry(const ozz::sample::Mesh& mesh)
 
     indices_.assign(mesh.triangle_indices.begin(), mesh.triangle_indices.end());
 
+    // Converter stores Ozz meshes with flipped winding (handedness change). Restore XRay ordering.
+    for (size_t tri = 0; tri + 2 < indices_.size(); tri += 3)
+        std::swap(indices_[tri + 1], indices_[tri + 2]);
+
     vertex_buffer_ = xr_make_unique<VertexStreamBuffer>();
     vertex_buffer_->Create(static_cast<size_t>(vertex_count_) * sizeof(OzzGpuVertex));
 
@@ -248,7 +268,7 @@ void COzzSkinnedSurface::UpdateGeometry()
             continue;
         }
 
-        remapped_palette[idx].set(palette[idx]);
+        remapped_palette[idx].set(palette[bone_index]);
     }
 
     if (!vertex_buffer_ || !vertex_buffer_->IsValid() || vertex_count_ == 0)
@@ -352,13 +372,23 @@ void COzzKinematicsVisual::DebugDumpPalette(const xr_vector<Fmatrix>& palette) c
     if (!AcquirePaletteDumpTicket())
         return;
 
+    const u16 bone_count = kinematics_.LL_BoneCount();
+    if (bone_count == 0)
+        return;
+
+    xr_vector<Fmatrix> world_palette;
+    world_palette.resize(bone_count);
+    for (u16 idx = 0; idx < bone_count; ++idx)
+        world_palette[idx] = kinematics_.LL_GetTransform(idx);
+
 #ifdef DEBUG
     const char* label = dbg_name.size() ? dbg_name.c_str() : "<ozz_visual>";
 #else
     const char* label = "<ozz_visual>";
 #endif
 
-    DumpPaletteLog("ozz", label, palette);
+    DumpPaletteLog("ozz", label, world_palette);
+    DumpPaletteLog("ozz_render", label, palette);
 }
 
 void COzzKinematicsVisual::DestroySurfaces()

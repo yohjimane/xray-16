@@ -77,12 +77,7 @@ constexpr Matrix4 kXrayToOzz = {
     std::array<float, 4>{ 0.f, 0.f,  0.f, 1.f }
 };
 
-constexpr Matrix4 kOzzToXray = {
-    std::array<float, 4>{ 1.f, 0.f,  0.f, 0.f },
-    std::array<float, 4>{ 0.f, 1.f,  0.f, 0.f },
-    std::array<float, 4>{ 0.f, 0.f, -1.f, 0.f },
-    std::array<float, 4>{ 0.f, 0.f,  0.f, 1.f }
-};;
+constexpr Matrix4 kOzzToXray = kXrayToOzz;
 
 Matrix4 ToColumnMajor(const Fmatrix& source)
 {
@@ -1814,6 +1809,8 @@ ozz::animation::offline::RawAnimation build_raw_animation_from_omf(const OmfMoti
         track.scales[0].time = 0.f;
         track.scales[0].value = ozz::math::Float3(1.f, 1.f, 1.f);
 
+        const BoneRecord& bone = bones[joint_index];
+
         for (u32 frame = 0; frame < motion.frame_count; ++frame)
         {
             const float time = static_cast<float>(frame) * SAMPLE_SPF;
@@ -1821,10 +1818,15 @@ ozz::animation::offline::RawAnimation build_raw_animation_from_omf(const OmfMoti
             const Fquaternion& xr_quat = source_track.rotations[frame];
             const Fvector& xr_translation = source_track.translations[frame];
 
-            Fmatrix local;
-            local.mk_xform(xr_quat, xr_translation);
+            // Build the animated offset in X-Ray space and compose it with the
+            // bind pose so absolute locals (matching legacy runtime) are baked.
+            Fmatrix delta;
+            delta.mk_xform(xr_quat, xr_translation);
 
-            const auto ozz_matrix = detail::ConvertXrayLocalToOzz(local);
+            Fmatrix absolute_local;
+            absolute_local.mul_43(bone.local_transform, delta);
+
+            const auto ozz_matrix = detail::ConvertXrayLocalToOzz(absolute_local);
             track.translations[frame].time = time;
             track.translations[frame].value = detail::ExtractTranslation(ozz_matrix);
             track.rotations[frame].time = time;

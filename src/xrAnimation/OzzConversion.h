@@ -83,7 +83,8 @@ inline std::array<float, 3> ApplyBasis(const Matrix4& basis, const std::array<fl
 inline Fmatrix ConvertOzzMatrixToXRay(const ozz::math::Float4x4& matrix)
 {
     const auto ozz = detail::LoadOzzMatrix(matrix);
-    return detail::ToFmatrix(ozz);
+    const auto xray = detail::ChangeBasis(ozz, detail::kOzzToXray, detail::kXrayToOzz);
+    return detail::ToFmatrix(xray);
 }
 } // namespace Animation
 } // namespace XRay
