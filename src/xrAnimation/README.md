@@ -1,72 +1,74 @@
-# X-Ray Animation / ozz-animation Integration
+# xrAnimation Module
 
-This module hosts the ongoing effort to move the OpenXRay animation toolchain and runtime over to [ozz-animation](https://github.com/guillaumeblanc/ozz-animation). It currently ships production-ready converters and validation tooling alongside a work-in-progress runtime façade (`OzzKinematics`) that mirrors the legacy `IKinematics` interface.
+## MVP Milestone
+- Converted `.ogf/.omf` assets now drive the `OzzKinematics` runtime and render correctly in-engine through `.ozzx` visuals.
+- `ozz_animation_viewer` matches the in-engine pose output, and `OzzKinematicsParity.AnimationPoseMatchesLegacySkeleton` passes — confirming animation playback parity with the legacy pipeline.
 
-## Current State
+## Module Overview
+- Owns the façade around ozz-animation (`OzzKinematics`, `COzzKinematicsVisual`) and conversion tooling.
+- Maintains parity tests against legacy kinematics and coordinates `.ozz/.ozzx` asset generation.
+- Provides developer toggles and logging for palette inspection while we continue migrating runtime paths.
 
-- **Asset conversion**: The `xray_to_ozz_converter` CLI and helper scripts convert `.ogf/.omf` pairs into `.ozz` skeletons/animations plus `.ozzx` bundles. Outputs are regression-tested against Blender exports.
-- **Visualization**: `ozz_animation_viewer` loads converted bundles, dumps bind-pose/animation data, and provides profiling overlays to compare with upstream ozz samples.
-- **Runtime façade**: `OzzKinematics` evaluates bind pose and sampled animation, handles visibility masks, `CBoneInstance` callbacks, and additional bone transforms while conforming to `IKinematics` expectations.
-- **Parity tests**: GoogleTest fixtures under `src/xrAnimation/tests` diff world-space transforms between legacy `CKinematics` and `OzzKinematics` for bind pose and sampled clips to ensure behaviour remains aligned.
-- **Still TODO**: Bone picking, vertex enumeration, renderer wiring, and an engine-ready `.ozzx` visual remain in progress; the façade is not yet a drop-in replacement for gameplay actors.
+## Build & Test Quickstart
+1. Configure (Mixed recommended for iteration):
+   ```sh
+   cmake -S . -B ozz_utils -DCMAKE_BUILD_TYPE=Mixed
+   ```
+2. Build animation targets:
+   ```sh
+   cmake --build ozz_utils --target ozz_kinematics_tests xrAnimation_converter_tests xray_to_ozz_converter -j
+   ```
+3. Run suites:
+   ```sh
+   ctest --test-dir ozz_utils --output-on-failure
+   ```
+   *Focused loop:* `ctest --test-dir ozz_utils -R "ozz_kinematics_tests|xrAnimation_converter_tests" --output-on-failure`
 
-## Key Components
+## Conversion & Viewer Tooling
+- **CLI Converter** `xray_to_ozz_converter`
+  ```sh
+  # Skeleton
+  xray_to_ozz_converter skeleton <input.ogf> <output_dir>
 
-- `OzzConversion.*`: Matrix/transform helpers shared by the converter, tests, and runtime façade.
-- `OzzBundle.*`: Minimal reader/writer for `.ozzx` bundles (skeleton + mesh payload).
-- `OzzKinematics.*`: `IKinematics` implementation backed by ozz runtime jobs (`LocalToModelJob`, sampling contexts, visibility masks).
-- `tests/`: Converter smoke tests, `ozz_kinematics_tests`, and parity fixtures that compare against legacy assets.
-- `tools/`: Viewer integration, converter CLI, and support scripts for running conversions on sample data.
+  # Animation (legacy .omf -> .ozz)
+  xray_to_ozz_converter animation <skeleton.ogf> <input.omf> <output_dir> [-optimize]
 
-## Building & Running Tools
+  # Batch creation
+  xray_to_ozz_converter batch <input_dir> <output_dir> <skeleton.ogf> [-optimize]
+  ```
+- **Viewer** `ozz_animation_viewer`
+  ```sh
+  cmake --build ozz_utils --target ozz_animation_viewer -j
+  ozz_utils/bin/Mixed/ozz_animation_viewer --bundle=asset_tests/stalker_hero.ozzx \
+      --animation=asset_tests/critical_hit_grup_1.ozz --render=false --max_idle_loops=1
+  ```
+  Use `--dump-animation-json=<path>` for frame-by-frame export or `--dump-bind-pose` (viewer default output) to diff against in-engine palettes.
 
-```bash
-cmake -S xray-16 -B xray-16/ozz_utils -DCMAKE_BUILD_TYPE=Debug
-cmake --build xray-16/ozz_utils -j$(nproc)
-```
+## In-Engine Developer Toggles
+- `g_use_ozz_visuals 1` – hydrate `.ozzx` bundles (falls back to `.ogf` when unavailable).
+- `g_dev_ozz_actor 1` – swap the player model to the dev `.ozzx` actor for quick smoke tests.
+- `g_dev_ozz_animation <name>` / `g_dev_ozz_animation_stop` – play/stop converted legacy motions.
+- `debug_dump_ozz_palette` / `debug_dump_ozz_palette_toggle` – capture legacy vs. ozz bone palettes.
 
-- **Converters**: `xray-16/ozz_utils/bin/<cfg>/xray_to_ozz_converter`
-- **Viewer**: `xray-16/ozz_utils/bin/<cfg>/ozz_animation_viewer --bundle=<path>.ozzx` (disabled when generating Visual Studio solutions)
+## Asset Regeneration Checklist
+1. Rebuild tooling (see Build & Test above).
+2. Use the helper scripts under `src/xrAnimation/scripts/` (e.g. `run_stalker_hero_conversion.sh`, `run_weapon_conversion.sh`) to regenerate `.ozz/.ozzx` fixtures. Each script writes outputs to `src/xrAnimation/tests/testdata` and can launch the viewer for quick validation.
+3. Mirror bundles into the runtime search path when testing in-engine, e.g.:
+   ```sh
+   install -D src/xrAnimation/tests/testdata/stalker_hero.ozzx bin/x86_64/Mixed/gamedata/meshes/actors/dev_stalker.ozzx
+   install -D src/xrAnimation/tests/testdata/critical_hit_grup_1.ozz bin/x86_64/Mixed/gamedata/anims/critical_hit_grup_1.ozz
+   ```
 
-Helper scripts in the repository root (e.g. `run_stalker_hero_conversion.sh`) regenerate sample assets under `src/xrAnimation/tests/testdata/` and launch the viewer in verification modes.
+### Conversion Scripts
+- `src/xrAnimation/scripts/run_stalker_hero_conversion.sh` – NPC skeleton/animation sample used by parity tests.
+- `run_weapon_conversion.sh`, `run_weapon_gunsl_conversion.sh` – first-person weapon assets.
+- `run_arms_conversion.sh`, `run_arms_gunsl_conversion.sh` – player arms variations.
+- `run_monster_conversion.sh` – creature pipeline smoke tests.
+- Each script sources `common.sh`, ensures the build tree exists, invokes the converter, and optionally runs `ozz_animation_viewer`.
 
-## Runtime Usage Snapshot
+## Blender / Debug Utilities
+- Rest pose dumps (Blender): set armature to REST pose and iterate `bone.matrix_local` to emit translation + Euler rotation tables.
+- Viewer bind pose dumps: run `ozz_animation_viewer` headless (`--render=false`) to capture the bind pose table printed to stdout.
 
-```cpp
-XRay::Animation::OzzKinematics kinematics;
-if (kinematics.InitializeFromOzz("path/to/skeleton.ozz"))
-{
-    // Evaluate rest pose or sampled animation (locals come from an ozz SamplingJob)
-    kinematics.CalculateBones(TRUE); // forces recompute this frame
-    const Fmatrix& world = kinematics.LL_GetTransform(bone_id);
-    // Feed matrices into renderer/physics as needed.
-}
-```
-
-`OzzKinematics` owns ozz sampling context/cache buffers; multi-threaded sampling is on the roadmap, so avoid sharing an instance across threads without external synchronization.
-
-## Tests
-
-- Build tests with the same CMake cache as the tools.
-- Run `ctest --output-on-failure` from the build directory or invoke binaries directly:
-  - `ozz_kinematics_tests`
-  - `xrAnimation_converter_tests`
-- Parity fixtures require the testdata produced by the converter scripts; regenerate them when converter logic changes.
-
-## Roadmap / Known Gaps
-
-- Implement renderer-facing visual that consumes `.ozzx` bundles and feeds bone palettes to the existing model pool.
-- Cover `.ozzx` runtime loading with dedicated tests (bundle hydration, material metadata, failure modes).
-- Add pilot actor/HUD wiring to exercise callbacks, physics hooks, and animation events through the façade.
-- Expand optimization tests to assert size wins for `--optimize` and detect pose drift on representative clips.
-- Harden `OzzKinematics` for multi-threaded sampling (dedicated scratch buffers, deterministic update cadence).
-
-## Resources
-
-- `AGENT_DOCS.md`: Session context, workflows, and tooling quick reference.
-- `AGENT_COMMANDS.md`: Ready-to-run snippets for gathering bind-pose and sampled animation data.
-- `AGENT_NEXT_STEPS.md`: Rolling plan that tracks façade work, visual integration, and testing priorities.
-
-## License
-
-This module is part of the OpenXRay project and follows the same licensing terms.
+## Housekeeping
+- Legacy agent docs have been consolidated into this README following the MVP milestone. Future doc updates should land here so the runtime, tooling, and test workflows stay in sync.

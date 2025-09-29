@@ -1,4 +1,4 @@
 # AGENTS.md (Consolidated)
 
-All technical guidance for assistants has moved to `xray-16/src/xrAnimation/AGENT_DOCS.md`.
-Quick-reference playbooks live in `AGENT_COMMANDS.md`; current priorities and follow-up tasks are tracked in `AGENT_NEXT_STEPS.md`.
+All xrAnimation documentation now lives in `src/xrAnimation/README.md`.
+Use that README for module overview, build/test workflows, converter usage, and developer toggles after the MVP milestone.

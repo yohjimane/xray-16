@@ -23,14 +23,12 @@
 - Focused test loop: `xray-16/ozz_utils/bin/Debug/ozz_kinematics_tests --gtest_filter=OzzKinematicsParity.*`
 
 ## Handy Tools & Scripts
-- `convert_assets.sh` (repo root) -> regenerates sample `.ozz` skeletons/animations.
+- `src/xrAnimation/scripts/run_*_conversion.sh` regenerate sample `.ozz/.ozzx` fixtures for NPCs, weapons, arms, and monsters.
 - `xray_to_ozz_converter` CLI handles skeleton/animation/batch conversion.
-- `ozz_animation_viewer` (Debug build) can dump bind poses, JSON animation samples, and headless previews for parity checks.
-- Blender snippets in `AGENT_COMMANDS.md` extract rest-pose matrices for cross-validation when needed.
+- `ozz_animation_viewer` (Debug/Mixed build) can dump bind poses, JSON animation samples, and headless previews for parity checks.
+- Blender snippets and viewer usage details live in `src/xrAnimation/README.md`.
 
 ## Where To Look Next
-- Detailed guidance: `src/xrAnimation/AGENT_DOCS.md`
-- Command recipes: `src/xrAnimation/AGENT_COMMANDS.md`
-- Roadmap & priorities: `src/xrAnimation/AGENT_NEXT_STEPS.md`
+- Module docs & workflows: `src/xrAnimation/README.md`
 - Historical context: `src/xrAnimation/CLAUDE.md`
 
