@@ -933,6 +933,7 @@ protected:
                 skinning_span = skinning_span.first(palette_size);
 
                 ozz::sample::Renderer::Options draw_options = ui_state_.renderer_options;
+                draw_options.front_face_ccw = mesh.xray_metadata.front_face_ccw;
                 if (draw_options.texture && mesh_index < mesh_textures_.size())
                 {
                     draw_options.texture_override = mesh_textures_[mesh_index];

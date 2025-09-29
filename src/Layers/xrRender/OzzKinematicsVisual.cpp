@@ -21,6 +21,8 @@ namespace xray::render::RENDER_NAMESPACE
 {
 using inherited = FHierrarhyVisual;
 using XRay::Animation::ConvertOzzMatrixToXRay;
+using XRay::Animation::ConvertVectorOzzToXRayBasis;
+using XRay::Animation::ConvertTangentOzzToXRayBasis;
 
 namespace
 {
@@ -32,19 +34,6 @@ struct OzzGpuVertex
     Fvector4 tangent;
     Fvector2 uv;
 };
-
-static inline Fvector ConvertOzzVectorToXRayBasis(Fvector value)
-{
-    value.z = -value.z;
-    return value;
-}
-
-static inline Fvector4 ConvertOzzTangentToXRayBasis(Fvector4 value)
-{
-    value.z = -value.z;
-    value.w = -value.w;
-    return value;
-}
 
 constexpr VertexElement OzzVertexDecl[] =
 {
@@ -166,11 +155,11 @@ void COzzSkinnedSurface::InitializeGeometry(const ozz::sample::Mesh& mesh)
             const int vertex_index = vertex_base + local;
             SourceVertex& dst = source_vertices_[vertex_index];
 
-            dst.position = ConvertOzzVectorToXRayBasis(
+            dst.position = ConvertVectorOzzToXRayBasis(
                 ReadVector3(part.positions, local, ozz::sample::Mesh::Part::kPositionsCpnts));
-            dst.normal = ConvertOzzVectorToXRayBasis(
+            dst.normal = ConvertVectorOzzToXRayBasis(
                 ReadVector3(part.normals, local, ozz::sample::Mesh::Part::kNormalsCpnts));
-            dst.tangent = ConvertOzzTangentToXRayBasis(
+            dst.tangent = ConvertTangentOzzToXRayBasis(
                 ReadVector4(part.tangents, local, ozz::sample::Mesh::Part::kTangentsCpnts));
             dst.uv = ReadUV(part.uvs, local);
 
@@ -218,10 +207,6 @@ void COzzSkinnedSurface::InitializeGeometry(const ozz::sample::Mesh& mesh)
     }
 
     indices_.assign(mesh.triangle_indices.begin(), mesh.triangle_indices.end());
-
-    // Converter stores Ozz meshes with flipped winding (handedness change). Restore XRay ordering.
-    for (size_t tri = 0; tri + 2 < indices_.size(); tri += 3)
-        std::swap(indices_[tri + 1], indices_[tri + 2]);
 
     vertex_buffer_ = xr_make_unique<VertexStreamBuffer>();
     vertex_buffer_->Create(static_cast<size_t>(vertex_count_) * sizeof(OzzGpuVertex));

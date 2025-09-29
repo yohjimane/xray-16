@@ -15,7 +15,14 @@ namespace Animation
 {
 namespace detail
 {
+using Matrix3 = std::array<std::array<float, 3>, 3>;
 using Matrix4 = std::array<std::array<float, 4>, 4>;
+
+constexpr Matrix3 kXrayToOzz3 = {
+    std::array<float, 3>{ 1.f, 0.f,  0.f },
+    std::array<float, 3>{ 0.f, 1.f,  0.f },
+    std::array<float, 3>{ 0.f, 0.f, -1.f }
+};
 
 constexpr Matrix4 kXrayToOzz = {
     std::array<float, 4>{ 1.f, 0.f,  0.f, 0.f },
@@ -24,7 +31,11 @@ constexpr Matrix4 kXrayToOzz = {
     std::array<float, 4>{ 0.f, 0.f,  0.f, 1.f }
 };
 
+constexpr Matrix3 kOzzToXray3 = kXrayToOzz3;
+
 constexpr Matrix4 kOzzToXray = kXrayToOzz;
+
+constexpr float kHandednessFlip = -1.f;
 
 inline Matrix4 Multiply(const Matrix4& lhs, const Matrix4& rhs)
 {
@@ -138,7 +149,7 @@ inline Matrix4 FromFmatrix(const Fmatrix& matrix)
     return result;
 }
 
-inline std::array<float, 3> ApplyBasis(const Matrix4& basis, const std::array<float, 3>& vector)
+inline std::array<float, 3> ApplyBasis(const Matrix3& basis, const std::array<float, 3>& vector)
 {
     std::array<float, 3> result{};
     for (int row = 0; row < 3; ++row)
@@ -147,6 +158,15 @@ inline std::array<float, 3> ApplyBasis(const Matrix4& basis, const std::array<fl
             basis[static_cast<size_t>(row)][1] * vector[1] +
             basis[static_cast<size_t>(row)][2] * vector[2];
     }
+    return result;
+}
+
+inline Fvector ApplyBasis(const Matrix3& basis, const Fvector& vector)
+{
+    Fvector result;
+    result.x = basis[0][0] * vector.x + basis[0][1] * vector.y + basis[0][2] * vector.z;
+    result.y = basis[1][0] * vector.x + basis[1][1] * vector.y + basis[1][2] * vector.z;
+    result.z = basis[2][0] * vector.x + basis[2][1] * vector.y + basis[2][2] * vector.z;
     return result;
 }
 } // namespace detail
@@ -221,6 +241,36 @@ inline ozz::math::Float3 ExtractTranslation(const Fmatrix& matrix)
 inline ozz::math::Quaternion ExtractQuaternion(const Fmatrix& matrix)
 {
     return detail::ExtractQuaternion(detail::FromFmatrix(matrix));
+}
+
+inline Fvector ConvertVectorXRayToOzzBasis(const Fvector& vector)
+{
+    return detail::ApplyBasis(detail::kXrayToOzz3, vector);
+}
+
+inline Fvector ConvertVectorOzzToXRayBasis(const Fvector& vector)
+{
+    return detail::ApplyBasis(detail::kOzzToXray3, vector);
+}
+
+inline Fvector4 ConvertTangentXRayToOzzBasis(const Fvector4& tangent)
+{
+    Fvector4 result;
+    result.x = detail::kXrayToOzz3[0][0] * tangent.x + detail::kXrayToOzz3[0][1] * tangent.y + detail::kXrayToOzz3[0][2] * tangent.z;
+    result.y = detail::kXrayToOzz3[1][0] * tangent.x + detail::kXrayToOzz3[1][1] * tangent.y + detail::kXrayToOzz3[1][2] * tangent.z;
+    result.z = detail::kXrayToOzz3[2][0] * tangent.x + detail::kXrayToOzz3[2][1] * tangent.y + detail::kXrayToOzz3[2][2] * tangent.z;
+    result.w = tangent.w * detail::kHandednessFlip;
+    return result;
+}
+
+inline Fvector4 ConvertTangentOzzToXRayBasis(const Fvector4& tangent)
+{
+    Fvector4 result;
+    result.x = detail::kOzzToXray3[0][0] * tangent.x + detail::kOzzToXray3[0][1] * tangent.y + detail::kOzzToXray3[0][2] * tangent.z;
+    result.y = detail::kOzzToXray3[1][0] * tangent.x + detail::kOzzToXray3[1][1] * tangent.y + detail::kOzzToXray3[1][2] * tangent.z;
+    result.z = detail::kOzzToXray3[2][0] * tangent.x + detail::kOzzToXray3[2][1] * tangent.y + detail::kOzzToXray3[2][2] * tangent.z;
+    result.w = tangent.w * detail::kHandednessFlip;
+    return result;
 }
 } // namespace Animation
 } // namespace XRay

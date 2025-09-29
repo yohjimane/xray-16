@@ -69,7 +69,14 @@ namespace
 {
 namespace detail
 {
+using Matrix3 = std::array<std::array<float, 3>, 3>;
 using Matrix4 = std::array<std::array<float, 4>, 4>;
+
+constexpr Matrix3 kXrayToOzz3 = {
+    std::array<float, 3>{ 1.f, 0.f,  0.f },
+    std::array<float, 3>{ 0.f, 1.f,  0.f },
+    std::array<float, 3>{ 0.f, 0.f, -1.f }
+};
 
 constexpr Matrix4 kXrayToOzz = {
     std::array<float, 4>{ 1.f, 0.f,  0.f, 0.f },
@@ -78,7 +85,11 @@ constexpr Matrix4 kXrayToOzz = {
     std::array<float, 4>{ 0.f, 0.f,  0.f, 1.f }
 };
 
+constexpr Matrix3 kOzzToXray3 = kXrayToOzz3;
+
 constexpr Matrix4 kOzzToXray = kXrayToOzz;
+
+constexpr float kHandednessFlip = -1.f;
 
 Matrix4 ToColumnMajor(const Fmatrix& source)
 {
@@ -125,7 +136,7 @@ Matrix4 ConvertXrayLocalToOzz(const Fmatrix& matrix)
     return ChangeBasis(ToColumnMajor(matrix), kXrayToOzz, kOzzToXray);
 }
 
-std::array<float, 3> ApplyBasis(const Matrix4& matrix, const std::array<float, 3>& vector)
+std::array<float, 3> ApplyBasis(const Matrix3& matrix, const std::array<float, 3>& vector)
 {
     std::array<float, 3> result{};
     for (int row = 0; row < 3; ++row)
@@ -139,7 +150,7 @@ std::array<float, 3> ApplyBasis(const Matrix4& matrix, const std::array<float, 3
 std::array<float, 3> ConvertVectorXrayToOzz(const Fvector& v)
 {
     const std::array<float, 3> source{ v.x, v.y, v.z };
-    return ApplyBasis(kXrayToOzz, source);
+    return ApplyBasis(kXrayToOzz3, source);
 }
 
 std::array<float, 2> ConvertUV(const Fvector2& uv)
@@ -1514,9 +1525,6 @@ ozz::sample::Mesh build_mesh(const std::vector<MeshVertex>& vertices, const std:
         mesh.triangle_indices[idx] = static_cast<uint16_t>(remapped);
     }
 
-    for (size_t tri = 0; tri + 2 < mesh.triangle_indices.size(); tri += 3)
-        std::swap(mesh.triangle_indices[tri + 1], mesh.triangle_indices[tri + 2]);
-
     mesh.joint_remaps.resize(joint_remaps.size());
     std::copy(joint_remaps.begin(), joint_remaps.end(), mesh.joint_remaps.begin());
 
@@ -1529,6 +1537,7 @@ ozz::sample::Mesh build_mesh(const std::vector<MeshVertex>& vertices, const std:
     mesh.xray_metadata.texture_link = 0;
     mesh.xray_metadata.shader_link_present = false;
     mesh.xray_metadata.shader_link = 0;
+    mesh.xray_metadata.front_face_ccw = false;
     mesh.xray_metadata.original_vertex_count = metadata.original_vertex_count;
     mesh.xray_metadata.original_face_count = metadata.original_face_count;
     mesh.xray_metadata.ogf_type = metadata.ogf_type;
