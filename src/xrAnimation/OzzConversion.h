@@ -203,31 +203,6 @@ inline Fmatrix RestSoaToXRayMatrix(const ozz::math::SoaTransform& rest, int lane
     return ConvertOzzMatrixToXRay(RestSoaToOzzMatrix(rest, lane));
 }
 
-inline Fmatrix ComposeRestAndDelta(const Fmatrix& rest_xray, const Fquaternion& delta_rotation, const Fvector& delta_translation)
-{
-    Fmatrix delta;
-    delta.mk_xform(delta_rotation, delta_translation);
-
-    Fmatrix result;
-    result.mul_43(rest_xray, delta);
-    return result;
-}
-
-inline ozz::math::Float4x4 ComposeRestAndDeltaOzz(const Fmatrix& rest_xray, const Fquaternion& delta_rotation, const Fvector& delta_translation)
-{
-    return ConvertXRayMatrixToOzz(ComposeRestAndDelta(rest_xray, delta_rotation, delta_translation));
-}
-
-inline ozz::math::Float4x4 ComposeRestAndDeltaOzz(const ozz::math::SoaTransform& rest, int lane, const Fquaternion& delta_rotation, const Fvector& delta_translation)
-{
-    return ComposeRestAndDeltaOzz(RestSoaToXRayMatrix(rest, lane), delta_rotation, delta_translation);
-}
-
-inline Fmatrix ComposeRestAndDeltaXRay(const ozz::math::SoaTransform& rest, int lane, const Fquaternion& delta_rotation, const Fvector& delta_translation)
-{
-    return ComposeRestAndDelta(RestSoaToXRayMatrix(rest, lane), delta_rotation, delta_translation);
-}
-
 inline ozz::math::Float3 ExtractTranslation(const ozz::math::Float4x4& matrix)
 {
     return detail::ExtractTranslation(detail::LoadOzzMatrix(matrix));

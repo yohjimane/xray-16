@@ -2,6 +2,7 @@
 
 ## Latest Session Notes
 - Runtime conversion bug traced to missing inverse basis: `ConvertOzzMatrixToXRay` now applies a direct Ozz→X-Ray change-of-basis (`kOzzToXray`), fixing flipped bind poses while keeping legacy palette math intact. The converter switched to the matching direct `kXrayToOzz` transform, dropping the confusing Blender intermediate.
+- OMF tracks are treated as absolute locals again; converters now convert the per-frame local matrix directly, which fixed `OzzKinematicsParity.AnimationPoseMatchesLegacySkeleton` and confirmed that `ozz_animation_viewer` matches in-engine playback.
 - `OzzKinematics` now evaluates bind pose and sampled animation with visibility masks, callbacks, and additional transforms; parity tests compare results against the legacy runtime.
 - Legacy motion conversion pulls `.omf` payloads through the virtual filesystem, so packaged `.db` archives work without unpacking assets when `OzzKinematics` converts legacy motions on demand.
 - Legacy `CKinematics` taps the shared palette dump hook, so `debug_dump_ozz_palette` snapshots `.ogf` bone matrices alongside `.ozzx` output.

@@ -1817,10 +1817,10 @@ ozz::animation::offline::RawAnimation build_raw_animation_from_omf(const OmfMoti
             const Fquaternion& xr_quat = source_track.rotations[frame];
             const Fvector& xr_translation = source_track.translations[frame];
 
-            const Fmatrix absolute_local = XRay::Animation::ComposeRestAndDelta(
-                bones[joint_index].local_transform, xr_quat, xr_translation);
+            Fmatrix local;
+            local.mk_xform(xr_quat, xr_translation);
 
-            const auto ozz_matrix = XRay::Animation::ConvertXRayMatrixToOzz(absolute_local);
+            const auto ozz_matrix = XRay::Animation::ConvertXRayMatrixToOzz(local);
 
             track.translations[frame].time = time;
             track.translations[frame].value = XRay::Animation::ExtractTranslation(ozz_matrix);

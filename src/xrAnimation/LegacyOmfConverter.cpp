@@ -453,42 +453,6 @@ ozz::animation::offline::RawAnimation BuildRawAnimation(const LegacyOmfMotion& m
     if (joint_count == 0)
         throw std::runtime_error("OMF bone remap is empty");
 
-    const auto rest_poses = skeleton.joint_rest_poses();
-    const int soa_count = skeleton.num_soa_joints();
-    xr_vector<Fmatrix> rest_locals(joint_count, Fidentity);
-
-    for (size_t joint = 0; joint < joint_count; ++joint)
-    {
-        const int soa_index = static_cast<int>(joint / 4);
-        const int lane = static_cast<int>(joint % 4);
-        if (soa_index >= soa_count)
-            continue;
-
-        const ozz::math::SoaTransform& rest = rest_poses[soa_index];
-
-        float tx[4], ty[4], tz[4];
-        float qx[4], qy[4], qz[4], qw[4];
-        float sx[4], sy[4], sz[4];
-
-        ozz::math::StorePtrU(rest.translation.x, tx);
-        ozz::math::StorePtrU(rest.translation.y, ty);
-        ozz::math::StorePtrU(rest.translation.z, tz);
-        ozz::math::StorePtrU(rest.rotation.x, qx);
-        ozz::math::StorePtrU(rest.rotation.y, qy);
-        ozz::math::StorePtrU(rest.rotation.z, qz);
-        ozz::math::StorePtrU(rest.rotation.w, qw);
-        ozz::math::StorePtrU(rest.scale.x, sx);
-        ozz::math::StorePtrU(rest.scale.y, sy);
-        ozz::math::StorePtrU(rest.scale.z, sz);
-
-        const ozz::math::Float3 translation(tx[lane], ty[lane], tz[lane]);
-        const ozz::math::Quaternion rotation(qx[lane], qy[lane], qz[lane], qw[lane]);
-        const ozz::math::Float3 scale(sx[lane], sy[lane], sz[lane]);
-
-        const ozz::math::Float4x4 rest_ozz = ozz::math::Float4x4::FromAffine(translation, rotation, scale);
-        rest_locals[joint] = XRay::Animation::ConvertOzzMatrixToXRay(rest_ozz);
-    }
-
     ozz::animation::offline::RawAnimation raw_animation;
     raw_animation.name = motion.name.c_str();
     raw_animation.duration = motion.frame_count > 1 ? (motion.frame_count - 1) * SAMPLE_SPF : SAMPLE_SPF;
@@ -516,8 +480,10 @@ ozz::animation::offline::RawAnimation BuildRawAnimation(const LegacyOmfMotion& m
             const Fquaternion& xr_quat = source_track.rotations[frame];
             const Fvector& xr_translation = source_track.translations[frame];
 
-            const Fmatrix absolute_local = ComposeRestAndDelta(rest_locals[joint_index], xr_quat, xr_translation);
-            const auto ozz_matrix = ConvertXRayMatrixToOzz(absolute_local);
+            Fmatrix local;
+            local.mk_xform(xr_quat, xr_translation);
+
+            const auto ozz_matrix = ConvertXRayMatrixToOzz(local);
             track.translations[frame].time = time;
             track.translations[frame].value = XRay::Animation::ExtractTranslation(ozz_matrix);
             track.rotations[frame].time = time;
