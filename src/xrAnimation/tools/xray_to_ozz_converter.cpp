@@ -26,6 +26,7 @@
 #include <ozz/base/maths/vec_float.h>
 
 #include "../Externals/ozz-animation/samples/framework/mesh.h"
+#include "../OzzConversion.h"
 
 #include <algorithm>
 #include <array>
@@ -1809,8 +1810,6 @@ ozz::animation::offline::RawAnimation build_raw_animation_from_omf(const OmfMoti
         track.scales[0].time = 0.f;
         track.scales[0].value = ozz::math::Float3(1.f, 1.f, 1.f);
 
-        const BoneRecord& bone = bones[joint_index];
-
         for (u32 frame = 0; frame < motion.frame_count; ++frame)
         {
             const float time = static_cast<float>(frame) * SAMPLE_SPF;
@@ -1818,19 +1817,15 @@ ozz::animation::offline::RawAnimation build_raw_animation_from_omf(const OmfMoti
             const Fquaternion& xr_quat = source_track.rotations[frame];
             const Fvector& xr_translation = source_track.translations[frame];
 
-            // Build the animated offset in X-Ray space and compose it with the
-            // bind pose so absolute locals (matching legacy runtime) are baked.
-            Fmatrix delta;
-            delta.mk_xform(xr_quat, xr_translation);
+            const Fmatrix absolute_local = XRay::Animation::ComposeRestAndDelta(
+                bones[joint_index].local_transform, xr_quat, xr_translation);
 
-            Fmatrix absolute_local;
-            absolute_local.mul_43(bone.local_transform, delta);
+            const auto ozz_matrix = XRay::Animation::ConvertXRayMatrixToOzz(absolute_local);
 
-            const auto ozz_matrix = detail::ConvertXrayLocalToOzz(absolute_local);
             track.translations[frame].time = time;
-            track.translations[frame].value = detail::ExtractTranslation(ozz_matrix);
+            track.translations[frame].value = XRay::Animation::ExtractTranslation(ozz_matrix);
             track.rotations[frame].time = time;
-            track.rotations[frame].value = detail::ExtractQuaternion(ozz_matrix);
+            track.rotations[frame].value = XRay::Animation::ExtractQuaternion(ozz_matrix);
         }
     }
 

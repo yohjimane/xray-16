@@ -11,6 +11,7 @@ project(OpenXRay
     HOMEPAGE_URL "https://github.com/OpenXRay/xray-16"
     LANGUAGES CXX C
 )
+include(CTest)
 
 option(BUILD_SHARED_LIBS "Build shared libraries"     ${BUILD_SHARED_LIBS_DEFAULT_VALUE})
 
@@ -27,6 +28,12 @@ add_compile_definitions(
 )
 
 add_subdirectory(Externals)
+if(BUILD_TESTING)
+    get_property(_ozz_tests DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR} PROPERTY TESTS)
+    foreach(_test IN LISTS _ozz_tests)
+        set_tests_properties(${_test} PROPERTIES DISABLED TRUE)
+    endforeach()
+endif()
 add_subdirectory(src)
 add_subdirectory(res)
 add_subdirectory(misc)

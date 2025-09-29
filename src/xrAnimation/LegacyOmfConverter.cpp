@@ -2,6 +2,8 @@
 
 #include "LegacyOmfConverter.h"
 
+#include "OzzConversion.h"
+
 #include "xrCore/Animation/SkeletonMotionDefs.hpp"
 #include "xrCore/Animation/SkeletonMotions.hpp"
 
@@ -37,120 +39,6 @@ namespace Animation
 {
 namespace
 {
-using Matrix4 = std::array<std::array<float, 4>, 4>;
-
-Matrix4 ToColumnMajor(const Fmatrix& matrix)
-{
-    Matrix4 result{};
-    for (int row = 0; row < 4; ++row)
-    {
-        result[static_cast<size_t>(row)][0] = matrix.m[row][0];
-        result[static_cast<size_t>(row)][1] = matrix.m[row][1];
-        result[static_cast<size_t>(row)][2] = matrix.m[row][2];
-        result[static_cast<size_t>(row)][3] = matrix.m[row][3];
-    }
-    return result;
-}
-
-Matrix4 Multiply(const Matrix4& lhs, const Matrix4& rhs)
-{
-    Matrix4 result{};
-    for (int row = 0; row < 4; ++row)
-    {
-        for (int col = 0; col < 4; ++col)
-        {
-            float value = 0.f;
-            for (int k = 0; k < 4; ++k)
-                value += lhs[static_cast<size_t>(row)][static_cast<size_t>(k)] * rhs[static_cast<size_t>(k)][static_cast<size_t>(col)];
-            result[static_cast<size_t>(row)][static_cast<size_t>(col)] = value;
-        }
-    }
-    return result;
-}
-
-Matrix4 ChangeBasis(const Matrix4& matrix, const Matrix4& basis, const Matrix4& basis_inverse)
-{
-    return Multiply(Multiply(basis, matrix), basis_inverse);
-}
-
-constexpr Matrix4 kXrayToOzz = {
-    std::array<float, 4>{ 1.f, 0.f,  0.f, 0.f },
-    std::array<float, 4>{ 0.f, 1.f,  0.f, 0.f },
-    std::array<float, 4>{ 0.f, 0.f, -1.f, 0.f },
-    std::array<float, 4>{ 0.f, 0.f,  0.f, 1.f }
-};
-
-constexpr Matrix4 kOzzToXray = kXrayToOzz;
-
-Matrix4 ConvertXrayLocalToOzz(const Fmatrix& matrix)
-{
-    return ChangeBasis(ToColumnMajor(matrix), kXrayToOzz, kOzzToXray);
-}
-
-ozz::math::Float3 ExtractTranslation(const Matrix4& matrix)
-{
-    return { matrix[0][3], matrix[1][3], matrix[2][3] };
-}
-
-ozz::math::Quaternion ExtractQuaternion(const Matrix4& matrix)
-{
-    const float m00 = matrix[0][0];
-    const float m01 = matrix[0][1];
-    const float m02 = matrix[0][2];
-    const float m10 = matrix[1][0];
-    const float m11 = matrix[1][1];
-    const float m12 = matrix[1][2];
-    const float m20 = matrix[2][0];
-    const float m21 = matrix[2][1];
-    const float m22 = matrix[2][2];
-
-    float qw = 0.f;
-    float qx = 0.f;
-    float qy = 0.f;
-    float qz = 0.f;
-
-    const float trace = m00 + m11 + m22;
-    if (trace > 0.f)
-    {
-        const float s = std::sqrt(trace + 1.f) * 2.f;
-        qw = 0.25f * s;
-        qx = (m21 - m12) / s;
-        qy = (m02 - m20) / s;
-        qz = (m10 - m01) / s;
-    }
-    else if (m00 > m11 && m00 > m22)
-    {
-        const float s = std::sqrt(1.f + m00 - m11 - m22) * 2.f;
-        qw = (m21 - m12) / s;
-        qx = 0.25f * s;
-        qy = (m01 + m10) / s;
-        qz = (m02 + m20) / s;
-    }
-    else if (m11 > m22)
-    {
-        const float s = std::sqrt(1.f + m11 - m00 - m22) * 2.f;
-        qw = (m02 - m20) / s;
-        qx = (m01 + m10) / s;
-        qy = 0.25f * s;
-        qz = (m12 + m21) / s;
-    }
-    else
-    {
-        const float s = std::sqrt(1.f + m22 - m00 - m11) * 2.f;
-        qw = (m10 - m01) / s;
-        qx = (m02 + m20) / s;
-        qy = (m12 + m21) / s;
-        qz = 0.25f * s;
-    }
-
-    ozz::math::Quaternion quaternion;
-    quaternion.x = qx;
-    quaternion.y = qy;
-    quaternion.z = qz;
-    quaternion.w = qw;
-    return quaternion;
-}
-
 struct BinaryReader
 {
     const std::byte* data = nullptr;
@@ -558,11 +446,48 @@ LegacyOmfData ParseOmfFile(const std::filesystem::path& path, const xr_vector<xr
     return ParseOmfBuffer(data.data(), data.size(), skeleton_bone_names);
 }
 
-ozz::animation::offline::RawAnimation BuildRawAnimation(const LegacyOmfMotion& motion, const LegacyOmfData& omf)
+ozz::animation::offline::RawAnimation BuildRawAnimation(const LegacyOmfMotion& motion, const LegacyOmfData& omf,
+    const ozz::animation::Skeleton& skeleton)
 {
     const size_t joint_count = omf.bone_remap.size();
     if (joint_count == 0)
         throw std::runtime_error("OMF bone remap is empty");
+
+    const auto rest_poses = skeleton.joint_rest_poses();
+    const int soa_count = skeleton.num_soa_joints();
+    xr_vector<Fmatrix> rest_locals(joint_count, Fidentity);
+
+    for (size_t joint = 0; joint < joint_count; ++joint)
+    {
+        const int soa_index = static_cast<int>(joint / 4);
+        const int lane = static_cast<int>(joint % 4);
+        if (soa_index >= soa_count)
+            continue;
+
+        const ozz::math::SoaTransform& rest = rest_poses[soa_index];
+
+        float tx[4], ty[4], tz[4];
+        float qx[4], qy[4], qz[4], qw[4];
+        float sx[4], sy[4], sz[4];
+
+        ozz::math::StorePtrU(rest.translation.x, tx);
+        ozz::math::StorePtrU(rest.translation.y, ty);
+        ozz::math::StorePtrU(rest.translation.z, tz);
+        ozz::math::StorePtrU(rest.rotation.x, qx);
+        ozz::math::StorePtrU(rest.rotation.y, qy);
+        ozz::math::StorePtrU(rest.rotation.z, qz);
+        ozz::math::StorePtrU(rest.rotation.w, qw);
+        ozz::math::StorePtrU(rest.scale.x, sx);
+        ozz::math::StorePtrU(rest.scale.y, sy);
+        ozz::math::StorePtrU(rest.scale.z, sz);
+
+        const ozz::math::Float3 translation(tx[lane], ty[lane], tz[lane]);
+        const ozz::math::Quaternion rotation(qx[lane], qy[lane], qz[lane], qw[lane]);
+        const ozz::math::Float3 scale(sx[lane], sy[lane], sz[lane]);
+
+        const ozz::math::Float4x4 rest_ozz = ozz::math::Float4x4::FromAffine(translation, rotation, scale);
+        rest_locals[joint] = XRay::Animation::ConvertOzzMatrixToXRay(rest_ozz);
+    }
 
     ozz::animation::offline::RawAnimation raw_animation;
     raw_animation.name = motion.name.c_str();
@@ -591,14 +516,12 @@ ozz::animation::offline::RawAnimation BuildRawAnimation(const LegacyOmfMotion& m
             const Fquaternion& xr_quat = source_track.rotations[frame];
             const Fvector& xr_translation = source_track.translations[frame];
 
-            Fmatrix local;
-            local.mk_xform(xr_quat, xr_translation);
-
-            const auto ozz_matrix = ConvertXrayLocalToOzz(local);
+            const Fmatrix absolute_local = ComposeRestAndDelta(rest_locals[joint_index], xr_quat, xr_translation);
+            const auto ozz_matrix = ConvertXRayMatrixToOzz(absolute_local);
             track.translations[frame].time = time;
-            track.translations[frame].value = ExtractTranslation(ozz_matrix);
+            track.translations[frame].value = XRay::Animation::ExtractTranslation(ozz_matrix);
             track.rotations[frame].time = time;
-            track.rotations[frame].value = ExtractQuaternion(ozz_matrix);
+            track.rotations[frame].value = XRay::Animation::ExtractQuaternion(ozz_matrix);
         }
     }
 
@@ -607,7 +530,7 @@ ozz::animation::offline::RawAnimation BuildRawAnimation(const LegacyOmfMotion& m
 
 ConvertedOmfAnimation BuildConvertedAnimation(const LegacyOmfMotion& motion, const LegacyOmfData& omf, const ozz::animation::Skeleton& skeleton, bool optimize)
 {
-    ozz::animation::offline::RawAnimation raw_animation = BuildRawAnimation(motion, omf);
+    ozz::animation::offline::RawAnimation raw_animation = BuildRawAnimation(motion, omf, skeleton);
 
     ozz::animation::offline::AnimationBuilder builder;
     ozz::animation::offline::AnimationOptimizer optimizer;
